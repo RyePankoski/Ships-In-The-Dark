@@ -2,6 +2,38 @@ import json
 from server_scene import ServerScene
 
 
+def serialize_state(state):
+    serialized_ships = []
+    for ship in state.get('player_ships', []):
+        ship_dict = {
+            'pos_x': ship.pos_x,
+            'pos_y': ship.pos_y,
+            'heading': ship.heading,
+            'vel_x': ship.vel_x,
+            'vel_y': ship.vel_y,
+            'player_id': str(ship.player_id) if ship.player_id else None,
+        }
+        serialized_ships.append(ship_dict)
+
+    # Serialize missiles
+    serialized_missiles = []
+    for missile in state.get('missiles', []):
+        missile_dict = {
+            'pos_x': missile.pos_x,
+            'pos_y': missile.pos_y,
+            'heading': missile.heading,
+            'velocity': missile.velocity,
+            'fuel': missile.fuel,
+            'alive': missile.alive,
+        }
+        serialized_missiles.append(missile_dict)
+
+    return {
+        'player_ships': serialized_ships,
+        'missiles': serialized_missiles,
+    }
+
+
 class Server:
     def __init__(self, network_layer):
         self.network_layer = network_layer
@@ -16,25 +48,10 @@ class Server:
         self.step_if_ready(dt)
 
         state = self.server_scene.get_state()
-        serialized_state = self.serialize_state(state)
-        self.send_to_all(json.dumps(serialized_state).encode())
 
-    def serialize_state(self, state):
-        serialized_ships = []
-        for ship in state.get('player_ships', []):
-            ship_dict = {
-                'pos_x': ship.pos_x,
-                'pos_y': ship.pos_y,
-                'vel_x': ship.vel_x,
-                'vel_y': ship.vel_y,
-                'heading': ship.heading,
-                'player_id': str(ship.player_id) if ship.player_id else None,
-            }
-            serialized_ships.append(ship_dict)
-
-        return {
-            'player_ships': serialized_ships
-        }
+        if state.get('player_ships'):
+            serialized_state = serialize_state(state)
+            self.send_to_all(json.dumps(serialized_state).encode())
 
     def send_to_all(self, serialized_state):
         for address in self.connected_players:
