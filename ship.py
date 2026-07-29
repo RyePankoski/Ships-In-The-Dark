@@ -30,7 +30,7 @@ class Ship:
         self.total_missiles = TOTAL_MISSILES
 
     def run(self, dt):
-        self.move()
+        self.move(dt)
         self.cooldowns(dt)
         self.update_rect()
 
@@ -63,9 +63,9 @@ class Ship:
                 self.missile_cooling_down = False
                 self.missile_cooldown_timer = 0
 
-    def move(self):
-        self.pos_x += self.vel_x
-        self.pos_y += self.vel_y
+    def move(self, dt):
+        self.pos_x += self.vel_x * dt
+        self.pos_y += self.vel_y * dt
 
         angle = math.atan2(self.vel_y, -self.vel_x)
         angle = math.degrees(angle) + 90

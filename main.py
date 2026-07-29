@@ -4,7 +4,7 @@ from core import Core
 
 pygame.init()
 clock = pygame.time.Clock()
-FPS = 45
+FPS = 30
 core = Core()
 
 

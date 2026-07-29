@@ -33,7 +33,7 @@ class Missile:
         if self.has_solution:
             self.steer()
 
-        self.move()
+        self.move(dt)
         self.update_rect()
 
     def steer(self):
@@ -49,9 +49,9 @@ class Missile:
         self.vel_x = (dx / distance) * self.velocity
         self.vel_y = (dy / distance) * self.velocity
 
-    def move(self):
-        self.pos_x += self.vel_x
-        self.pos_y += self.vel_y
+    def move(self, dt):
+        self.pos_x += self.vel_x * dt
+        self.pos_y += self.vel_y * dt
 
         angle = math.atan2(self.vel_y, -self.vel_x)
         angle = math.degrees(angle) + 90

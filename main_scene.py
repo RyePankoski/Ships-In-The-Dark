@@ -20,8 +20,8 @@ class MainScene:
 
         self.player_ship = Ship(100, 100, is_player=True)
         self.enemy_ship = Ship(random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT), is_player=False)
-        self.enemy_ship.vel_x = 1 / 5
-        self.enemy_ship.vel_y = -2 / 5
+        self.enemy_ship.vel_x = 25
+        self.enemy_ship.vel_y = 30
         self.enemy_ship.dampening = False
 
         self.ships = []
