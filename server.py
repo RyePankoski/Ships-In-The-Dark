@@ -43,15 +43,21 @@ class Server:
         self.current_frame_inputs = {}  # Buffer inputs this frame
 
     def run(self, dt):
-        self.listen_for_messages()
-        self.parse_messages()
-        self.step_if_ready(dt)
+        print(f"[SERVER TICK] Connected players: {len(self.connected_players)}")
 
-        state = self.server_scene.get_state()
+        try:
+            self.listen_for_messages()
+            self.parse_messages()
+            self.step_if_ready(dt)
 
-        if state.get('player_ships'):
-            serialized_state = serialize_state(state)
-            self.send_to_all(json.dumps(serialized_state).encode())
+            state = self.server_scene.get_state()
+            if state and state.get('player_ships'):
+                serialized_state = serialize_state(state)
+                self.send_to_all(json.dumps(serialized_state).encode())
+        except Exception as e:
+            print(f"[CRITICAL ERROR] {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
 
     def send_to_all(self, serialized_state):
         for address in self.connected_players:
@@ -72,19 +78,24 @@ class Server:
     def parse_messages(self):
         for message in self.message_queue:
             if message is not None:
-                data, address = message
-
-                # New player connecting
-                if address not in self.connected_players:
-                    self.connected_players.add(address)
-                    self.server_scene.connected_players.append(address)
-                    self.server_scene.create_player_ships(address)
-                    print(f"Player connected: {address}")
                 try:
-                    decoded = json.loads(data.decode())
-                    self.current_frame_inputs[address] = decoded.get('input_data')
+                    data, address = message
+
+                    # New player connecting
+                    if address not in self.connected_players:
+                        self.connected_players.add(address)
+                        self.server_scene.connected_players.append(address)
+                        self.server_scene.create_player_ships(address)
+                        print(f"Player connected: {address}")
+                    try:
+                        decoded = json.loads(data.decode())
+                        self.current_frame_inputs[address] = decoded.get('input_data')
+                    except Exception as e:
+                        print(f"Error parsing message: {e}")
                 except Exception as e:
-                    print(f"Error parsing message: {e}")
+                    print(f"[PARSE ERROR] {e}")
+                    import traceback
+                    traceback.print_exc()
 
         self.message_queue.clear()
 

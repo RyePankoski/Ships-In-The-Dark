@@ -1,8 +1,9 @@
 import socket
+from constants import *
 
 
 class NetworkLayer:
-    def __init__(self, bind_socket=False, port=4242, host='localhost'):
+    def __init__(self, bind_socket=False, port=PORT, host='localhost'):
         self.socket = None
         self.bind_socket = bind_socket
         self.port = port
