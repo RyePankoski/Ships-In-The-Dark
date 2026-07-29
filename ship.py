@@ -17,7 +17,7 @@ class Ship:
         self.vel_y = 0
         self.player_id = player_id
 
-        self.heading = None
+        self.heading = 0
         self.rect = pygame.Rect(self.pos_x, self.pos_y, 200, 200)
 
         self.dampening = True
@@ -88,5 +88,3 @@ class Ship:
     def update_rect(self):
         self.rect.x = self.pos_x
         self.rect.y = self.pos_y
-
-

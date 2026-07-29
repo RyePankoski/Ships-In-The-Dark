@@ -31,6 +31,7 @@ class NetworkLayer:
         if self.socket:
             self.socket.sendto(message, address)
 
+
     def listen_for_messages(self):
         if not self.socket:
             return None
