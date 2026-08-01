@@ -2,7 +2,8 @@ import json
 import random
 
 from constants import WORLD_HEIGHT, WORLD_WIDTH
-from draw import Draw
+from draw_game import DrawGame
+from draw_ui import DrawUI
 from ship import Ship
 from missile import Missile
 from false_contact import FalseContact
@@ -12,16 +13,17 @@ from util import end_blit
 
 
 class MainScene:
-    def __init__(self, connected):
+    def __init__(self, connected, screen, audio_manager):
         self.connected = connected
         self.my_player_id = None  # Track which player_id is ours
 
-        self.draw = Draw()
+        self.draw_game = DrawGame(screen)
+        self.draw_ui = DrawUI(screen)
 
         self.player_ship = Ship(100, 100, is_player=True)
         self.enemy_ship = Ship(random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT), is_player=False)
-        self.enemy_ship.vel_x = 25
-        self.enemy_ship.vel_y = 30
+        self.enemy_ship.vel_x = 50
+        self.enemy_ship.vel_y = 60
         self.enemy_ship.dampening = False
 
         self.ships = []
@@ -30,6 +32,11 @@ class MainScene:
 
         self.missiles = []
         self.explosions = []
+
+        self.has_missile_solution = False
+        self.grid_on = True
+
+
 
     def run(self, inputs, dt):
         if not self.connected:
@@ -43,7 +50,8 @@ class MainScene:
 
     def handle_inputs(self, inputs, dt):
         self.player_ship.apply_inputs(inputs, dt)
-        if inputs["p"] and self.player_ship.can_fire():
+
+        if inputs["p"] and self.player_ship.can_fire() and self.has_missile_solution:
             self.fire_missile()
             self.player_ship.fire()
             print(self.player_ship.total_missiles)
@@ -68,25 +76,34 @@ class MainScene:
             self.missiles.remove(missile)
 
     def draw_scene(self, inputs):
-        self.draw.start_blit()
+        self.draw_game.start_blit()
 
         # Find player ship and calculate camera position
         player_ship = next((ship for ship in self.ships if ship.player), None)
         if player_ship:
-            camera_x = player_ship.rect.center[0] - self.draw.screen.get_width() / 2
-            camera_y = player_ship.rect.center[1] - self.draw.screen.get_height() / 2
+            camera_x = player_ship.rect.center[0] - self.draw_game.screen.get_width() / 2
+            camera_y = player_ship.rect.center[1] - self.draw_game.screen.get_height() / 2
         else:
             camera_x = 0
             camera_y = 0
 
-        # Draw starfield first (background)
-        self.draw.draw_stars(camera_x, camera_y)
+        # Draw the starfield first (background)
+        self.draw_game.draw_stars(camera_x, camera_y)
 
         # Then draw game objects on top
-        self.draw.draw_ships(self.ships, camera_x, camera_y)
-        self.draw.draw_missiles(self.missiles, camera_x, camera_y)
-        self.draw.draw_explosions(self.explosions, camera_x, camera_y)
+        self.draw_game.draw_ships(self.ships, camera_x, camera_y)
+        self.draw_game.draw_missiles(self.missiles, camera_x, camera_y)
+        self.draw_game.draw_explosions(self.explosions, camera_x, camera_y)
         self.explosions = []
+
+        # UI elements and crt effect
+        self.draw_ui.draw_world_grid(camera_x, camera_y, self.grid_on)
+        self.draw_ui.draw_ui_layout()
+        self.draw_ui.draw_weapon_solution_indicator(self.has_missile_solution)
+        self.draw_ui.draw_ship_info(self.player_ship)
+        self.draw_ui.draw_scanlines()
+
+
         end_blit()
 
     def inject_server_data(self, message):

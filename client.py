@@ -1,18 +1,21 @@
 from main_scene import MainScene
 from util import collect_inputs
 from network_layer import NetworkLayer
+from audio_manager import AudioManager
 from server import Server
 from constants import *
 import json
 
 
 class Client:
-    def __init__(self):
+    def __init__(self, screen):
         self.connected = False
         self.network_layer = None
         self.server = None
 
-        self.main_scene = MainScene(self.connected)
+        self.audio_manager = AudioManager()
+        self.main_scene = MainScene(self.connected, screen, self.audio_manager)
+        self.audio_manager.play_ambience('ambience')
 
         self.hosting = False
         self.joined = False

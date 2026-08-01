@@ -3,9 +3,9 @@ SHIP_BRAKE_FORCE = 20  # was 0.4
 SHIP_MAX_SPEED = 75  # was 1.5
 DAMPENING_FORCE = 0.999  # This one stays the same (it's multiplicative)
 
-MISSILE_THRUST = 20  # was 0.4
+MISSILE_THRUST = 50  # was 0.4
 MISSILE_MAX_SPEED = 500  # was 10
-MISSILE_FUEL = 100  # stays
+MISSILE_FUEL = 20  # stays
 MISSILE_FUEL_USE_RATE = 3  # stays (or adjust)
 
 MISSILE_LIFETIME = 60

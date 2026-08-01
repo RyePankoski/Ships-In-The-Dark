@@ -42,7 +42,7 @@ class Missile:
 
         distance = math.sqrt(dx ** 2 + dy ** 2)
 
-        if distance < 25:
+        if distance < 50:
             self.alive = False
             self.reached_target = True
 
