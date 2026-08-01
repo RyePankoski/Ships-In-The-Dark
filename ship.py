@@ -31,6 +31,11 @@ class Ship:
         self.missile_cooldown = 1
         self.total_missiles = TOTAL_MISSILES
 
+        # Radar
+        self.radar_resolution = 360
+        self.radar_cross_section = 100      # hit tolerance (px) for being detected
+        self.enemy_radar_ping_coordinates = []
+
     def run(self, dt):
         self.move(dt)
         self.cooldowns(dt)

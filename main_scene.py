@@ -1,60 +1,74 @@
 import json
 import random
 
-import pygame
-
-from constants import WORLD_HEIGHT, WORLD_WIDTH
+from constants import WORLD_HEIGHT, WORLD_WIDTH, GRID_SIZE
 from draw_game import DrawGame
 from draw_ui import DrawUI
 from ship import Ship
 from missile import Missile
-from false_contact import FalseContact
 from player_ship_ai import PlayerShipAI
-from decoy import Decoy
+from asteroid import Asteroid
+from radar_system import RadarSystem
 
 from util import end_blit
 
 
 class MainScene:
     def __init__(self, connected, screen, audio_manager):
-        self.connected = connected
-        self.my_player_id = None
+        # Classes
         self.audio_manager = audio_manager
-
         self.draw_game = DrawGame(screen)
         self.draw_ui = DrawUI(screen)
+        self.player_ship_ai = PlayerShipAI()
+        self.radar_system = RadarSystem()
 
+
+        # Netcode stuff
+        self.connected = connected
+        self.my_player_id = None
+
+        # Lists
         self.ships = []
+        self.explosions = []
+        self.missiles = []
+        self.asteroids = {}
+        self.signatures = []
 
+        # Create player ship and enemy ship
         if not self.connected:
-            self.player_ship = Ship(100, 100, is_player=True, player_id=1)
-
+            self.player_ship = Ship(random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT), is_player=True,
+                                    player_id=1)
             self.enemy_ship = Ship(random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT), is_player=False)
             self.enemy_ship.vel_x = 50
             self.enemy_ship.vel_y = 60
             self.enemy_ship.dampening = False
+            self.ships.append(self.enemy_ship)
+
+            for i in range(1000):
+                pos_x = random.randint(0, WORLD_WIDTH)
+                pos_y = random.randint(0, WORLD_HEIGHT)
+
+                grid_x = int(pos_x // GRID_SIZE)
+                grid_y = int(pos_y // GRID_SIZE)
+                cell = (grid_x, grid_y)
+
+                if cell not in self.asteroids:
+                    self.asteroids[cell] = []
+
+                asteroid = Asteroid(pos_x, pos_y, random.randint(5, 50))
+                self.asteroids[cell].append(asteroid)
+
 
         else:
             self.player_ship = Ship(100, 100, is_player=True)
 
-
         self.ships.append(self.player_ship)
-        self.ships.append(self.enemy_ship)
 
-        self.player_ship_ai = PlayerShipAI()
-
-        self.missiles = []
-        self.enemy_missiles_with_solution = []
-
-
-        self.explosions = []
-
+        # Weapons systems
         self.has_missile_solution = False
-
-
         self.enemy_has_missile_solution = False
 
-
+        # UI stuff
         self.grid_on = True
         self.manual_control = True
 
@@ -65,8 +79,15 @@ class MainScene:
             self.handle_missiles(dt)
             self.handle_ships(dt)
 
+
+        if not self.radar_system.scanning:
+            self.signatures = []
+            self.radar_system.begin_scan(self.player_ship, self.ships, self.asteroids)
+        else:
+            self.signatures.extend(self.radar_system.continue_scan())
+
         self.handle_general_sound_effects()
-        self.draw_scene(inputs)
+        self.draw_scene()
 
     def handle_inputs(self, inputs, dt):
 
@@ -81,12 +102,12 @@ class MainScene:
         if inputs["p"] and self.player_ship.can_fire() and self.has_missile_solution:
             self.fire_missile()
             self.player_ship.fire()
-            print(self.player_ship.total_missiles)
 
         if inputs["m"]:
             self.manual_control = not self.manual_control
 
         if inputs["x"]:
+            self.enemy_ship.fire()
             self.missiles.append(Missile(self.enemy_ship.pos_x, self.enemy_ship.pos_y, 0, 0, self.player_ship,
                                          self.enemy_ship.player_id))
 
@@ -116,6 +137,18 @@ class MainScene:
         for ship in self.ships:
             ship.run(dt)
 
+            ship_grid_x = int(ship.rect.center[0] // GRID_SIZE)
+            ship_grid_y = int(ship.rect.center[1] // GRID_SIZE)
+
+            if (ship_grid_x, ship_grid_y) in self.asteroids:
+                for asteroid in self.asteroids[(ship_grid_x, ship_grid_y)]:
+                    distance = (ship.rect.center[0] - asteroid.pos_x) ** 2 + (ship.rect.center[1] - asteroid.pos_y) ** 2
+                    if distance < asteroid.size ** 2:
+                        print("Collision")
+
+                        ship.vel_x *= -1.5
+                        ship.vel_y *= -1.5
+
     def handle_missiles(self, dt):
         if not self.missiles:
             self.enemy_has_missile_solution = False
@@ -125,7 +158,6 @@ class MainScene:
                 return
             if missile.contact == self.player_ship:
                 self.enemy_has_missile_solution = True
-
 
         missiles_to_remove = []
         for missile in self.missiles:
@@ -137,7 +169,7 @@ class MainScene:
             self.explosions.append(missile.rect.center)
             self.missiles.remove(missile)
 
-    def draw_scene(self, inputs):
+    def draw_scene(self):
         self.draw_game.start_blit()
 
         # Find player ship and calculate camera position
@@ -156,6 +188,7 @@ class MainScene:
         self.draw_game.draw_ships(self.ships, camera_x, camera_y)
         self.draw_game.draw_missiles(self.missiles, camera_x, camera_y)
         self.draw_game.draw_explosions(self.explosions, camera_x, camera_y)
+        self.draw_game.draw_asteroids(self.asteroids, camera_x, camera_y)
         self.explosions = []
 
         # UI elements and crt effect
@@ -165,7 +198,9 @@ class MainScene:
         self.draw_ui.draw_manual_control_indicator(self.manual_control)
         self.draw_ui.draw_ship_info(self.player_ship)
         self.draw_ui.draw_missile_lock_warning(self.enemy_has_missile_solution)
-        self.draw_ui.draw_missile_vectors(self.player_ship.player_id, self.missiles, self.player_ship, camera_x, camera_y)
+        self.draw_ui.draw_missile_vectors(self.player_ship.player_id, self.missiles, self.player_ship, camera_x,
+                                          camera_y)
+        self.draw_ui.draw_radar(self.player_ship, self.signatures)
         self.draw_ui.draw_scanlines()
 
         end_blit()
@@ -205,7 +240,7 @@ class MainScene:
                 vx=0,
                 vy=0,
                 contact=None  # Server handles targeting
-            )
+                , owner=1)
             missile.heading = missile_dict['heading']
             missile.velocity = missile_dict['velocity']
             missile.fuel = missile_dict['fuel']

@@ -51,6 +51,18 @@ class DrawGame:
             if -10 < screen_x < screen_width + 10 and -10 < screen_y < screen_height + 10:
                 pygame.draw.circle(self.screen, (brightness, brightness, brightness), (screen_x, screen_y), size)
 
+    def draw_asteroids(self, asteroids, camera_x, camera_y):
+        for asteroid_list in asteroids.values():
+            for asteroid in asteroid_list:
+                screen_x = asteroid.pos_x - camera_x
+                screen_y = asteroid.pos_y - camera_y
+                pygame.draw.circle(
+                    self.screen,
+                    (150, 105, 40),
+                    (screen_x, screen_y),
+                    asteroid.size
+                )
+
     def draw_explosions(self, explosions, camera_x, camera_y):
         for explosion in explosions:
             screen_x = explosion[0] - camera_x

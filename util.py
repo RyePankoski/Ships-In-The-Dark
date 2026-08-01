@@ -1,4 +1,6 @@
 import pygame
+from constants import *
+import math
 
 
 def collect_inputs():

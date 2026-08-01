@@ -28,7 +28,7 @@ class AudioManager:
             try:
                 self.sounds[name] = pygame.mixer.Sound(filepath)
                 self.sounds[name].set_volume(self.master_volume)
-                print(f"[AUDIO] Loaded: {name}")
+
             except Exception as e:
                 print(f"[AUDIO ERROR] Failed to load {filename}: {e}")
 

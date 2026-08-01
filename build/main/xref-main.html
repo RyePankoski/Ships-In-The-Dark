@@ -1172,6 +1172,23 @@ imported by:
 </div>
 
 <div class="node">
+  <a name="audio_manager"></a>
+  <a target="code" href="///C:/Users/Rye/PycharmProjects/ShipsInTheDark/audio_manager.py" type="text/plain"><tt>audio_manager</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#os">os</a>
+ &#8226;   <a href="#pygame">pygame</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#client">client</a>
+
+  </div>
+
+</div>
+
+<div class="node">
   <a name="base64"></a>
   <a target="code" href="///C:/Users/Rye/AppData/Local/Programs/Python/Python312/Lib/base64.py" type="text/plain"><tt>base64</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
@@ -1304,7 +1321,8 @@ imported by:
   <a target="code" href="///C:/Users/Rye/PycharmProjects/ShipsInTheDark/client.py" type="text/plain"><tt>client</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
-    <a href="#constants">constants</a>
+    <a href="#audio_manager">audio_manager</a>
+ &#8226;   <a href="#constants">constants</a>
  &#8226;   <a href="#json">json</a>
  &#8226;   <a href="#main_scene">main_scene</a>
  &#8226;   <a href="#network_layer">network_layer</a>
@@ -1544,10 +1562,11 @@ imported by:
 <span class="moduletype">SourceModule</span>  <div class="import">
 imported by:
     <a href="#client">client</a>
- &#8226;   <a href="#draw">draw</a>
+ &#8226;   <a href="#draw_game">draw_game</a>
  &#8226;   <a href="#main_scene">main_scene</a>
  &#8226;   <a href="#missile">missile</a>
  &#8226;   <a href="#network_layer">network_layer</a>
+ &#8226;   <a href="#player_ship_ai">player_ship_ai</a>
  &#8226;   <a href="#server_scene">server_scene</a>
  &#8226;   <a href="#ship">ship</a>
 
@@ -1780,8 +1799,8 @@ imported by:
 </div>
 
 <div class="node">
-  <a name="draw"></a>
-  <a target="code" href="///C:/Users/Rye/PycharmProjects/ShipsInTheDark/draw.py" type="text/plain"><tt>draw</tt></a>
+  <a name="draw_game"></a>
+  <a target="code" href="///C:/Users/Rye/PycharmProjects/ShipsInTheDark/draw_game.py" type="text/plain"><tt>draw_game</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#constants">constants</a>
@@ -1789,6 +1808,24 @@ imports:
  &#8226;   <a href="#pygame">pygame</a>
  &#8226;   <a href="#random">random</a>
  &#8226;   <a href="#sys">sys</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#main_scene">main_scene</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="draw_ui"></a>
+  <a target="code" href="///C:/Users/Rye/PycharmProjects/ShipsInTheDark/draw_ui.py" type="text/plain"><tt>draw_ui</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#math">math</a>
+ &#8226;   <a href="#pygame">pygame</a>
+ &#8226;   <a href="#time">time</a>
 
   </div>
   <div class="import">
@@ -5956,10 +5993,13 @@ imported by:
 imports:
     <a href="#constants">constants</a>
  &#8226;   <a href="#decoy">decoy</a>
- &#8226;   <a href="#draw">draw</a>
+ &#8226;   <a href="#draw_game">draw_game</a>
+ &#8226;   <a href="#draw_ui">draw_ui</a>
  &#8226;   <a href="#false_contact">false_contact</a>
  &#8226;   <a href="#json">json</a>
  &#8226;   <a href="#missile">missile</a>
+ &#8226;   <a href="#player_ship_ai">player_ship_ai</a>
+ &#8226;   <a href="#pygame">pygame</a>
  &#8226;   <a href="#random">random</a>
  &#8226;   <a href="#ship">ship</a>
  &#8226;   <a href="#util">util</a>
@@ -5989,8 +6029,10 @@ imported by:
 imported by:
     <a href="#_pydatetime">_pydatetime</a>
  &#8226;   <a href="#_pydecimal">_pydecimal</a>
+ &#8226;   <a href="#draw_ui">draw_ui</a>
  &#8226;   <a href="#fractions">fractions</a>
  &#8226;   <a href="#missile">missile</a>
+ &#8226;   <a href="#player_ship_ai">player_ship_ai</a>
  &#8226;   <a href="#random">random</a>
  &#8226;   <a href="#selectors">selectors</a>
  &#8226;   <a href="#ship">ship</a>
@@ -6187,9 +6229,10 @@ imports:
   <div class="import">
 imported by:
     <a href="#argparse">argparse</a>
+ &#8226;   <a href="#audio_manager">audio_manager</a>
  &#8226;   <a href="#bz2">bz2</a>
  &#8226;   <a href="#contextlib">contextlib</a>
- &#8226;   <a href="#draw">draw</a>
+ &#8226;   <a href="#draw_game">draw_game</a>
  &#8226;   <a href="#email.utils">email.utils</a>
  &#8226;   <a href="#fnmatch">fnmatch</a>
  &#8226;   <a href="#genericpath">genericpath</a>
@@ -6349,6 +6392,24 @@ imports:
   <div class="import">
 imported by:
     <a href="#pygame.macosx">pygame.macosx</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="player_ship_ai"></a>
+  <a target="code" href="///C:/Users/Rye/PycharmProjects/ShipsInTheDark/player_ship_ai.py" type="text/plain"><tt>player_ship_ai</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#constants">constants</a>
+ &#8226;   <a href="#math">math</a>
+ &#8226;   <a href="#random">random</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#main_scene">main_scene</a>
 
   </div>
 
@@ -6517,8 +6578,11 @@ imports:
   </div>
   <div class="import">
 imported by:
-    <a href="#draw">draw</a>
+    <a href="#audio_manager">audio_manager</a>
+ &#8226;   <a href="#draw_game">draw_game</a>
+ &#8226;   <a href="#draw_ui">draw_ui</a>
  &#8226;   <a href="#main.py">main.py</a>
+ &#8226;   <a href="#main_scene">main_scene</a>
  &#8226;   <a href="#missile">missile</a>
  &#8226;   <a href="#pygame">pygame</a>
  &#8226;   <a href="#pygame._common">pygame._common</a>
@@ -7393,10 +7457,11 @@ imports:
   </div>
   <div class="import">
 imported by:
-    <a href="#draw">draw</a>
+    <a href="#draw_game">draw_game</a>
  &#8226;   <a href="#email.generator">email.generator</a>
  &#8226;   <a href="#email.utils">email.utils</a>
  &#8226;   <a href="#main_scene">main_scene</a>
+ &#8226;   <a href="#player_ship_ai">player_ship_ai</a>
  &#8226;   <a href="#server_scene">server_scene</a>
  &#8226;   <a href="#statistics">statistics</a>
  &#8226;   <a href="#tempfile">tempfile</a>
@@ -7981,7 +8046,7 @@ imported by:
  &#8226;   <a href="#contextlib">contextlib</a>
  &#8226;   <a href="#dataclasses">dataclasses</a>
  &#8226;   <a href="#dis">dis</a>
- &#8226;   <a href="#draw">draw</a>
+ &#8226;   <a href="#draw_game">draw_game</a>
  &#8226;   <a href="#email._header_value_parser">email._header_value_parser</a>
  &#8226;   <a href="#email.generator">email.generator</a>
  &#8226;   <a href="#email.iterators">email.iterators</a>
@@ -8166,6 +8231,7 @@ imported by:
  &#8226;   <a href="#_pydatetime">_pydatetime</a>
  &#8226;   <a href="#_strptime">_strptime</a>
  &#8226;   <a href="#datetime">datetime</a>
+ &#8226;   <a href="#draw_ui">draw_ui</a>
  &#8226;   <a href="#email._parseaddr">email._parseaddr</a>
  &#8226;   <a href="#email.generator">email.generator</a>
  &#8226;   <a href="#email.utils">email.utils</a>
