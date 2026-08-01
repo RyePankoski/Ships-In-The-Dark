@@ -4,7 +4,7 @@ from core import Core
 
 pygame.init()
 clock = pygame.time.Clock()
-FPS = 15
+FPS = 20
 
 screen = pygame.display.set_mode(pygame.display.get_desktop_sizes()[0])
 core = Core(screen)

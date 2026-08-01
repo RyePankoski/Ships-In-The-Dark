@@ -5,7 +5,7 @@ import pygame
 
 
 class Missile:
-    def __init__(self, x, y, vx, vy, contact):
+    def __init__(self, x, y, vx, vy, contact, owner):
         self.fuel = MISSILE_FUEL
 
         self.pos_x = x
@@ -15,6 +15,7 @@ class Missile:
         self.vel_y = vy
 
         self.contact = contact
+        self.owner = owner
 
         self.heading = 0
         self.rect = pygame.Rect(self.pos_x, self.pos_y, 200, 200)

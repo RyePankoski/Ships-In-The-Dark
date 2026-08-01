@@ -1,12 +1,15 @@
 import json
 import random
 
+import pygame
+
 from constants import WORLD_HEIGHT, WORLD_WIDTH
 from draw_game import DrawGame
 from draw_ui import DrawUI
 from ship import Ship
 from missile import Missile
 from false_contact import FalseContact
+from player_ship_ai import PlayerShipAI
 from decoy import Decoy
 
 from util import end_blit
@@ -15,49 +18,98 @@ from util import end_blit
 class MainScene:
     def __init__(self, connected, screen, audio_manager):
         self.connected = connected
-        self.my_player_id = None  # Track which player_id is ours
+        self.my_player_id = None
+        self.audio_manager = audio_manager
 
         self.draw_game = DrawGame(screen)
         self.draw_ui = DrawUI(screen)
 
-        self.player_ship = Ship(100, 100, is_player=True)
-        self.enemy_ship = Ship(random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT), is_player=False)
-        self.enemy_ship.vel_x = 50
-        self.enemy_ship.vel_y = 60
-        self.enemy_ship.dampening = False
-
         self.ships = []
+
+        if not self.connected:
+            self.player_ship = Ship(100, 100, is_player=True, player_id=1)
+
+            self.enemy_ship = Ship(random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT), is_player=False)
+            self.enemy_ship.vel_x = 50
+            self.enemy_ship.vel_y = 60
+            self.enemy_ship.dampening = False
+
+        else:
+            self.player_ship = Ship(100, 100, is_player=True)
+
+
         self.ships.append(self.player_ship)
         self.ships.append(self.enemy_ship)
 
+        self.player_ship_ai = PlayerShipAI()
+
         self.missiles = []
+        self.enemy_missiles_with_solution = []
+
+
         self.explosions = []
 
         self.has_missile_solution = False
+
+
+        self.enemy_has_missile_solution = False
+
+
         self.grid_on = True
-
-
+        self.manual_control = True
 
     def run(self, inputs, dt):
+
         if not self.connected:
             self.handle_inputs(inputs, dt)
             self.handle_missiles(dt)
             self.handle_ships(dt)
-            if random.random() < 0.005:
-                self.missiles.append(Missile(self.enemy_ship.pos_x, self.enemy_ship.pos_y, 0, 0, self.player_ship))
 
+        self.handle_general_sound_effects()
         self.draw_scene(inputs)
 
     def handle_inputs(self, inputs, dt):
-        self.player_ship.apply_inputs(inputs, dt)
+
+        if self.manual_control:
+            self.player_ship.apply_inputs(inputs, dt)
+        else:
+            print("Ai mode")
+            self.player_ship_ai.run_ship_ai(self.player_ship)
+
+        self.handle_input_based_sound_effects(inputs)
 
         if inputs["p"] and self.player_ship.can_fire() and self.has_missile_solution:
             self.fire_missile()
             self.player_ship.fire()
             print(self.player_ship.total_missiles)
 
+        if inputs["m"]:
+            self.manual_control = not self.manual_control
+
+        if inputs["x"]:
+            self.missiles.append(Missile(self.enemy_ship.pos_x, self.enemy_ship.pos_y, 0, 0, self.player_ship,
+                                         self.enemy_ship.player_id))
+
+    def handle_input_based_sound_effects(self, inputs):
+        if self.manual_control:
+
+            if inputs['up'] or inputs['left'] or inputs['down'] or inputs['right']:
+                self.audio_manager.play_sfx('thrust')
+            else:
+                self.audio_manager.stop_sfx('thrust')
+
+        if inputs['m']:
+            self.audio_manager.play_sfx('retro_beep')
+
+    def handle_general_sound_effects(self):
+        if self.enemy_has_missile_solution:
+            self.audio_manager.play_sfx('enemy_missile_lock')
+        else:
+            self.audio_manager.stop_sfx('enemy_missile_lock')
+
     def fire_missile(self):
-        missile = Missile(self.player_ship.pos_x, self.player_ship.pos_y, 0, 0, self.enemy_ship)
+        missile = Missile(self.player_ship.pos_x, self.player_ship.pos_y, 0, 0, self.enemy_ship,
+                          self.player_ship.player_id)
         self.missiles.append(missile)
 
     def handle_ships(self, dt):
@@ -65,6 +117,16 @@ class MainScene:
             ship.run(dt)
 
     def handle_missiles(self, dt):
+        if not self.missiles:
+            self.enemy_has_missile_solution = False
+
+        for missile in self.missiles:
+            if missile.owner == self.player_ship.player_id:
+                return
+            if missile.contact == self.player_ship:
+                self.enemy_has_missile_solution = True
+
+
         missiles_to_remove = []
         for missile in self.missiles:
             missile.run(dt)
@@ -100,9 +162,11 @@ class MainScene:
         self.draw_ui.draw_world_grid(camera_x, camera_y, self.grid_on)
         self.draw_ui.draw_ui_layout()
         self.draw_ui.draw_weapon_solution_indicator(self.has_missile_solution)
+        self.draw_ui.draw_manual_control_indicator(self.manual_control)
         self.draw_ui.draw_ship_info(self.player_ship)
+        self.draw_ui.draw_missile_lock_warning(self.enemy_has_missile_solution)
+        self.draw_ui.draw_missile_vectors(self.player_ship.player_id, self.missiles, self.player_ship, camera_x, camera_y)
         self.draw_ui.draw_scanlines()
-
 
         end_blit()
 

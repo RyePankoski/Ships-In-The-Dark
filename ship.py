@@ -15,6 +15,8 @@ class Ship:
         self.vel_x = 0
         self.vel_y = 0
 
+        self.velocity = 0
+
         self.player_id = player_id
 
         self.heading = 0
@@ -37,8 +39,7 @@ class Ship:
         if self.dampening:
             self.dampen(dt)
 
-        if not self.player:
-            self.bounce()
+        self.bounce()
 
     def fire(self):
         if not self.missile_cooling_down:

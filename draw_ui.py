@@ -1,13 +1,17 @@
+import math
+import time
+
 import pygame
 
 
 class DrawUI:
     def __init__(self, screen):
+        self.lock_blink_counter = 0
         self.font_small = None
         self.screen = screen
 
         self.font = pygame.font.Font(None, 28)  # Was 18
-        self.font_small = pygame.font.Font(None, 22)  # Was 16
+        self.font_small = pygame.font.Font(None, 35)  # Was 16
 
     def draw_ship_info(self, ship):
         """Draw ship status information in bottom left panel
@@ -64,6 +68,39 @@ class DrawUI:
 
         # Draw text
         text = self.font.render("WEAPON SOLUTION", True, (0, 255, 200))
+        self.screen.blit(text, (x + 40, y + 8))
+
+    def draw_manual_control_indicator(self, enabled):
+        """Draw manual control status indicator in top right
+
+        Args:
+            enabled: Boolean, True if manual control is active
+
+        Future expansions:
+            - Add control mode indicators (sensor mode, targeting mode)
+            - Add key bindings display
+            - Add control sensitivity slider
+        """
+        screen_width = self.screen.get_width()
+        x = screen_width - 290  # Position from right edge
+        y = 30
+
+        # Light color - cyan if enabled, red if not
+        light_color = (0, 255, 200) if enabled else (150, 50, 50)
+
+        # Draw indicator box
+        box_rect = pygame.Rect(x, y, 260, 40)
+        pygame.draw.rect(self.screen, (30, 30, 40), box_rect)
+        pygame.draw.rect(self.screen, (0, 255, 200), box_rect, 1)
+
+        # Draw light indicator (circle)
+        light_x = x + 20
+        light_y = y + 20
+        pygame.draw.circle(self.screen, light_color, (light_x, light_y), 8)
+
+        # Draw text
+        status_text = "MANUAL CTRL" if enabled else "AUTO MODE"
+        text = self.font.render(status_text, True, (0, 255, 200))
         self.screen.blit(text, (x + 40, y + 8))
 
     def draw_ui_layout(self):
@@ -177,3 +214,170 @@ class DrawUI:
                 label = self.font_grid.render(str(int(y)), True, text_color)
                 self.screen.blit(label, (world_left + 5, screen_y + 5))
             y += grid_size
+
+    def draw_missile_lock_warning(self, locked):
+        if not locked:
+            return
+
+        screen_width = self.screen.get_width()
+        screen_height = self.screen.get_height()
+
+        # UI panel dimensions (must match draw_ui_layout)
+        panel_width = 600
+        thin_height = 200
+
+        # World area bounds
+        world_left = panel_width
+        world_right = screen_width - panel_width
+        world_top = thin_height
+        world_bottom = screen_height - thin_height
+
+        # Blink timing
+        if not hasattr(self, 'lock_blink_counter'):
+            self.lock_blink_counter = 0
+
+        self.lock_blink_counter += 1
+        blink_frequency = 10
+
+        if (self.lock_blink_counter // blink_frequency) % 2 == 0:
+            border_color = (255, 0, 0)
+            border_width = 10
+
+            # Draw red border around world area
+            pygame.draw.rect(self.screen, border_color,
+                             (world_left, world_top, world_right - world_left, world_bottom - world_top),
+                             border_width)
+
+    def draw_missile_vectors(
+            self, player_id, missiles, player_ship, camera_x, camera_y
+    ):
+        """Draw incoming missile threat indicators and vectors along the screen edges.
+
+        Designed for retro CRT aesthetic.
+        """
+        screen_width = self.screen.get_width()
+        screen_height = self.screen.get_height()
+
+        # Viewport boundaries (constrained by UI panels)
+        panel_width = 600
+        thin_height = 200
+
+        world_left = panel_width
+        world_right = screen_width - panel_width
+        world_top = thin_height
+        world_bottom = screen_height - thin_height
+
+        # Center of screen for relative directional calculations
+        screen_center_x = (world_left + world_right) / 2
+        screen_center_y = (world_top + world_bottom) / 2
+
+        # Filter incoming threat missiles targeting player
+        enemy_missiles = [
+            m
+            for m in missiles
+            if getattr(m, "contact", None) and m.contact.player_id == player_id
+        ]
+
+        current_time = time.time()
+
+        for missile in enemy_missiles:
+            # Convert missile world position to screen space
+            screen_x = missile.pos_x - camera_x
+            screen_y = missile.pos_y - camera_y
+
+            # Only draw edge indicators for off-screen threats
+            if not (
+                    world_left < screen_x < world_right
+                    and world_top < screen_y < world_bottom
+            ):
+
+                # Calculate distance to player ship for threat level
+                dx = missile.pos_x - player_ship.pos_x
+                dy = missile.pos_y - player_ship.pos_y
+                dist = math.hypot(dx, dy)
+
+                # 1. Dynamic Threat Level Color Coding
+                if dist < 400:
+                    color = (255, 30, 30)  # High Threat: Critical Red
+                    pulse_speed = 15.0
+                elif dist < 1000:
+                    color = (255, 140, 0)  # Medium Threat: Warning Orange
+                    pulse_speed = 8.0
+                else:
+                    color = (255, 220, 0)  # Low Threat: Yellow
+                    pulse_speed = 3.0
+
+                # 2. CRT Flicker/Pulse Effect
+                # Blinks indicator intensity fast when close, slow when far
+                flicker = math.sin(current_time * pulse_speed)
+                if flicker < -0.3:
+                    continue  # Skip drawing frame for a radar "tick" sweep look
+
+                # 3. Raycast Direction to Edge (Center -> Off-screen position)
+                rel_x = screen_x - screen_center_x
+                rel_y = screen_y - screen_center_y
+                angle = math.atan2(rel_y, rel_x)
+
+                # Clamp vector to HUD edge bounds
+                edge_x = max(
+                    world_left + 10, min(world_right - 10, screen_x)
+                )  # Default fallback
+                edge_y = max(world_top + 10, min(world_bottom - 10, screen_y))
+
+                # Ray-box intersection for accurate edge placement relative to player
+                if rel_x != 0 and rel_y != 0:
+                    scale_x = (
+                        (world_right - screen_center_x - 10) / rel_x
+                        if rel_x > 0
+                        else (world_left - screen_center_x + 10) / rel_x
+                    )
+                    scale_y = (
+                        (world_bottom - screen_center_y - 10) / rel_y
+                        if rel_y > 0
+                        else (world_top - screen_center_y + 10) / rel_y
+                    )
+                    scale = min(scale_x, scale_y)
+                    edge_x = screen_center_x + rel_x * scale
+                    edge_y = screen_center_y + rel_y * scale
+
+                # 4. Missile Velocity Vector Projection
+                vel_mag = math.hypot(missile.vel_x, missile.vel_y)
+                if vel_mag > 0:
+                    dir_x = missile.vel_x / vel_mag
+                    dir_y = missile.vel_y / vel_mag
+                else:
+                    dir_x, dir_y = math.cos(angle), math.sin(angle)
+
+                # Vector tail (length scales slightly with missile speed)
+                vec_length = max(20, min(45, vel_mag * 2))
+                end_x = edge_x + dir_x * vec_length
+                end_y = edge_y + dir_y * vec_length
+
+                # 5. Render CRT Visual Elements
+                # Trajectory vector line
+                pygame.draw.line(
+                    self.screen, color, (edge_x, edge_y), (end_x, end_y), 2
+                )
+
+                # Main threat node
+                pygame.draw.circle(
+                    self.screen, color, (int(edge_x), int(edge_y)), 4, 1
+                )
+                pygame.draw.circle(
+                    self.screen, color, (int(edge_x), int(edge_y)), 2
+                )
+
+                # Directional "chevron" tick on edge point pointing toward threat
+                chev_angle1 = angle + math.pi * 0.85
+                chev_angle2 = angle - math.pi * 0.85
+                c1_x = edge_x + math.cos(chev_angle1) * 8
+                c1_y = edge_y + math.sin(chev_angle1) * 8
+                c2_x = edge_x + math.cos(chev_angle2) * 8
+                c2_y = edge_y + math.sin(chev_angle2) * 8
+
+                pygame.draw.line(
+                    self.screen, color, (edge_x, edge_y), (c1_x, c1_y), 1
+                )
+                pygame.draw.line(
+                    self.screen, color, (edge_x, edge_y), (c2_x, c2_y), 1
+                )
