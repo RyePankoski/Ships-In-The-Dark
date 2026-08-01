@@ -19,6 +19,7 @@ def collect_inputs():
         'shift': keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT],
         'g': keys[pygame.K_g],
         'x': keys[pygame.K_x],
+        'r' : keys[pygame.K_r],
     }
 
     return inputs

@@ -5,11 +5,18 @@ DAMPENING_FORCE = 0.999  # This one stays the same (it's multiplicative)
 
 MISSILE_THRUST = 50  # was 0.4
 MISSILE_MAX_SPEED = 500  # was 10
-MISSILE_FUEL = 20  # stays
+MISSILE_FUEL = 15  # stays
 MISSILE_FUEL_USE_RATE = 3  # stays (or adjust)
 
 MISSILE_LIFETIME = 60
 TOTAL_MISSILES = 3
+
+# Missile obstacle avoidance (single-feeler steering)
+MISSILE_FEELER_LENGTH = 200     # how far ahead the missile looks for rocks
+MISSILE_FEELER_STEP = 25       # sample spacing; keep < GRID_SIZE so no cell is skipped
+MISSILE_AVOID_CLEARANCE = 250    # berth given to a rock; tune to visible missile size
+MISSILE_AVOID_WEIGHT = 1.0      # 1.0 = up to ~45 deg deflection from straight-at-target
+MISSILE_AVOID_SMOOTH = 0.15     # 0.1 = heavy smoothing (gliding), 0.4 = snappier
 
 WORLD_WIDTH = 10000
 WORLD_HEIGHT = 10000
@@ -17,6 +24,6 @@ GRID_SIZE = 500
 
 RADAR_RANGE = 1000
 RADAR_PULSE_RANGE = 2000
-RADAR_PULSE_SPEED = 5
+RADAR_PULSE_SPEED = 1
 
 PORT = 27015

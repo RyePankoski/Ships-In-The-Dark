@@ -1,4 +1,5 @@
 import math
+import time
 
 import pygame
 
@@ -105,38 +106,126 @@ class DrawUI:
         self.screen.blit(text, (x + 40, y + 8))
 
     def draw_ui_layout(self):
-        """Draw UI panel backgrounds and borders - retro CRT aesthetic"""
+        """Draw UI panel backgrounds and borders with clean CRT chassis framing.
+
+        Dimensions and panel locations remain strictly locked.
+        """
         screen_width = self.screen.get_width()
         screen_height = self.screen.get_height()
 
+        # Fixed panel dimensions - UNCHANGED
         panel_width = 600
         thin_height = 200
 
-        # Define panel areas
+        # Define panel rects
         top_panel = pygame.Rect(0, 0, screen_width, thin_height)
-        bottom_panel = pygame.Rect(0, screen_height - thin_height, screen_width, thin_height)
-        left_panel = pygame.Rect(0, thin_height, panel_width, screen_height - 2 * thin_height)
-        right_panel = pygame.Rect(screen_width - panel_width, thin_height, panel_width, screen_height - 2 * thin_height)
+        bottom_panel = pygame.Rect(
+            0, screen_height - thin_height, screen_width, thin_height
+        )
+        left_panel = pygame.Rect(
+            0, thin_height, panel_width, screen_height - 2 * thin_height
+        )
+        right_panel = pygame.Rect(
+            screen_width - panel_width,
+            thin_height,
+            panel_width,
+            screen_height - 2 * thin_height,
+        )
 
-        # Retro CRT colors - dark background with cyan accents
-        panel_color = (2, 8, 2)
-        border_color = (200, 150, 0)
-        border_width = 2
+        panels = [top_panel, bottom_panel, left_panel, right_panel]
 
-        # Draw panel backgrounds
-        pygame.draw.rect(self.screen, panel_color, top_panel)
-        pygame.draw.rect(self.screen, panel_color, bottom_panel)
-        pygame.draw.rect(self.screen, panel_color, left_panel)
-        pygame.draw.rect(self.screen, panel_color, right_panel)
+        # Palette - Crisp, functional amber CRT look
+        panel_bg = (3, 8, 5)  # Dark phosphor background
+        primary_border = (210, 150, 0)  # Main amber border
+        inset_border = (90, 65, 0)  # Dimmer accent for inner bevel
+        corner_accent = (255, 200, 40)  # High-brightness corner notch ticks
 
-        # Draw borders
-        pygame.draw.rect(self.screen, border_color, top_panel, border_width)
-        pygame.draw.rect(self.screen, border_color, bottom_panel, border_width)
-        pygame.draw.rect(self.screen, border_color, left_panel, border_width)
-        pygame.draw.rect(self.screen, border_color, right_panel, border_width)
+        # 1. Base Background Fill
+        for panel in panels:
+            pygame.draw.rect(self.screen, panel_bg, panel)
 
-    def draw_scanlines(self): # noqa
-        """Draw CRT scanlines with transparency""" # noqa
+        # 2. Primary Outer Borders
+        for panel in panels:
+            pygame.draw.rect(self.screen, primary_border, panel, 2)
+
+        # 3. Parallel Inset Line (Recessed Chassis Effect)
+        # Draws a subtle inner line 5px inside each panel to add depth without clutter
+        for panel in panels:
+            inner_rect = panel.inflate(-10, -10)
+            pygame.draw.rect(self.screen, inset_border, inner_rect, 1)
+
+        # 4. Viewport Corner Notch Ticks
+        # Marks the 4 inner corners framing the gameplay area with clean, thick L-brackets
+        v_left, v_right = panel_width, screen_width - panel_width
+        v_top, v_bottom = thin_height, screen_height - thin_height
+        notch_len = 12
+
+        # Top-Left Viewport Notch
+        pygame.draw.line(
+            self.screen,
+            corner_accent,
+            (v_left, v_top),
+            (v_left + notch_len, v_top),
+            3,
+        )
+        pygame.draw.line(
+            self.screen,
+            corner_accent,
+            (v_left, v_top),
+            (v_left, v_top + notch_len),
+            3,
+        )
+
+        # Top-Right Viewport Notch
+        pygame.draw.line(
+            self.screen,
+            corner_accent,
+            (v_right, v_top),
+            (v_right - notch_len, v_top),
+            3,
+        )
+        pygame.draw.line(
+            self.screen,
+            corner_accent,
+            (v_right, v_top),
+            (v_right, v_top + notch_len),
+            3,
+        )
+
+        # Bottom-Left Viewport Notch
+        pygame.draw.line(
+            self.screen,
+            corner_accent,
+            (v_left, v_bottom),
+            (v_left + notch_len, v_bottom),
+            3,
+        )
+        pygame.draw.line(
+            self.screen,
+            corner_accent,
+            (v_left, v_bottom),
+            (v_left, v_bottom - notch_len),
+            3,
+        )
+
+        # Bottom-Right Viewport Notch
+        pygame.draw.line(
+            self.screen,
+            corner_accent,
+            (v_right, v_bottom),
+            (v_right - notch_len, v_bottom),
+            3,
+        )
+        pygame.draw.line(
+            self.screen,
+            corner_accent,
+            (v_right, v_bottom),
+            (v_right, v_bottom - notch_len),
+            3,
+        )
+
+    def draw_scanlines(self):  # noqa
+        """Draw CRT scanlines with transparency"""  # noqa
         scanline_surface = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
 
         line_height = 2
@@ -183,7 +272,7 @@ class DrawUI:
         world_top = thin_height
         world_bottom = screen_height - thin_height
 
-        grid_size = GRID_SIZE # World units between grid lines
+        grid_size = GRID_SIZE  # World units between grid lines
         grid_color = (100, 100, 80)  # Muted olive
         text_color = (150, 150, 100)
 
@@ -310,7 +399,7 @@ class DrawUI:
 
             # Only draw if within radar bounds
             if radar_x < radar_px < radar_x + radar_size and radar_y < radar_py < radar_y + radar_size:
-                pygame.draw.circle(self.screen, color, (int(radar_px), int(radar_py)), 4)
+                pygame.draw.circle(self.screen, color, (int(radar_px), int(radar_py)), 1)
 
         # Draw label
         if not hasattr(self, 'font_tiny'):

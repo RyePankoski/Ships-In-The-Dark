@@ -15,7 +15,7 @@ class RadarSystem:
         self.current_frame = 1
         self.scan_frames = 100
         self.current_ray = 0
-        self.scan_resolution = 720
+        self.scan_resolution = 72
         self.rays_per_frame = None
         self.radar_rays = None
 

@@ -22,7 +22,6 @@ class MainScene:
         self.player_ship_ai = PlayerShipAI()
         self.radar_system = RadarSystem()
 
-
         # Netcode stuff
         self.connected = connected
         self.my_player_id = None
@@ -44,7 +43,7 @@ class MainScene:
             self.enemy_ship.dampening = False
             self.ships.append(self.enemy_ship)
 
-            for i in range(1000):
+            for i in range(200):
                 pos_x = random.randint(0, WORLD_WIDTH)
                 pos_y = random.randint(0, WORLD_HEIGHT)
 
@@ -55,7 +54,7 @@ class MainScene:
                 if cell not in self.asteroids:
                     self.asteroids[cell] = []
 
-                asteroid = Asteroid(pos_x, pos_y, random.randint(5, 50))
+                asteroid = Asteroid(pos_x, pos_y, random.randint(20,100 ))
                 self.asteroids[cell].append(asteroid)
 
 
@@ -65,7 +64,7 @@ class MainScene:
         self.ships.append(self.player_ship)
 
         # Weapons systems
-        self.has_missile_solution = False
+        self.has_missile_solution = True
         self.enemy_has_missile_solution = False
 
         # UI stuff
@@ -79,11 +78,7 @@ class MainScene:
             self.handle_missiles(dt)
             self.handle_ships(dt)
 
-
-        if not self.radar_system.scanning:
-            self.signatures = []
-            self.radar_system.begin_scan(self.player_ship, self.ships, self.asteroids)
-        else:
+        if self.radar_system.scanning:
             self.signatures.extend(self.radar_system.continue_scan())
 
         self.handle_general_sound_effects()
@@ -111,6 +106,12 @@ class MainScene:
             self.missiles.append(Missile(self.enemy_ship.pos_x, self.enemy_ship.pos_y, 0, 0, self.player_ship,
                                          self.enemy_ship.player_id))
 
+        if inputs['r']:
+            if self.radar_system.scanning:
+                return
+            self.signatures = []
+            self.radar_system.begin_scan(self.player_ship, self.ships, self.asteroids)
+
     def handle_input_based_sound_effects(self, inputs):
         if self.manual_control:
 
@@ -121,6 +122,9 @@ class MainScene:
 
         if inputs['m']:
             self.audio_manager.play_sfx('retro_beep')
+
+        if inputs['r']:
+            self.audio_manager.play_sfx('radar')
 
     def handle_general_sound_effects(self):
         if self.enemy_has_missile_solution:
@@ -155,13 +159,13 @@ class MainScene:
 
         for missile in self.missiles:
             if missile.owner == self.player_ship.player_id:
-                return
+                continue
             if missile.contact == self.player_ship:
                 self.enemy_has_missile_solution = True
 
         missiles_to_remove = []
         for missile in self.missiles:
-            missile.run(dt)
+            missile.run(dt, self.asteroids)
             if missile.alive is False:
                 missiles_to_remove.append(missile)
 
