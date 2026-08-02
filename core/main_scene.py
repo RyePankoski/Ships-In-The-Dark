@@ -68,6 +68,7 @@ class MainScene:
         self.laser_endpoint = (0, 0)
         self.unpainted_all = False
         self.laser_on = False
+        self.target_type = "Nothing"
 
         # Weapons systems
         self.has_missile_solution = True
@@ -131,6 +132,7 @@ class MainScene:
                 self.fire_missile()
                 self.player_ship.fire()
                 self.input_cooling_down = True
+                self.audio_manager.play_sfx('fire_missile')
             if inputs["m"]:
                 self.manual_control = not self.manual_control
                 self.audio_manager.play_sfx('retro_beep')
@@ -157,7 +159,7 @@ class MainScene:
 
     def handle_laser(self, inputs):
         if self.laser_on:
-            self.laser_endpoint = self.laser_assessor.shine_laser(self.ships, self.asteroids)
+            self.laser_endpoint, self.target_type = self.laser_assessor.shine_laser(self.ships, self.asteroids)
             self.laser_assessor.change_direction(inputs)
             self.unpainted_all = False
         elif not self.unpainted_all:
@@ -249,7 +251,8 @@ class MainScene:
         self.draw_ui.draw_missile_lock_warning(self.enemy_has_missile_solution)
         self.draw_ui.draw_missile_vectors(self.player_ship.player_id, self.missiles, self.player_ship, camera_x,
                                           camera_y)
-        self.draw_ui.draw_radar(self.player_ship, self.signatures)
+        self.draw_ui.draw_radar(self.player_ship, self.signatures, self.radar_system.scanning)
+        self.draw_ui.draw_laser_targeting_info(self.target_type, self.laser_on)
         if self.laser_on:
             self.draw_ui.draw_laser(self.laser_assessor, self.laser_endpoint, camera_x, camera_y)
         self.draw_ui.draw_scanlines()

@@ -228,7 +228,7 @@ class DrawUI:
         """Draw CRT scanlines with transparency"""  # noqa
         scanline_surface = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
 
-        line_height = 2
+        line_height = 1
         line_spacing = 4
 
         for y in range(0, self.screen.get_height(), line_spacing):
@@ -338,18 +338,13 @@ class DrawUI:
                              (world_left, world_top, world_right - world_left, world_bottom - world_top),
                              border_width)
 
-    def draw_radar(self, player_ship, signatures):
+    def draw_radar(self, player_ship, signatures, is_scanning=False):
         """Draw tactical radar in right panel
 
         Args:
             player_ship: Player ship object (pos_x, pos_y)
             signatures: List of (x, y) tuples representing contacts
-
-        Future expansions:
-            - Circular radar display instead of square
-            - Color coding by contact type (ship vs decoy)
-            - Range rings with distance labels
-            - Contact age/fade effect
+            is_scanning: Boolean indicating if an active scan sequence is running
         """
         screen_width = self.screen.get_width()
         screen_height = self.screen.get_height()
@@ -358,15 +353,13 @@ class DrawUI:
         panel_width = 600
         thin_height = 200
 
-        # Right panel bounds - make radar fill most of it
+        # Right panel bounds
         radar_x = screen_width - panel_width + 20
         radar_y = thin_height + 20
-        radar_size = screen_height - 2 * thin_height - 40  # Fill vertical space
-
-        # Make it square
+        radar_size = screen_height - 2 * thin_height - 40
         radar_size = min(radar_size, panel_width - 40)
 
-        # Draw radar background
+        # Draw radar background & border
         radar_rect = pygame.Rect(radar_x, radar_y, radar_size, radar_size)
         pygame.draw.rect(self.screen, (10, 20, 10), radar_rect)
         pygame.draw.rect(self.screen, (200, 150, 0), radar_rect, 2)
@@ -376,38 +369,47 @@ class DrawUI:
         center_y = radar_y + radar_size // 2
         pygame.draw.circle(self.screen, (0, 255, 0), (center_x, center_y), 5)
 
-        # Draw range grid (larger rings now)
+        # Draw range grid
         grid_color = (80, 80, 60)
         grid_spacing = radar_size // 4
         for i in range(1, 3):
             offset = grid_spacing * i
             pygame.draw.circle(self.screen, grid_color, (center_x, center_y), offset, 1)
 
-        # Scale world coordinates to radar (-2000 to +2000 world units = full radar)
+        # Scale world coordinates to radar (-2000 to +2000 world units)
         radar_scale = radar_size / 4000.0
 
         # Plot signatures
         player_x, player_y = player_ship.rect.center
         for sig_x, sig_y, color in signatures:
-
-            # Relative to player
-
             rel_x = sig_x - player_x
             rel_y = sig_y - player_y
 
-            # Scale to radar
             radar_px = center_x + rel_x * radar_scale
             radar_py = center_y + rel_y * radar_scale
 
-            # Only draw if within radar bounds
             if radar_x < radar_px < radar_x + radar_size and radar_y < radar_py < radar_y + radar_size:
-                pygame.draw.circle(self.screen, color, (int(radar_px), int(radar_py)), 1)
+                pygame.draw.circle(self.screen, color, (int(radar_px), int(radar_py)), 2)
 
-        # Draw label
-        if not hasattr(self, 'font_tiny'):
-            self.font_tiny = pygame.font.Font(None, 12)
-        label = self.font_tiny.render("RADAR", True, (200, 150, 0))
-        self.screen.blit(label, (radar_x + 5, radar_y - 20))
+        # --- Legible Header Label ---
+        # Bump size to 18 and render inside the top-left corner of the radar frame
+        if not hasattr(self, 'font_radar_label') or self.font_radar_label is None:
+            self.font_radar_label = pygame.font.Font(None, 25)
+
+        if is_scanning:
+            label_text = "RADAR [ SCANNING... ]"
+            label_color = (0, 255, 200)
+        else:
+            label_text = "RADAR"
+            label_color = (200, 150, 0)
+
+        label = self.font_radar_label.render(label_text, True, label_color)
+
+        # Optional dark backdrop behind text to keep grid lines from cutting through glyphs
+        label_bg = pygame.Rect(radar_x + 8, radar_y + 8, label.get_width() + 6, label.get_height() + 2)
+        pygame.draw.rect(self.screen, (10, 20, 10), label_bg)
+
+        self.screen.blit(label, (radar_x + 11, radar_y + 9))
 
     def draw_laser(self, laser, laser_endpoint, camera_x, camera_y):
         """Draw the laser beam in BOTH the world viewport and the radar panel.
@@ -422,6 +424,10 @@ class DrawUI:
             laser: LaserAssessor -- uses .ship_of_origin.rect.center and .painted
             laser_endpoint: (x, y) tuple of world coordinates where the laser ends
             camera_x, camera_y: world->screen camera offset for the main view
+            :param laser:
+            :param laser_endpoint:
+            :param camera_x:
+            :param camera_y:
         """
         screen_width = self.screen.get_width()
         screen_height = self.screen.get_height()
@@ -481,6 +487,64 @@ class DrawUI:
             1,
         )
         self.screen.set_clip(None)
+
+    def draw_laser_targeting_info(self, signature_type: str, enabled: bool):
+        """Draw laser targeting assessment status directly below the radar panel.
+
+        Args:
+            signature_type: Text description of the analyzed contact (e.g., "MISSILE / HIGH THREAT")
+            enabled: Boolean indicating if laser targeting is currently active
+        """
+        screen_width = self.screen.get_width()
+        screen_height = self.screen.get_height()
+
+        # UI panel dimensions (matches draw_radar layout)
+        panel_width = 600
+        thin_height = 200
+
+        # Anchor relative to radar placement
+        radar_x = screen_width - panel_width + 20
+        radar_y = thin_height + 20
+        radar_size = screen_height - 2 * thin_height - 40
+        radar_size = min(radar_size, panel_width - 40)
+
+        # Position box directly under the radar face
+        box_x = radar_x
+        box_y = radar_y + radar_size + 15
+        box_w = radar_size
+        box_h = 45
+
+        # Colors
+        bg_color = (10, 20, 10)
+        border_color = (200, 150, 0) if enabled else (80, 60, 0)
+        label_color = (150, 150, 100)
+        active_text_color = (0, 255, 200)
+        inactive_text_color = (200, 50, 50)
+
+        # Container Box
+        box_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, bg_color, box_rect)
+        pygame.draw.rect(self.screen, border_color, box_rect, 1)
+
+        # Header Label
+        if not hasattr(self, 'font_tiny') or self.font_tiny is None:
+            self.font_tiny = pygame.font.Font(None, 14)
+
+        header = self.font_tiny.render("LASER TARGET ANALYSIS", True, label_color)
+        self.screen.blit(header, (box_x + 8, box_y + 6))
+
+        # Status Line
+        if enabled:
+            text_str = f"CLASSIFICATION: {signature_type.upper()}"
+            text_color = active_text_color
+        else:
+            text_str = "TARGETING SYSTEM INACTIVE"
+            text_color = inactive_text_color
+
+        status_surface = self.font.render(text_str, True, text_color)
+        self.screen.blit(status_surface, (box_x + 8, box_y + 20))
+
+
 
     def draw_missile_vectors(
             self, player_id, missiles, player_ship, camera_x, camera_y

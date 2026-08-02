@@ -39,6 +39,7 @@ class AudioManager:
             'death_screen': 'sounds/death_screen.wav',
             'laser': 'sounds/laser_toggle.wav',
             'laser_dir_change' : 'sounds/laser_dir_change.wav',
+            'fire_missile' : 'sounds/fire_missile.wav',
         }
 
         for name, filename in sound_files.items():

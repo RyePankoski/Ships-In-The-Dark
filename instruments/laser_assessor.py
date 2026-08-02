@@ -8,7 +8,22 @@ class LaserAssessor:
         self.direction = 0
         self.ship_of_origin = player_ship
 
+        self.signature_position = (0, 0)
+        self.previous_signature_position = (0, 0)
+
+    def assess_target(self, x, y):
+
+        self.previous_signature_position = self.signature_position
+        self.signature_position = (x, y)
+
+        if self.previous_signature_position == self.signature_position:
+            return "Asteroid Likely"
+        else:
+            return "Moving Object"
+
     def shine_laser(self, ships, asteroids):
+        target_type = "Nothing"
+
         for cell in asteroids.values():
             for rock in cell:
                 rock.painted = False
@@ -30,23 +45,24 @@ class LaserAssessor:
             for ship in ships:
                 if ship is self.ship_of_origin:
                     continue
-
                 sx, sy = ship.rect.center
                 if (sx - ray_x) ** 2 + (sy - ray_y) ** 2 < ship.radar_cross_section ** 2:
+                    target_type = self.assess_target(ship.rect.center[0], ship.rect.center[1])
                     ship.painted = True
-                    return ray_x, ray_y
+                    return (ray_x, ray_y), target_type
                 else:
                     ship.painted = False
 
             cell = (int(ray_x // GRID_SIZE), int(ray_y // GRID_SIZE))
             for rock in asteroids.get(cell, []):
                 if (rock.pos_x - ray_x) ** 2 + (rock.pos_y - ray_y) ** 2 < rock.size ** 2:
+                    target_type = self.assess_target(rock.pos_x, rock.pos_y)
                     rock.painted = True
-                    return ray_x, ray_y
+                    return (ray_x, ray_y), target_type
                 else:
                     rock.painted = False
 
-        return ray_x, ray_y
+        return (ray_x, ray_y), target_type
 
     def change_direction(self, inputs):
         if inputs['arrow_key_left']:
