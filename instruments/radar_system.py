@@ -43,7 +43,7 @@ class RadarSystem:
         target_ray = self.rays_per_frame * self.current_frame
         if self.current_frame >= self.scan_frames:
             self.scanning = False
-            target_ray = self.scan_resolution   # final frame casts the remainder
+            target_ray = self.scan_resolution
 
         origin_x, origin_y = self.passed_ship.rect.center
 
@@ -62,18 +62,20 @@ class RadarSystem:
                 ray_y += dy * RADAR_PULSE_SPEED
                 ray_sector = (int(ray_x // GRID_SIZE), int(ray_y // GRID_SIZE))
 
-                # Ships first — they're the targets that matter
                 for ship in self.all_ships:
                     if ship is self.passed_ship:
                         continue
                     s_x, s_y = ship.rect.center
                     dist_sq = (s_x - ray_x) ** 2 + (s_y - ray_y) ** 2
-                    # NOTE: tolerance below is a hit-thickness, not a range.
-                    # Size it against ship radius + step, or fast rays tunnel.
                     if dist_sq < ship.radar_cross_section ** 2:
                         angle = math.atan2(origin_y - s_y, origin_x - s_x)
                         ship.enemy_radar_ping_coordinates.append(angle)
-                        signatures.append((ray_x, ray_y, RED))
+
+                        if ship.painted:
+                            signatures.append((ray_x, ray_y, RED))
+                        else:
+                            signatures.append((ray_x, ray_y, WHITE))
+
                         hit_found = True
                         break
 
@@ -84,11 +86,12 @@ class RadarSystem:
                 if ray_sector in self.all_asteroids:
                     for asteroid in self.all_asteroids[ray_sector]:
                         dist_sq = (asteroid.pos_x - ray_x) ** 2 + (asteroid.pos_y - ray_y) ** 2
-                        # tolerance derived from the rock's own size — big rocks
-                        # are easier to hit, and small ones stop tunnelling if
-                        # RADAR_PULSE_SPEED <= smallest asteroid.size
                         if dist_sq < asteroid.size ** 2:
-                            signatures.append((ray_x, ray_y, WHITE))
+                            if asteroid.painted:
+                                signatures.append((ray_x, ray_y, RED))
+                            else:
+                                signatures.append((ray_x, ray_y, WHITE))
+
                             hit_found = True
                             break
 

@@ -37,6 +37,8 @@ class AudioManager:
             'enemy_missile_lock': 'sounds/enemy_missile_lock.wav',
             'radar': 'sounds/radar.mp3',
             'death_screen': 'sounds/death_screen.wav',
+            'laser': 'sounds/laser_toggle.wav',
+            'laser_dir_change' : 'sounds/laser_dir_change.wav',
         }
 
         for name, filename in sound_files.items():

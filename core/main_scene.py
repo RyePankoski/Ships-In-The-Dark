@@ -1,6 +1,7 @@
 import json
 import random
 
+from instruments.laser_assessor import LaserAssessor
 from utility.constants import WORLD_HEIGHT, WORLD_WIDTH, GRID_SIZE
 from asset_handlers.draw_game import DrawGame
 from asset_handlers.draw_ui import DrawUI
@@ -37,7 +38,8 @@ class MainScene:
         if not self.connected:
             self.player_ship = Ship(random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT), is_player=True,
                                     player_id=1)
-            self.enemy_ship = Ship(random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT), is_player=False)
+            self.enemy_ship = Ship(random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT), is_player=False,
+                                   is_painted=False)
             self.enemy_ship.vel_x = 50
             self.enemy_ship.vel_y = 60
             self.enemy_ship.dampening = False
@@ -62,6 +64,7 @@ class MainScene:
             self.player_ship = Ship(100, 100, is_player=True)
 
         self.ships.append(self.player_ship)
+        self.laser_assessor = LaserAssessor(self.player_ship)
 
         # Weapons systems
         self.has_missile_solution = True
@@ -71,13 +74,20 @@ class MainScene:
         self.grid_on = True
         self.manual_control = True
         self.end_tripped = False
+        self.laser_on = True
+
+        # input timer
+        self.input_timer = 0
+        self.input_timer_cooldown = 0.5
+        self.input_cooling_down = False
 
     def run(self, inputs, dt):
 
-        if not self.player_ship.alive and not self.end_tripped:
-            self.audio_manager.stop_all()
-            self.audio_manager.play_sfx('death_screen')
-            self.end_tripped = True
+        if not self.player_ship.alive:
+            if not self.end_tripped:
+                self.audio_manager.stop_all()
+                self.audio_manager.play_sfx('death_screen')
+                self.end_tripped = True
             return
 
         if not self.connected:
@@ -88,6 +98,10 @@ class MainScene:
         if self.radar_system.scanning:
             self.signatures.extend(self.radar_system.continue_scan())
 
+        if self.laser_on:
+            self.laser_assessor.shine_laser(self.ships, self.asteroids)
+            self.laser_assessor.change_direction(inputs)
+
         self.handle_general_sound_effects()
         self.draw_scene()
 
@@ -96,28 +110,39 @@ class MainScene:
         if self.manual_control:
             self.player_ship.apply_inputs(inputs, dt)
         else:
-            print("Ai mode")
             self.player_ship_ai.run_ship_ai(self.player_ship)
 
         self.handle_input_based_sound_effects(inputs)
 
-        if inputs["p"] and self.player_ship.can_fire() and self.has_missile_solution:
-            self.fire_missile()
-            self.player_ship.fire()
+        if self.input_cooling_down:
+            self.input_timer += dt
+            if self.input_timer > self.input_timer_cooldown:
+                self.input_timer = 0
+                self.input_cooling_down = False
 
-        if inputs["m"]:
-            self.manual_control = not self.manual_control
-
-        if inputs["x"]:
-            self.enemy_ship.fire()
-            self.missiles.append(Missile(self.enemy_ship.pos_x, self.enemy_ship.pos_y, 0, 0, self.player_ship,
-                                         self.enemy_ship.player_id))
-
-        if inputs['r']:
-            if self.radar_system.scanning:
-                return
-            self.signatures = []
-            self.radar_system.begin_scan(self.player_ship, self.ships, self.asteroids)
+        if not self.input_cooling_down:
+            if inputs["p"] and self.player_ship.can_fire() and self.has_missile_solution:
+                self.fire_missile()
+                self.player_ship.fire()
+                self.input_cooling_down = True
+            if inputs["m"]:
+                self.manual_control = not self.manual_control
+                self.input_cooling_down = True
+            if inputs["x"]:
+                self.enemy_ship.fire()
+                self.missiles.append(Missile(self.enemy_ship.pos_x, self.enemy_ship.pos_y, 0, 0, self.player_ship,
+                                             self.enemy_ship.player_id))
+                self.input_cooling_down = True
+            if inputs['r']:
+                if self.radar_system.scanning:
+                    return
+                self.signatures = []
+                self.radar_system.begin_scan(self.player_ship, self.ships, self.asteroids)
+                self.input_cooling_down = True
+            if inputs['i']:
+                self.laser_on = not self.laser_on
+                self.audio_manager.play_sfx('laser')
+                self.input_cooling_down = True
 
     def handle_input_based_sound_effects(self, inputs):
         if self.manual_control:
@@ -132,6 +157,12 @@ class MainScene:
 
         if inputs['r']:
             self.audio_manager.play_sfx('radar')
+
+        if self.laser_on:
+            if inputs['arrow_key_left'] or inputs['arrow_key_right']:
+                self.audio_manager.play_sfx('laser_dir_change')
+            else:
+                self.audio_manager.stop_sfx('laser_dir_change')
 
     def handle_general_sound_effects(self):
         if self.enemy_has_missile_solution:
@@ -155,8 +186,6 @@ class MainScene:
                 for asteroid in self.asteroids[(ship_grid_x, ship_grid_y)]:
                     distance = (ship.rect.center[0] - asteroid.pos_x) ** 2 + (ship.rect.center[1] - asteroid.pos_y) ** 2
                     if distance < asteroid.size ** 2:
-                        print("Collision")
-
                         ship.vel_x *= -1.5
                         ship.vel_y *= -1.5
 
@@ -217,6 +246,8 @@ class MainScene:
         self.draw_ui.draw_missile_vectors(self.player_ship.player_id, self.missiles, self.player_ship, camera_x,
                                           camera_y)
         self.draw_ui.draw_radar(self.player_ship, self.signatures)
+        if self.laser_on:
+            self.draw_ui.draw_laser(self.laser_assessor, self.laser_assessor.direction, camera_x, camera_y)
         self.draw_ui.draw_scanlines()
 
         end_blit()

@@ -3,3 +3,4 @@ class Asteroid:
         self.pos_x = x
         self.pos_y = y
         self.size = size
+        self.painted = False

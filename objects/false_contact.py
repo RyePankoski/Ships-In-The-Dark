@@ -4,3 +4,4 @@ class FalseContact:
         self.pos_y = y
         self.vel_x = vx
         self.vel_y = vy
+        self.painted = False

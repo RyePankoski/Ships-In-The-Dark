@@ -5,7 +5,7 @@ from utility.constants import *
 
 
 class Ship:
-    def __init__(self, x=None, y=None, is_player=False, player_id=None):
+    def __init__(self, x=None, y=None, is_player=False, player_id=None, is_painted=False):
         self.screen_width, self.screen_height = pygame.display.get_desktop_sizes()[0]
 
         self.player = is_player
@@ -37,6 +37,7 @@ class Ship:
         self.enemy_radar_ping_coordinates = []
 
         self.alive = True
+        self.painted = is_painted
 
     def run(self, dt):
         self.move(dt)

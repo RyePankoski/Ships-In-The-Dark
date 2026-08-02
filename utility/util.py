@@ -20,6 +20,9 @@ def collect_inputs():
         'g': keys[pygame.K_g],
         'x': keys[pygame.K_x],
         'r' : keys[pygame.K_r],
+        'arrow_key_left' : keys[pygame.K_LEFT],
+        'arrow_key_right' : keys[pygame.K_RIGHT],
+        'i' : keys[pygame.K_i],
     }
 
     return inputs

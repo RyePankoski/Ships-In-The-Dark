@@ -3,6 +3,7 @@ import math
 import pygame
 
 from utility.constants import GRID_SIZE
+from utility.constants import *
 
 
 class DrawUI:
@@ -388,7 +389,9 @@ class DrawUI:
         # Plot signatures
         player_x, player_y = player_ship.rect.center
         for sig_x, sig_y, color in signatures:
+
             # Relative to player
+
             rel_x = sig_x - player_x
             rel_y = sig_y - player_y
 
@@ -405,6 +408,83 @@ class DrawUI:
             self.font_tiny = pygame.font.Font(None, 12)
         label = self.font_tiny.render("RADAR", True, (200, 150, 0))
         self.screen.blit(label, (radar_x + 5, radar_y - 20))
+
+    def draw_laser(self, laser, direction, camera_x, camera_y):
+        """Draw the laser beam in BOTH the world viewport and the radar panel.
+
+        The beam is cast as a fixed-range ray in the aim direction -- the exact
+        hit point isn't needed because the far end is clipped off-screen anyway.
+        Colour keys off laser.painted (red on target, cyan on empty space).
+
+        Call after draw_radar (beam on top of the radar face) and before
+        draw_scanlines.
+
+        Args:
+            laser: LaserAssessor -- uses .ship_of_origin.rect.center and .painted
+            direction: aim bearing in degrees (0 = east/+x, clockwise on screen)
+            camera_x, camera_y: world->screen camera offset for the main view
+            :param camera_y:
+            :param laser:
+            :param direction:
+            :param camera_x:
+        """
+        screen_width = self.screen.get_width()
+        screen_height = self.screen.get_height()
+
+        panel_width = 600
+        thin_height = 200
+
+        world_left = panel_width
+        world_right = screen_width - panel_width
+        world_top = thin_height
+        world_bottom = screen_height - thin_height
+
+        origin_x, origin_y = laser.ship_of_origin.rect.center
+
+        # Cast a fixed-range ray in the aim direction. Clipping trims whatever
+        # falls outside each view, so the length just needs to exceed the view.
+        rad = math.radians(direction)
+        end_x = origin_x + math.cos(rad) * LASER_RANGE
+        end_y = origin_y + math.sin(rad) * LASER_RANGE
+
+        beam_color = (150, 30, 30) if laser.painted else (0, 255, 160)
+
+        # --- 1. World viewport beam -----------------------------------------
+        viewport = pygame.Rect(world_left, world_top,
+                               world_right - world_left, world_bottom - world_top)
+        self.screen.set_clip(viewport)
+        pygame.draw.line(
+            self.screen, beam_color,
+            (origin_x - camera_x, origin_y - camera_y),
+            (end_x - camera_x, end_y - camera_y),
+            2,
+        )
+        self.screen.set_clip(None)
+
+        # --- 2. Radar panel beam --------------------------------------------
+        # Radar geometry -- must stay in sync with draw_radar.
+        radar_x = screen_width - panel_width + 20
+        radar_y = thin_height + 20
+        radar_size = screen_height - 2 * thin_height - 40
+        radar_size = min(radar_size, panel_width - 40)
+        center_x = radar_x + radar_size // 2
+        center_y = radar_y + radar_size // 2
+        radar_scale = radar_size / 4000.0
+
+        rel_x = end_x - origin_x
+        rel_y = end_y - origin_y
+        radar_end_x = center_x + rel_x * radar_scale
+        radar_end_y = center_y + rel_y * radar_scale
+
+        radar_rect = pygame.Rect(radar_x, radar_y, radar_size, radar_size)
+        self.screen.set_clip(radar_rect)
+        pygame.draw.line(
+            self.screen, beam_color,
+            (center_x, center_y),
+            (radar_end_x, radar_end_y),
+            1,
+        )
+        self.screen.set_clip(None)
 
     def draw_missile_vectors(
             self, player_id, missiles, player_ship, camera_x, camera_y

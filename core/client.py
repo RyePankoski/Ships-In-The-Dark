@@ -45,6 +45,8 @@ class Client:
             self.connect_to_server()
             self.connected = True
 
+        user_inputs.clear()
+
     def start_netcode(self):
         self.network_layer = NetworkLayer(True, PORT)
         self.network_layer.start()
