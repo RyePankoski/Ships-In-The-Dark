@@ -1,6 +1,6 @@
 import pygame
 import sys
-from core import Core
+from core.core import Core
 
 pygame.init()
 clock = pygame.time.Clock()
