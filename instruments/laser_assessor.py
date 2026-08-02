@@ -9,6 +9,11 @@ class LaserAssessor:
         self.ship_of_origin = player_ship
 
     def shine_laser(self, ships, asteroids):
+        for cell in asteroids.values():
+            for rock in cell:
+                rock.painted = False
+        for ship in ships:
+            ship.painted = False
 
         rad = math.radians(self.direction)
         dx, dy = math.cos(rad), math.sin(rad)
@@ -33,10 +38,6 @@ class LaserAssessor:
                 else:
                     ship.painted = False
 
-            for cell in asteroids.values():
-                for rock in cell:
-                    rock.painted = False
-
             cell = (int(ray_x // GRID_SIZE), int(ray_y // GRID_SIZE))
             for rock in asteroids.get(cell, []):
                 if (rock.pos_x - ray_x) ** 2 + (rock.pos_y - ray_y) ** 2 < rock.size ** 2:
@@ -53,3 +54,6 @@ class LaserAssessor:
         if inputs['arrow_key_right']:
             self.direction += 1
         self.direction %= 360
+
+    def set_direction(self, direction):
+        self.direction = direction

@@ -409,11 +409,10 @@ class DrawUI:
         label = self.font_tiny.render("RADAR", True, (200, 150, 0))
         self.screen.blit(label, (radar_x + 5, radar_y - 20))
 
-    def draw_laser(self, laser, direction, camera_x, camera_y):
+    def draw_laser(self, laser, laser_endpoint, camera_x, camera_y):
         """Draw the laser beam in BOTH the world viewport and the radar panel.
 
-        The beam is cast as a fixed-range ray in the aim direction -- the exact
-        hit point isn't needed because the far end is clipped off-screen anyway.
+        The beam is drawn from the originating ship to the exact target endpoint.
         Colour keys off laser.painted (red on target, cyan on empty space).
 
         Call after draw_radar (beam on top of the radar face) and before
@@ -421,12 +420,8 @@ class DrawUI:
 
         Args:
             laser: LaserAssessor -- uses .ship_of_origin.rect.center and .painted
-            direction: aim bearing in degrees (0 = east/+x, clockwise on screen)
+            laser_endpoint: (x, y) tuple of world coordinates where the laser ends
             camera_x, camera_y: world->screen camera offset for the main view
-            :param camera_y:
-            :param laser:
-            :param direction:
-            :param camera_x:
         """
         screen_width = self.screen.get_width()
         screen_height = self.screen.get_height()
@@ -440,21 +435,21 @@ class DrawUI:
         world_bottom = screen_height - thin_height
 
         origin_x, origin_y = laser.ship_of_origin.rect.center
-
-        # Cast a fixed-range ray in the aim direction. Clipping trims whatever
-        # falls outside each view, so the length just needs to exceed the view.
-        rad = math.radians(direction)
-        end_x = origin_x + math.cos(rad) * LASER_RANGE
-        end_y = origin_y + math.sin(rad) * LASER_RANGE
+        end_x, end_y = laser_endpoint
 
         beam_color = (150, 30, 30) if laser.painted else (0, 255, 160)
 
         # --- 1. World viewport beam -----------------------------------------
-        viewport = pygame.Rect(world_left, world_top,
-                               world_right - world_left, world_bottom - world_top)
+        viewport = pygame.Rect(
+            world_left,
+            world_top,
+            world_right - world_left,
+            world_bottom - world_top,
+        )
         self.screen.set_clip(viewport)
         pygame.draw.line(
-            self.screen, beam_color,
+            self.screen,
+            beam_color,
             (origin_x - camera_x, origin_y - camera_y),
             (end_x - camera_x, end_y - camera_y),
             2,
@@ -479,7 +474,8 @@ class DrawUI:
         radar_rect = pygame.Rect(radar_x, radar_y, radar_size, radar_size)
         self.screen.set_clip(radar_rect)
         pygame.draw.line(
-            self.screen, beam_color,
+            self.screen,
+            beam_color,
             (center_x, center_y),
             (radar_end_x, radar_end_y),
             1,

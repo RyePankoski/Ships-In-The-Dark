@@ -59,12 +59,15 @@ class MainScene:
                 asteroid = Asteroid(pos_x, pos_y, random.randint(20, 100))
                 self.asteroids[cell].append(asteroid)
 
-
         else:
             self.player_ship = Ship(100, 100, is_player=True)
 
+        # Laser system
         self.ships.append(self.player_ship)
         self.laser_assessor = LaserAssessor(self.player_ship)
+        self.laser_endpoint = (0, 0)
+        self.unpainted_all = False
+        self.laser_on = False
 
         # Weapons systems
         self.has_missile_solution = True
@@ -74,7 +77,6 @@ class MainScene:
         self.grid_on = True
         self.manual_control = True
         self.end_tripped = False
-        self.laser_on = True
 
         # input timer
         self.input_timer = 0
@@ -82,7 +84,6 @@ class MainScene:
         self.input_cooling_down = False
 
     def run(self, inputs, dt):
-
         if not self.player_ship.alive:
             if not self.end_tripped:
                 self.audio_manager.stop_all()
@@ -90,29 +91,34 @@ class MainScene:
                 self.end_tripped = True
             return
 
+        # Let the server handle inputs and simulation
         if not self.connected:
             self.handle_inputs(inputs, dt)
             self.handle_missiles(dt)
             self.handle_ships(dt)
 
-        if self.radar_system.scanning:
-            self.signatures.extend(self.radar_system.continue_scan())
-
-        if self.laser_on:
-            self.laser_assessor.shine_laser(self.ships, self.asteroids)
-            self.laser_assessor.change_direction(inputs)
-
+        self.handle_radar()
+        self.handle_laser(inputs)
         self.handle_general_sound_effects()
         self.draw_scene()
 
     def handle_inputs(self, inputs, dt):
+        if self.laser_on:
+            if inputs['arrow_key_left'] or inputs['arrow_key_right']:
+                self.audio_manager.play_sfx('laser_dir_change')
+            else:
+                self.audio_manager.stop_sfx('laser_dir_change')
+
+        if self.manual_control:
+            if inputs['up'] or inputs['left'] or inputs['down'] or inputs['right']:
+                self.audio_manager.play_sfx('thrust')
+            else:
+                self.audio_manager.stop_sfx('thrust')
 
         if self.manual_control:
             self.player_ship.apply_inputs(inputs, dt)
         else:
             self.player_ship_ai.run_ship_ai(self.player_ship)
-
-        self.handle_input_based_sound_effects(inputs)
 
         if self.input_cooling_down:
             self.input_timer += dt
@@ -127,6 +133,7 @@ class MainScene:
                 self.input_cooling_down = True
             if inputs["m"]:
                 self.manual_control = not self.manual_control
+                self.audio_manager.play_sfx('retro_beep')
                 self.input_cooling_down = True
             if inputs["x"]:
                 self.enemy_ship.fire()
@@ -134,46 +141,38 @@ class MainScene:
                                              self.enemy_ship.player_id))
                 self.input_cooling_down = True
             if inputs['r']:
-                if self.radar_system.scanning:
-                    return
+                self.audio_manager.play_sfx('radar')
                 self.signatures = []
                 self.radar_system.begin_scan(self.player_ship, self.ships, self.asteroids)
                 self.input_cooling_down = True
             if inputs['i']:
                 self.laser_on = not self.laser_on
+                self.laser_assessor.set_direction(self.player_ship.heading)
                 self.audio_manager.play_sfx('laser')
                 self.input_cooling_down = True
 
-    def handle_input_based_sound_effects(self, inputs):
-        if self.manual_control:
+    def handle_radar(self):
+        if self.radar_system.scanning:
+            self.signatures.extend(self.radar_system.continue_scan())
 
-            if inputs['up'] or inputs['left'] or inputs['down'] or inputs['right']:
-                self.audio_manager.play_sfx('thrust')
-            else:
-                self.audio_manager.stop_sfx('thrust')
-
-        if inputs['m']:
-            self.audio_manager.play_sfx('retro_beep')
-
-        if inputs['r']:
-            self.audio_manager.play_sfx('radar')
-
+    def handle_laser(self, inputs):
         if self.laser_on:
-            if inputs['arrow_key_left'] or inputs['arrow_key_right']:
-                self.audio_manager.play_sfx('laser_dir_change')
-            else:
-                self.audio_manager.stop_sfx('laser_dir_change')
+            self.laser_endpoint = self.laser_assessor.shine_laser(self.ships, self.asteroids)
+            self.laser_assessor.change_direction(inputs)
+            self.unpainted_all = False
+        elif not self.unpainted_all:
+            self.unpainted_all = True
+            for cell in self.asteroids.values():
+                for asteroid in cell:
+                    asteroid.painted = False
+            for ship in self.ships:
+                ship.painted = False
 
     def handle_general_sound_effects(self):
         if self.enemy_has_missile_solution:
             self.audio_manager.play_sfx('enemy_missile_lock')
         else:
             self.audio_manager.stop_sfx('enemy_missile_lock')
-
-    def fire_missile(self):
-        missile = Missile(self.player_ship.pos_x, self.player_ship.pos_y, 0, 0, self.enemy_ship,
-                          self.player_ship.player_id)
-        self.missiles.append(missile)
 
     def handle_ships(self, dt):
         for ship in self.ships:
@@ -208,6 +207,11 @@ class MainScene:
         for missile in missiles_to_remove:
             self.explosions.append(missile.rect.center)
             self.missiles.remove(missile)
+
+    def fire_missile(self):
+        missile = Missile(self.player_ship.pos_x, self.player_ship.pos_y, 0, 0, self.enemy_ship,
+                          self.player_ship.player_id)
+        self.missiles.append(missile)
 
     def draw_scene(self):
         self.draw_game.start_blit()
@@ -247,7 +251,7 @@ class MainScene:
                                           camera_y)
         self.draw_ui.draw_radar(self.player_ship, self.signatures)
         if self.laser_on:
-            self.draw_ui.draw_laser(self.laser_assessor, self.laser_assessor.direction, camera_x, camera_y)
+            self.draw_ui.draw_laser(self.laser_assessor, self.laser_endpoint, camera_x, camera_y)
         self.draw_ui.draw_scanlines()
 
         end_blit()
