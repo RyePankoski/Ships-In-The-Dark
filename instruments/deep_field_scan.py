@@ -34,6 +34,7 @@ class DeepFieldScan:
             if in_quadrant(player_x, player_y, direction_deg, ship.rect.center):
                 range_px = distance(player_x, player_y, ship.rect.center)
                 is_moving = ship.total_velocity > 0.1
+                ship.dfs_scanned = True
                 contacts.append((range_px, 'ship', is_moving, 0.8, ship))
 
         # Check asteroids

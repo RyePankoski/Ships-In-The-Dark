@@ -38,6 +38,7 @@ class Ship:
         self.has_missile_solution = True
         self.close_range_scanning = True
         self.manual_control = True
+        self.dfs_scanned = True
         self.scan_used = False
         self.dampening = True
         self.laser_on = False

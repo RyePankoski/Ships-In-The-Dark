@@ -1,6 +1,7 @@
 import math
 import pygame
 from utility.constants import *
+from utility.ui_constants import COLOR_DFS_GRAY
 
 
 class DrawUI:
@@ -644,11 +645,12 @@ class DrawUI:
 
         self.screen.set_clip(None)
 
-    def draw_laser_targeting_info(self, signature_type: str, enabled: bool):
+    def draw_laser_targeting_info(self, target_type: str, laser_assessor, enabled: bool):
         """Draw laser targeting assessment status below the radar panel.
 
         Args:
-            signature_type: Text description of analyzed contact
+            target_type: String classification of the target
+            laser_assessor: LaserAssessor object with lock info
             enabled: Boolean indicating if laser targeting is active
         """
 
@@ -658,10 +660,9 @@ class DrawUI:
         box_x = radar_x
         box_y = radar_y + radar_size + 15
         box_w = radar_size
-        box_h = 45
+        box_h = 60
 
         border_color = self.COLOR_HUD_AMBER if enabled else (80, 60, 0)
-        text_color = self.COLOR_HUD_CYAN if enabled else (200, 50, 50)
 
         # Container Box
         box_rect = pygame.Rect(box_x, box_y, box_w, box_h)
@@ -672,14 +673,34 @@ class DrawUI:
         header = self.font_tiny.render("LASER TARGET ANALYSIS", True, (150, 150, 100))
         self.screen.blit(header, (box_x + 8, box_y + 6))
 
-        # Status Line
+        # Status Line 1: Classification
         if enabled:
-            text_str = f"CLASSIFICATION: {signature_type.upper()}"
+            text_str1 = f"CLASSIFICATION: {target_type.upper()}"
+            color1 = self.COLOR_HUD_CYAN if target_type != "Nothing" else (200, 100, 50)
         else:
-            text_str = "TARGETING SYSTEM INACTIVE"
+            text_str1 = "TARGETING SYSTEM INACTIVE"
+            color1 = (200, 50, 50)
 
-        status_surface = self.font_body.render(text_str, True, text_color)
-        self.screen.blit(status_surface, (box_x + 8, box_y + 20))
+        status_surface1 = self.font_body.render(text_str1, True, color1)
+        self.screen.blit(status_surface1, (box_x + 8, box_y + 20))
+
+        # Status Line 2: Lock status
+        if enabled:
+            if laser_assessor.laser_locked:
+                text_str2 = "STATUS: LOCK ACQUIRED"
+                color2 = (100, 255, 100)
+            elif target_type != "Nothing":
+                text_str2 = "STATUS: TRACKING [SPACE TO LOCK]"
+                color2 = self.COLOR_HUD_AMBER
+            else:
+                text_str2 = "STATUS: SEARCHING"
+                color2 = (150, 150, 150)
+        else:
+            text_str2 = "SYSTEM OFFLINE"
+            color2 = (200, 50, 50)
+
+        status_surface2 = self.font_body.render(text_str2, True, color2)
+        self.screen.blit(status_surface2, (box_x + 8, box_y + 38))
 
     def draw_missile_vectors(self, player_id, missiles, camera_x, camera_y):
         world_left, world_right, world_top, world_bottom = self._get_world_bounds()
@@ -799,13 +820,20 @@ class DrawUI:
                     (hx + self.MISSILE_LOCK_BOX_SIZE, hy + self.MISSILE_LOCK_BOX_SIZE - 5), 2
                 )
 
-    def draw_tactical_map(self, active, player_ship, confirmed_contacts):
+    def draw_tactical_map(self, active, player_ship, confirmed_contacts, scan_active=False, scan_range=1000,
+                          laser_active=False, laser_direction=0, laser_locked=False, locked_object=None):
         """Draw tactical map showing confirmed contacts with confidence fading.
 
         Args:
             active: Boolean indicating if the map display is active.
             player_ship: Player ship object.
             confirmed_contacts: List of (pos_x, pos_y, contact_type, velocity_tuple, confidence) tuples.
+            scan_active: Boolean indicating if close-range scan is active.
+            scan_range: Close-range scan radius in world units.
+            laser_active: Boolean indicating if laser is on.
+            laser_direction: Laser heading in degrees.
+            laser_locked: Boolean indicating if laser is locked to target.
+            locked_object: The object laser is locked to.
         """
         if not active:
             return
@@ -862,6 +890,32 @@ class DrawUI:
             world_to_screen(0 - player_x, WORLD_HEIGHT - player_y)
         ]
         pygame.draw.polygon(self.screen, (100, 30, 30), boundary_pts, 1)
+
+        # --- CLOSE-RANGE SCAN RADIUS ---
+        if scan_active:
+            radius_px = scan_range * scale
+            pygame.draw.circle(self.screen, (0, 220, 220, 40), map_center, int(radius_px))
+            pygame.draw.circle(self.screen, (0, 220, 220, 100), map_center, int(radius_px), 1)
+
+        # --- LASER BEAM ---
+        if laser_active:
+            rad = math.radians(laser_direction - 90)
+            beam_end_x = math.cos(rad) * LASER_RANGE
+            beam_end_y = math.sin(rad) * LASER_RANGE
+
+            beam_start = world_to_screen(0, 0)
+            beam_end = world_to_screen(beam_end_x, beam_end_y)
+
+            # Beam color changes if locked
+            beam_color = (255, 100, 100) if laser_locked else (255, 150, 0)
+            pygame.draw.line(self.screen, beam_color, beam_start, beam_end, 2)
+
+            # Highlight locked target with red circle
+            if laser_locked and locked_object:
+                obj_x = getattr(locked_object, 'pos_x', None) or locked_object.rect.center[0]
+                obj_y = getattr(locked_object, 'pos_y', None) or locked_object.rect.center[1]
+                lock_screen = world_to_screen(obj_x - player_x, obj_y - player_y)
+                pygame.draw.circle(self.screen, (255, 100, 100), lock_screen, 12, 2)
 
         # --- CONFIRMED CONTACTS (With Confidence Fading) ---
         for pos_x, pos_y, contact_type, velocity, confidence in confirmed_contacts:

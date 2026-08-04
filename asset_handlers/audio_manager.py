@@ -49,6 +49,9 @@ class AudioManager:
             'laser_warning': 'sounds/laser_warning.wav',
             'catastrophic_warning': 'sounds/catastrophic_warning.mp3',
             'dfs_scan_warning': 'sounds/dfs_scan_warning.wav',
+            'laser_locked' : 'sounds/laser_locked.wav',
+            'laser_turn_off' : 'sounds/laser_turn_off.wav',
+            'laser_lock_lost': 'sounds/laser_lock_lost.mp3',
         }
 
         for name, filename in sound_files.items():

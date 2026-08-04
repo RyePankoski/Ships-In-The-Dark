@@ -55,7 +55,7 @@ class MainScene:
 
         self.laser_endpoint = (0, 0)
         self.unpainted_all = False
-        self.target_type = "Nothing"
+        self.laser_target_type = "Nothing"
 
         # UI stuff
         self.is_map_open = False
@@ -67,10 +67,10 @@ class MainScene:
         self.input_cooling_down = False
         self.input_timer = 0
         self.dfs_warning_cooldown = 3
-        self.dfs_warning_flag = True
         self.dfs_warning_timer = 0
 
     def run(self, inputs, dt):
+
         # Handle end game scenario
         if not self.player_ship.alive:
             if not self.end_tripped:
@@ -99,8 +99,10 @@ class MainScene:
 
     def handle_inputs(self, inputs, dt):
         if self.player_ship.laser_on:
+
             if inputs['arrow_key_left'] or inputs['arrow_key_right']:
                 self.audio_manager.play_sfx('laser_dir_change')
+                self.laser_assessor.laser_locked = False
             else:
                 self.audio_manager.stop_sfx('laser_dir_change')
 
@@ -116,11 +118,19 @@ class MainScene:
             self.player_ship_ai.run_ship_ai(self.player_ship)
 
         if not self.input_cooling_down:
+
+            if inputs['space'] and self.player_ship.laser_on:
+                if self.laser_assessor.laser_locked:
+                    self.audio_manager.play_sfx('laser_turn_off')
+                    self.laser_assessor.laser_locked = False
+                elif self.laser_assessor.current_target is not None:
+                    self.audio_manager.play_sfx('laser_locked')
+                    self.laser_assessor.laser_locked = True
+                self.input_cooling_down = True
             if inputs['q']:
                 self.player_ship.close_range_scanning = not self.player_ship.close_range_scanning
                 self.audio_manager.play_sfx('close_range_toggle')
                 self.input_cooling_down = True
-
             if inputs["p"] and self.player_ship.can_fire() and self.player_ship.has_missile_solution:
                 self.fire_missile()
                 self.player_ship.fire()
@@ -175,30 +185,28 @@ class MainScene:
 
     def handle_laser(self, inputs):
         if self.player_ship.laser_on:
-            self.laser_endpoint, self.target_type = self.laser_assessor.shine_laser(self.ships, self.asteroids, self.drones)
+            self.laser_endpoint, self.laser_target_type = self.laser_assessor.shine_laser(self.ships, self.asteroids, self.drones)
             self.laser_assessor.change_direction(inputs)
             self.unpainted_all = False
         elif not self.unpainted_all:
             self.unpaint_all()
-
-        # Testing only
-        # self.player_ship.painted = True
 
     def handle_general_sound_effects(self):
         if self.player_ship.enemy_has_missile_solution:
             self.audio_manager.play_sfx('enemy_missile_lock')
         else:
             self.audio_manager.stop_sfx('enemy_missile_lock')
-
         if self.player_ship.painted:
             self.audio_manager.play_sfx('laser_warning')
         else:
             self.audio_manager.stop_sfx('laser_warning')
-
-        if self.dfs_warning_flag:
+        if self.player_ship.dfs_scanned:
             self.audio_manager.play_sfx('dfs_scan_warning')
         else:
             self.audio_manager.stop_sfx('dfs_scan_warning')
+        if self.laser_assessor.tracking_lost:
+            self.audio_manager.play_sfx('laser_lock_lost')
+            self.laser_assessor.tracking_lost = False
 
     def handle_drones(self, dt):
         for cell in list(self.drones.keys()):
@@ -264,10 +272,10 @@ class MainScene:
             if self.input_timer > self.input_timer_cooldown:
                 self.input_timer = 0
                 self.input_cooling_down = False
-        if self.dfs_warning_flag:
+        if self.player_ship.dfs_scanned:
             self.dfs_warning_timer += dt
             if self.dfs_warning_timer > self.dfs_warning_cooldown:
-                self.dfs_warning_flag = False
+                self.player_ship.dfs_scanned = False
                 self.dfs_warning_timer = 0
 
     def fire_missile(self):
@@ -302,17 +310,19 @@ class MainScene:
         self.draw_ui.draw_missile_lock_warning(self.player_ship.enemy_has_missile_solution)
         self.draw_ui.draw_missile_vectors(self.player_ship.player_id, self.missiles, camera_x, camera_y)
         self.draw_ui.draw_radar(self.player_ship, self.player_ship.unconfirmed_signatures, self.radar_system.scanning)
-        self.draw_ui.draw_laser_targeting_info(self.target_type, self.player_ship.laser_on)
+        self.draw_ui.draw_laser_targeting_info(self.laser_target_type, self.laser_assessor, self.player_ship.laser_on)
         self.draw_ui.draw_deep_field_panel(self.player_ship.deep_field_contacts, self.deep_field_scan.direction_index, self.player_ship.dfs_on)
-        self.draw_ui.draw_tactical_map(self.is_map_open, self.player_ship, self.close_range_scan.get_contacts())
         self.draw_ui.draw_catastrophe_warning(self.player_ship.catastrophic_warning)
-        self.draw_ui.draw_dfs_warning(self.dfs_warning_flag, self.dfs_warning_timer)
+        self.draw_ui.draw_dfs_warning(self.player_ship.dfs_scanned, self.dfs_warning_timer)
 
         # Context dependent
         if self.player_ship.dfs_on:
             self.draw_ui.draw_dfs_corridor(self.player_ship, self.deep_field_scan.direction_index, camera_x, camera_y)
         if self.player_ship.laser_on:
             self.draw_ui.draw_laser(self.laser_assessor, self.laser_endpoint, camera_x, camera_y)
+
+        self.draw_ui.draw_tactical_map(self.is_map_open, self.player_ship, self.close_range_scan.get_contacts())
+
 
         # End
         self.draw_ui.draw_scanlines()
@@ -327,6 +337,8 @@ class MainScene:
                 drone.is_painted = False
         for ship in self.ships:
             ship.painted = False
+
+        self.unpainted_all = True
 
     def find_camera(self):
         player_ship = next((ship for ship in self.ships if ship.player), None)

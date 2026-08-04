@@ -1,4 +1,8 @@
 import math
+
+from objects.asteroid import Asteroid
+from objects.drone import Drone
+from objects.ship import Ship
 from utility.constants import *
 
 
@@ -11,10 +15,41 @@ class LaserAssessor:
         self.signature_position = (0, 0)
         self.previous_signature_position = (0, 0)
 
-    def assess_target(self, x, y):
+        self.current_target = None
+        self.previous_target = None
+        self.laser_locked = False
+        self.tracking_lost = False
 
+    def lock_laser(self):
+
+        # print(f"Laser locked to {type(self.current_target)}")
+
+        if isinstance(self.current_target, Ship):
+            angle = math.atan2(
+                self.current_target.rect.center[1] - self.ship_of_origin.rect.center[1],
+                self.current_target.rect.center[0] - self.ship_of_origin.rect.center[0]
+            )
+        elif isinstance(self.current_target, Asteroid) or isinstance(self.current_target, Drone):
+            angle = math.atan2(
+                self.current_target.pos_y - self.ship_of_origin.rect.center[1],
+                self.current_target.pos_x - self.ship_of_origin.rect.center[0]
+            )
+        else:
+            return
+
+        self.direction = math.degrees(angle)
+        self.direction = (self.direction + 360) % 360
+
+    def assess_target(self, x, y, contact):
         self.previous_signature_position = self.signature_position
         self.signature_position = (x, y)
+
+        self.previous_target = self.current_target
+        self.current_target = contact
+
+        if self.laser_locked and self.previous_target != self.current_target:
+            self.laser_locked = False
+            self.tracking_lost = True
 
         if self.previous_signature_position == self.signature_position:
             return "Asteroid Likely"
@@ -22,12 +57,14 @@ class LaserAssessor:
             return "Moving Object"
 
     def shine_laser(self, ships, asteroids, drones):
+        if self.laser_locked:
+            self.lock_laser()
+
         target_type = "Nothing"
 
         for cell in drones.values():
             for drone in cell:
                 drone.is_painted = False
-
         for cell in asteroids.values():
             for rock in cell:
                 rock.painted = False
@@ -51,8 +88,9 @@ class LaserAssessor:
                     continue
                 sx, sy = ship.rect.center
                 if (sx - ray_x) ** 2 + (sy - ray_y) ** 2 < ship.radar_cross_section ** 2:
-                    target_type = self.assess_target(ship.rect.center[0], ship.rect.center[1])
+                    target_type = self.assess_target(ship.rect.center[0], ship.rect.center[1], ship)
                     ship.painted = True
+                    self.current_target = ship
                     return (ray_x, ray_y), target_type
                 else:
                     ship.painted = False
@@ -60,8 +98,9 @@ class LaserAssessor:
             cell = (int(ray_x // GRID_SIZE), int(ray_y // GRID_SIZE))
             for rock in asteroids.get(cell, []):
                 if (rock.pos_x - ray_x) ** 2 + (rock.pos_y - ray_y) ** 2 < rock.size ** 2:
-                    target_type = self.assess_target(rock.pos_x, rock.pos_y)
+                    target_type = self.assess_target(rock.pos_x, rock.pos_y, rock)
                     rock.painted = True
+                    self.current_target = rock
                     return (ray_x, ray_y), target_type
                 else:
                     rock.painted = False
@@ -69,8 +108,9 @@ class LaserAssessor:
             for cell in drones.values():
                 for drone in cell:
                     if (drone.pos_x - ray_x) ** 2 + (drone.pos_y - ray_y) ** 2 < 50 ** 2:
-                        target_type = self.assess_target(drone.pos_x, drone.pos_y)
+                        target_type = self.assess_target(drone.pos_x, drone.pos_y, drone)
                         drone.is_painted = True
+                        self.current_target = drone
                         return (ray_x, ray_y), target_type
                     else:
                         drone.is_painted = False
