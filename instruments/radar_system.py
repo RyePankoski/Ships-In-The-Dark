@@ -15,23 +15,24 @@ class RadarSystem:
         self.current_frame = 1
         self.scan_frames = 100
         self.current_ray = 0
-        self.scan_resolution = 72
+        self.scan_resolution = 360
         self.rays_per_frame = None
         self.radar_rays = None
 
         self.passed_ship = None
         self.all_ships = None
         self.all_asteroids = None
+        self.all_drones = None
 
-    def begin_scan(self, passed_ship, all_ships, all_asteroids):
+    def begin_scan(self, passed_ship, all_ships, all_asteroids, all_drones):
         self.scanning = True
         self.current_frame = 1
         self.current_ray = 0
         self.passed_ship = passed_ship
         self.all_ships = all_ships
         self.all_asteroids = all_asteroids
+        self.all_drones = all_drones
 
-        self.scan_resolution = passed_ship.radar_resolution
         # Can't have < 1 ray per frame
         self.scan_frames = min(100, self.scan_resolution)
         self.radar_rays = RADAR_DIRECTIONS[self.scan_resolution]
@@ -81,6 +82,19 @@ class RadarSystem:
 
                 if hit_found:
                     break
+
+                # Then drones in this sector
+                if ray_sector in self.all_drones:
+                    for drone in self.all_drones[ray_sector]:
+                        dist_sq = (drone.pos_x - ray_x) ** 2 + (drone.pos_y - ray_y) ** 2
+                        if dist_sq < 50 ** 2:
+                            if drone.is_painted:
+                                signatures.append((ray_x, ray_y, RED))
+                            else:
+                                signatures.append((ray_x, ray_y, WHITE))
+
+                            hit_found = True
+                            break
 
                 # Then asteroids in this sector
                 if ray_sector in self.all_asteroids:

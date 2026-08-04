@@ -22,10 +22,19 @@ WORLD_WIDTH = 10000
 WORLD_HEIGHT = 10000
 GRID_SIZE = 500
 
+# Radar configuration
 RADAR_PULSE_RANGE = 3000
 RADAR_PULSE_SPEED = 2
 
+# Laser configuration
 LASER_STEP = 5
 LASER_RANGE = 5000
+
+# Deep field scan configuration
+CORRIDOR_DEPTH = 8000
+CORRIDOR_WIDTH = 2000
+
+# Close range scanner
+CLOSE_RANGE_SCAN_RANGE = 800
 
 PORT = 27015

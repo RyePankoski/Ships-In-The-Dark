@@ -21,8 +21,12 @@ class LaserAssessor:
         else:
             return "Moving Object"
 
-    def shine_laser(self, ships, asteroids):
+    def shine_laser(self, ships, asteroids, drones):
         target_type = "Nothing"
+
+        for cell in drones.values():
+            for drone in cell:
+                drone.is_painted = False
 
         for cell in asteroids.values():
             for rock in cell:
@@ -62,13 +66,22 @@ class LaserAssessor:
                 else:
                     rock.painted = False
 
+            for cell in drones.values():
+                for drone in cell:
+                    if (drone.pos_x - ray_x) ** 2 + (drone.pos_y - ray_y) ** 2 < 50 ** 2:
+                        target_type = self.assess_target(drone.pos_x, drone.pos_y)
+                        drone.is_painted = True
+                        return (ray_x, ray_y), target_type
+                    else:
+                        drone.is_painted = False
+
         return (ray_x, ray_y), target_type
 
     def change_direction(self, inputs):
         if inputs['arrow_key_left']:
-            self.direction -= 1
+            self.direction -= 2
         if inputs['arrow_key_right']:
-            self.direction += 1
+            self.direction += 2
         self.direction %= 360
 
     def set_direction(self, direction):

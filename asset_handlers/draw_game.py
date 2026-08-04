@@ -9,7 +9,6 @@ from utility.constants import *
 from pathlib import Path
 
 
-
 def generate_stars(star_count=100000, world_width=100000, world_height=100000):
     """Generate random stars across the world"""
     import random
@@ -38,6 +37,8 @@ class DrawGame:
         self.player_ship_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship.png"))
         self.enemy_ship_sprite = pygame.image.load(os.path.join(asset_path, "pngs/enemy_ship.png"))
         self.missile_sprite = pygame.image.load(os.path.join(asset_path, "pngs/missile.png"))
+        self.drone_sprite = pygame.image.load(os.path.join(asset_path, "pngs/drone.png"))
+        self.drone_mining = pygame.image.load(os.path.join(asset_path, "pngs/drone_mining.png"))
 
         # Generate starfield
         self.stars = generate_stars(10000, WORLD_WIDTH, WORLD_HEIGHT)
@@ -83,6 +84,17 @@ class DrawGame:
             rotated_sprite = pygame.transform.rotate(self.missile_sprite, missile.heading)
             rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
             self.screen.blit(rotated_sprite, rotated_rect)
+
+    def draw_drones(self, drones, camera_x, camera_y):
+        for cell in drones.values():
+            for drone in cell:
+                screen_x = drone.pos_x - camera_x
+                screen_y = drone.pos_y - camera_y
+
+                if drone.am_mining:
+                    self.screen.blit(self.drone_mining, (screen_x, screen_y))
+                else:
+                    self.screen.blit(self.drone_sprite, (screen_x, screen_y))
 
     def draw_ships(self, ships, camera_x, camera_y):
         for ship in ships:

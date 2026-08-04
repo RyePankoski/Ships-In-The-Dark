@@ -2,44 +2,65 @@ import math
 
 import pygame
 from utility.constants import *
+from ai.ai import AI
 
 
 class Ship:
-    def __init__(self, x=None, y=None, is_player=False, player_id=None, is_painted=False):
-        self.screen_width, self.screen_height = pygame.display.get_desktop_sizes()[0]
-
+    def __init__(self, x=None, y=None, is_player=False, player_id=None, is_painted=False, is_ai=False):
         self.player = is_player
-
         self.pos_x = x
         self.pos_y = y
         self.vel_x = 0
         self.vel_y = 0
-
         self.velocity = 0
-
         self.player_id = player_id
-
+        self.painted = is_painted
         self.heading = 0
+
+        if is_ai:
+            self.ai = AI(self)
+        else:
+            self.ai = None
+
+        self.screen_width, self.screen_height = pygame.display.get_desktop_sizes()[0]
         self.rect = pygame.Rect(self.pos_x, self.pos_y, 200, 200)
 
-        self.dampening = True
-
         self.total_velocity = 0
+        self.radar_cross_section = 100
 
+        self.total_missiles = TOTAL_MISSILES
         self.missile_cooling_down = False
         self.missile_cooldown_timer = 0
         self.missile_cooldown = 1
-        self.total_missiles = TOTAL_MISSILES
 
-        # Radar
-        self.radar_resolution = 360
-        self.radar_cross_section = 100      # hit tolerance (px) for being detected
+        self.enemy_has_missile_solution = False
+        self.has_missile_solution = True
+        self.manual_control = True
+        self.scan_used = False
+        self.dampening = True
+        self.laser_on = False
+        self.dfs_on = False
+        self.alive = True
+
+        self.scan_type = None
+
+        self.ships = []
+        self.missiles = []
+        self.explosions = []
+        self.deep_field_contacts = []
+        self.close_range_contacts = []
+        self.confirmed_signatures = []
+        self.unconfirmed_signatures = []
         self.enemy_radar_ping_coordinates = []
 
-        self.alive = True
-        self.painted = is_painted
+        self.drones = {}
+        self.asteroids = {}
 
     def run(self, dt):
+
+        if self.ai is not None:
+            self.ai.run_ai()
+
         self.move(dt)
         self.cooldowns(dt)
         self.update_rect()

@@ -40,6 +40,11 @@ class AudioManager:
             'laser': 'sounds/laser_toggle.wav',
             'laser_dir_change' : 'sounds/laser_dir_change.wav',
             'fire_missile' : 'sounds/fire_missile.wav',
+            'dfs_dir_change' : 'sounds/dfs_dir_change.mp3',
+            'dfs_scan' : 'sounds/dfs_scan.wav',
+            'dfs_toggle' : 'sounds/dfs_toggle.wav',
+            'map_open' : 'sounds/map_open.wav',
+            'map_close' : 'sounds/map_close.wav',
         }
 
         for name, filename in sound_files.items():
