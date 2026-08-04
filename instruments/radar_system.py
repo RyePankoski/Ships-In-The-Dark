@@ -41,10 +41,13 @@ class RadarSystem:
     def continue_scan(self):
         signatures = []
 
-        target_ray = self.rays_per_frame * self.current_frame
+        # Calculate target_ray based on completion percentage to absorb rounding remainders smoothly
         if self.current_frame >= self.scan_frames:
             self.scanning = False
             target_ray = self.scan_resolution
+        else:
+            completion_ratio = self.current_frame / self.scan_frames
+            target_ray = int(completion_ratio * self.scan_resolution)
 
         origin_x, origin_y = self.passed_ship.rect.center
 

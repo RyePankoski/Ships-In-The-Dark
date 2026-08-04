@@ -43,8 +43,6 @@ class CloseRangeScan:
             if not self._contact_exists(obj):
                 self.confirmed_contacts.append([x, y, ctype, (vx, vy), 1.0, 0, obj])  # Start at 1.0 (100%)
 
-        print(f"Confirmed contacts: {len(self.confirmed_contacts)}")
-
         # Update existing contacts
         updated_contacts = []
         for contact in self.confirmed_contacts:

@@ -27,8 +27,6 @@ class Drone:
 
     def run_drone(self, asteroids, dt):
 
-        self.velocity = random.randint(20, 100)
-
         if self.am_mining:
             self.mining(dt)
             return

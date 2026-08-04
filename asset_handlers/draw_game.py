@@ -8,7 +8,6 @@ import os
 from utility.constants import *
 from pathlib import Path
 
-
 def generate_stars(star_count=100000, world_width=100000, world_height=100000):
     """Generate random stars across the world"""
     import random
@@ -19,21 +18,18 @@ def generate_stars(star_count=100000, world_width=100000, world_height=100000):
         brightness = random.randint(100, 255)
         size = random.randint(1, 3)
         stars.append((x, y, brightness, size))
-
     return stars
 
 
 class DrawGame:
     def __init__(self, screen):
         self.screen = screen
-
         if getattr(sys, "frozen", False):
             base_path = Path(sys._MEIPASS)
         else:
             base_path = Path(__file__).resolve().parent.parent
 
         asset_path = base_path / "assets"
-
         self.player_ship_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship.png"))
         self.enemy_ship_sprite = pygame.image.load(os.path.join(asset_path, "pngs/enemy_ship.png"))
         self.missile_sprite = pygame.image.load(os.path.join(asset_path, "pngs/missile.png"))
@@ -110,13 +106,7 @@ class DrawGame:
                 rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
                 self.screen.blit(rotated_sprite, rotated_rect)
 
-    def draw_signal_lost(self, message="SIGNAL LOST", subtitle="CARRIER LOST -- NO SYNC"):
-        """Full-screen 'signal lost' game-over overlay, monochrome-phosphor CRT.
-
-        Call every frame while the match is over: it self-animates (phosphor
-        flicker, blinking cursor, a slow sweeping tear) off the wall clock, and
-        draws its own scanlines, so it stands alone over the frozen world.
-        """
+    def draw_signal_lost(self, message="SIGNAL LOST", subtitle="SYNCHRONIZATION LOST. DEBUG:42*1a2"):
         w, h = self.screen.get_width(), self.screen.get_height()
         t = time.time()
 

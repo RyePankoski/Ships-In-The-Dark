@@ -45,6 +45,10 @@ class AudioManager:
             'dfs_toggle' : 'sounds/dfs_toggle.wav',
             'map_open' : 'sounds/map_open.wav',
             'map_close' : 'sounds/map_close.wav',
+            'close_range_toggle' : 'sounds/close_range_toggle.wav',
+            'laser_warning': 'sounds/laser_warning.wav',
+            'catastrophic_warning': 'sounds/catastrophic_warning.mp3',
+            'dfs_scan_warning': 'sounds/dfs_scan_warning.wav',
         }
 
         for name, filename in sound_files.items():

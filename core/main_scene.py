@@ -1,117 +1,83 @@
-import json
 import random
+import json
 
-from instruments.laser_assessor import LaserAssessor
-from utility.constants import WORLD_HEIGHT, WORLD_WIDTH, GRID_SIZE
+from utility.constants import WORLD_HEIGHT, WORLD_WIDTH, GRID_SIZE, CLOSE_RANGE_SCAN_RANGE
+from utility.util import end_blit
+
 from asset_handlers.draw_game import DrawGame
 from asset_handlers.draw_ui import DrawUI
-from objects.ship import Ship
-from objects.missile import Missile
+
 from ai.player_ship_ai import PlayerShipAI
 from objects.asteroid import Asteroid
-from instruments.radar_system import RadarSystem
-from instruments.deep_field_scan import DeepFieldScan
-from instruments.close_range_scan import CloseRangeScan
+from objects.missile import Missile
 from objects.drone import Drone
+from objects.ship import Ship
 
-from utility.util import end_blit
+from instruments.close_range_scan import CloseRangeScan
+from instruments.deep_field_scan import DeepFieldScan
+from instruments.laser_assessor import LaserAssessor
+from instruments.radar_system import RadarSystem
 
 
 class MainScene:
     def __init__(self, connected, screen, audio_manager):
         # Classes
+        self.player_ship_ai = PlayerShipAI()
         self.audio_manager = audio_manager
         self.draw_game = DrawGame(screen)
         self.draw_ui = DrawUI(screen)
-        self.player_ship_ai = PlayerShipAI()
-        self.radar_system = RadarSystem()
 
         # Netcode stuff
         self.connected = connected
         self.my_player_id = None
 
         # Lists
-        self.ships = []
         self.explosions = []
         self.missiles = []
-        self.drones = {}
+        self.ships = []
+
         self.asteroids = {}
+        self.drones = {}
 
         # Create player ship and enemy ship
         if not self.connected:
+            self.enemy_ship = Ship(random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT), is_player=False, is_ai=True)
             self.player_ship = Ship(random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT), is_player=True, player_id=1)
-            self.enemy_ship = Ship(random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT), is_player=False, is_painted=False, is_ai=True)
-
-            self.enemy_ship.vel_x = 50
-            self.enemy_ship.vel_y = 60
-            self.enemy_ship.dampening = False
+            self.ships.append(self.player_ship)
             self.ships.append(self.enemy_ship)
+            self.init_asteroids_and_drones()
 
-            for i in range(100):
-                pos_x = random.randint(0, WORLD_WIDTH)
-                pos_y = random.randint(0, WORLD_HEIGHT)
-
-                grid_x = int(pos_x // GRID_SIZE)
-                grid_y = int(pos_y // GRID_SIZE)
-                cell = (grid_x, grid_y)
-
-                if cell not in self.asteroids:
-                    self.asteroids[cell] = []
-
-                asteroid = Asteroid(pos_x, pos_y, random.randint(50, 100))
-                self.asteroids[cell].append(asteroid)
-
-            for i in range(8):
-                pos_x = random.randint(0, WORLD_WIDTH)
-                pos_y = random.randint(0, WORLD_HEIGHT)
-
-                grid_x = int(pos_x // GRID_SIZE)
-                grid_y = int(pos_y // GRID_SIZE)
-                cell = (grid_x, grid_y)
-
-                if cell not in self.drones:
-                    self.drones[cell] = []
-
-                drone = Drone(pos_x, pos_y, 40)
-                self.drones[cell].append(drone)
-        else:
-            self.player_ship = Ship(100, 100, is_player=True)
-
-        # Laser system
-        self.ships.append(self.player_ship)
-        self.laser_assessor = LaserAssessor(self.player_ship)
+        # Subsystems
         self.close_range_scan = CloseRangeScan(self.player_ship)
+        self.deep_field_scan = DeepFieldScan(self.player_ship)
+        self.laser_assessor = LaserAssessor(self.player_ship)
+        self.radar_system = RadarSystem()
 
         self.laser_endpoint = (0, 0)
         self.unpainted_all = False
         self.target_type = "Nothing"
 
-        # Deep field scan
-        self.deep_field_scan = DeepFieldScan(self.player_ship)
-
-        # Weapons systems
-
-        # Map Screen
-        self.is_map_open = False
-
         # UI stuff
-        self.grid_on = True
+        self.is_map_open = False
         self.end_tripped = False
+        self.grid_on = True
 
         # input timer
-        self.input_timer = 0
         self.input_timer_cooldown = 0.2
         self.input_cooling_down = False
-
-    def enemy_ai(self):
-        pass
+        self.input_timer = 0
+        self.dfs_warning_cooldown = 3
+        self.dfs_warning_flag = True
+        self.dfs_warning_timer = 0
 
     def run(self, inputs, dt):
+        # Handle end game scenario
         if not self.player_ship.alive:
             if not self.end_tripped:
                 self.audio_manager.stop_all()
                 self.audio_manager.play_sfx('death_screen')
                 self.end_tripped = True
+            self.draw_death()
             return
 
         # Let the server handle inputs and simulation
@@ -121,12 +87,15 @@ class MainScene:
             self.handle_ships(dt)
             self.handle_drones(dt)
 
-        self.close_range_scan.update(self.ships, self.asteroids, self.drones)
+        if self.player_ship.close_range_scanning:
+            self.close_range_scan.update(self.ships, self.asteroids, self.drones)
 
+        self.timers(dt)
         self.handle_radar()
         self.handle_laser(inputs)
         self.handle_general_sound_effects()
         self.draw_scene()
+        self.explosions = []
 
     def handle_inputs(self, inputs, dt):
         if self.player_ship.laser_on:
@@ -146,13 +115,12 @@ class MainScene:
         else:
             self.player_ship_ai.run_ship_ai(self.player_ship)
 
-        if self.input_cooling_down:
-            self.input_timer += dt
-            if self.input_timer > self.input_timer_cooldown:
-                self.input_timer = 0
-                self.input_cooling_down = False
-
         if not self.input_cooling_down:
+            if inputs['q']:
+                self.player_ship.close_range_scanning = not self.player_ship.close_range_scanning
+                self.audio_manager.play_sfx('close_range_toggle')
+                self.input_cooling_down = True
+
             if inputs["p"] and self.player_ship.can_fire() and self.player_ship.has_missile_solution:
                 self.fire_missile()
                 self.player_ship.fire()
@@ -165,7 +133,6 @@ class MainScene:
             if inputs["x"]:
                 self.enemy_ship.fire()
                 self.missiles.append(Missile(self.enemy_ship.pos_x, self.enemy_ship.pos_y, 0, 0, self.player_ship, self.enemy_ship.player_id))
-
                 self.input_cooling_down = True
             if inputs['r']:
                 self.audio_manager.play_sfx('radar')
@@ -177,29 +144,23 @@ class MainScene:
                 self.laser_assessor.set_direction(self.player_ship.heading)
                 self.audio_manager.play_sfx('laser')
                 self.input_cooling_down = True
-
             if inputs['k']:
                 self.player_ship.dfs_on = not self.player_ship.dfs_on
                 self.audio_manager.play_sfx('dfs_toggle')
                 self.input_cooling_down = True
                 self.player_ship.deep_field_contacts = []
-
             if inputs['m']:
                 self.is_map_open = not self.is_map_open
                 self.input_cooling_down = True
-
                 if self.is_map_open:
                     self.audio_manager.play_sfx('map_open')
                 else:
                     self.audio_manager.play_sfx('map_close')
-
             if self.player_ship.dfs_on:
                 if inputs['o']:
                     self.player_ship.deep_field_contacts = self.deep_field_scan.run_scan(self.ships, self.asteroids, self.drones)
-
                     self.audio_manager.play_sfx('dfs_scan')
                     self.input_cooling_down = True
-
                 if inputs['arrow_key_up'] or inputs['arrow_key_down']:
                     self.deep_field_scan.change_direction(inputs)
                     self.audio_manager.play_sfx('dfs_dir_change')
@@ -215,25 +176,29 @@ class MainScene:
     def handle_laser(self, inputs):
         if self.player_ship.laser_on:
             self.laser_endpoint, self.target_type = self.laser_assessor.shine_laser(self.ships, self.asteroids, self.drones)
-
             self.laser_assessor.change_direction(inputs)
             self.unpainted_all = False
         elif not self.unpainted_all:
-            self.unpainted_all = True
-            for cell in self.asteroids.values():
-                for asteroid in cell:
-                    asteroid.painted = False
-            for ship in self.ships:
-                ship.painted = False
-            for cell in self.drones.values():
-                for drone in cell:
-                    drone.is_painted = False
+            self.unpaint_all()
+
+        # Testing only
+        # self.player_ship.painted = True
 
     def handle_general_sound_effects(self):
         if self.player_ship.enemy_has_missile_solution:
             self.audio_manager.play_sfx('enemy_missile_lock')
         else:
             self.audio_manager.stop_sfx('enemy_missile_lock')
+
+        if self.player_ship.painted:
+            self.audio_manager.play_sfx('laser_warning')
+        else:
+            self.audio_manager.stop_sfx('laser_warning')
+
+        if self.dfs_warning_flag:
+            self.audio_manager.play_sfx('dfs_scan_warning')
+        else:
+            self.audio_manager.stop_sfx('dfs_scan_warning')
 
     def handle_drones(self, dt):
         for cell in list(self.drones.keys()):
@@ -276,6 +241,13 @@ class MainScene:
             if missile.contact == self.player_ship:
                 self.player_ship.enemy_has_missile_solution = True
 
+                distance = (missile.pos_x - self.player_ship.pos_x) ** 2 + (missile.pos_y - self.player_ship.pos_y) ** 2
+                if distance < 1000 ** 2:
+                    self.player_ship.catastrophic_warning = True
+                    self.audio_manager.play_sfx('catastrophic_warning')
+                else:
+                    self.player_ship.catastrophic_warning = False
+
         missiles_to_remove = []
         for missile in self.missiles:
             missile.run(dt, self.asteroids)
@@ -286,44 +258,46 @@ class MainScene:
             self.explosions.append(missile.rect.center)
             self.missiles.remove(missile)
 
+    def timers(self, dt):
+        if self.input_cooling_down:
+            self.input_timer += dt
+            if self.input_timer > self.input_timer_cooldown:
+                self.input_timer = 0
+                self.input_cooling_down = False
+        if self.dfs_warning_flag:
+            self.dfs_warning_timer += dt
+            if self.dfs_warning_timer > self.dfs_warning_cooldown:
+                self.dfs_warning_flag = False
+                self.dfs_warning_timer = 0
+
     def fire_missile(self):
-        missile = Missile(self.player_ship.pos_x, self.player_ship.pos_y, 0, 0, self.enemy_ship,
-                          self.player_ship.player_id)
+        missile = Missile(self.player_ship.pos_x, self.player_ship.pos_y, 0, 0, self.enemy_ship, self.player_ship.player_id)
         self.missiles.append(missile)
+
+    def draw_death(self):
+        self.draw_game.start_blit()
+        self.draw_game.draw_signal_lost()
+        end_blit()
 
     def draw_scene(self):
         self.draw_game.start_blit()
-
-        if not self.player_ship.alive:
-            self.draw_game.draw_signal_lost()
-            end_blit()
-            return
-
         # Find player ship and calculate camera position
-        player_ship = next((ship for ship in self.ships if ship.player), None)
-        if player_ship:
-            camera_x = player_ship.rect.center[0] - self.draw_game.screen.get_width() / 2
-            camera_y = player_ship.rect.center[1] - self.draw_game.screen.get_height() / 2
-        else:
-            camera_x = 0
-            camera_y = 0
+        camera_x, camera_y = self.find_camera()
 
         # Draw the starfield first (background)
         self.draw_game.draw_stars(camera_x, camera_y)
 
-        # Then draw game objects on top
+        # Then draw game objects
         self.draw_game.draw_missiles(self.missiles, camera_x, camera_y)
         self.draw_game.draw_explosions(self.explosions, camera_x, camera_y)
         self.draw_game.draw_asteroids(self.asteroids, camera_x, camera_y)
         self.draw_game.draw_drones(self.drones, camera_x, camera_y)
         self.draw_game.draw_ships(self.ships, camera_x, camera_y)
 
-        self.explosions = []
-
-        # UI elements and crt effect
+        # UI elements
         self.draw_ui.draw_ui_layout()
         self.draw_ui.draw_world_grid(camera_x, camera_y, self.grid_on)
-        self.draw_ui.draw_manual_control_indicator(self.player_ship.manual_control)
+        self.draw_ui.draw_laser_painted_warning(self.player_ship.painted)
         self.draw_ui.draw_ship_info(self.player_ship)
         self.draw_ui.draw_missile_lock_warning(self.player_ship.enemy_has_missile_solution)
         self.draw_ui.draw_missile_vectors(self.player_ship.player_id, self.missiles, camera_x, camera_y)
@@ -331,6 +305,8 @@ class MainScene:
         self.draw_ui.draw_laser_targeting_info(self.target_type, self.player_ship.laser_on)
         self.draw_ui.draw_deep_field_panel(self.player_ship.deep_field_contacts, self.deep_field_scan.direction_index, self.player_ship.dfs_on)
         self.draw_ui.draw_tactical_map(self.is_map_open, self.player_ship, self.close_range_scan.get_contacts())
+        self.draw_ui.draw_catastrophe_warning(self.player_ship.catastrophic_warning)
+        self.draw_ui.draw_dfs_warning(self.dfs_warning_flag, self.dfs_warning_timer)
 
         # Context dependent
         if self.player_ship.dfs_on:
@@ -342,12 +318,62 @@ class MainScene:
         self.draw_ui.draw_scanlines()
         end_blit()
 
+    def unpaint_all(self):
+        for cell in self.asteroids.values():
+            for asteroid in cell:
+                asteroid.painted = False
+        for cell in self.drones.values():
+            for drone in cell:
+                drone.is_painted = False
+        for ship in self.ships:
+            ship.painted = False
+
+    def find_camera(self):
+        player_ship = next((ship for ship in self.ships if ship.player), None)
+
+        if player_ship:
+            camera_x = player_ship.rect.center[0] - self.draw_game.screen.get_width() / 2
+            camera_y = player_ship.rect.center[1] - self.draw_game.screen.get_height() / 2
+        else:
+            camera_x = 0
+            camera_y = 0
+
+        return camera_x, camera_y
+
+    def init_asteroids_and_drones(self):
+        for i in range(100):
+            pos_x = random.randint(0, WORLD_WIDTH)
+            pos_y = random.randint(0, WORLD_HEIGHT)
+
+            grid_x = int(pos_x // GRID_SIZE)
+            grid_y = int(pos_y // GRID_SIZE)
+            cell = (grid_x, grid_y)
+
+            if cell not in self.asteroids:
+                self.asteroids[cell] = []
+
+            asteroid = Asteroid(pos_x, pos_y, random.randint(50, 100))
+            self.asteroids[cell].append(asteroid)
+
+        for i in range(8):
+            pos_x = random.randint(0, WORLD_WIDTH)
+            pos_y = random.randint(0, WORLD_HEIGHT)
+
+            grid_x = int(pos_x // GRID_SIZE)
+            grid_y = int(pos_y // GRID_SIZE)
+            cell = (grid_x, grid_y)
+
+            if cell not in self.drones:
+                self.drones[cell] = []
+
+            drone = Drone(pos_x, pos_y, 40)
+            self.drones[cell].append(drone)
+
     def inject_server_data(self, message):
         message_dict = json.loads(message)
 
         # Store our player_id so we know which ship is ours
         self.my_player_id = message_dict.get('your_player_id')
-
         ship_dicts = message_dict['player_ships']
 
         # Reconstruct ships from server data

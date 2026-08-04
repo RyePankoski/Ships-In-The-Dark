@@ -14,6 +14,7 @@ class AI:
         else:
             self.move_to_destination()
 
+
     def move_to_destination(self):
         """Navigate ship to destination"""
         dx = self.destination[0] - self.ship.pos_x

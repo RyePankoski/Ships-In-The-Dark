@@ -4,7 +4,7 @@ from utility.constants import *
 
 
 class DrawUI:
-    # Panel Dimensions (locked, matches UI layout)
+    # region constant
     PANEL_WIDTH = 600
     THIN_HEIGHT = 200
     NOTCH_LENGTH = 12
@@ -85,11 +85,13 @@ class DrawUI:
     LOCK_BLINK_FREQUENCY = 10
     LOCK_BORDER_WIDTH = 10
 
+    # endregion
+
     def __init__(self, screen):
         self.screen = screen
         self.lock_blink_counter = 0
 
-        # Initialize all fonts once
+        # Initialize all fonts at once
         self.font_large = pygame.font.Font(None, self.FONT_SIZE_LARGE)
         self.font_body = pygame.font.Font(None, self.FONT_SIZE_BODY)
         self.font_radar_label = pygame.font.Font(None, self.FONT_SIZE_RADAR)
@@ -136,14 +138,14 @@ class DrawUI:
         """
         screen_height = self.screen.get_height()
 
-        # Anchor safely inside bottom panel area
+        # Anchor safely inside the bottom panel area
         panel_y_top = screen_height - self.THIN_HEIGHT
         panel_offset_x = getattr(self, "PANEL_WIDTH", 0) + 12
 
         # Container Box Dimensions
         box_x = panel_offset_x
         box_y = panel_y_top + 6
-        box_w = 720  # Expanded slightly to accommodate larger font
+        box_w = 720
         box_h = self.THIN_HEIGHT - 12
 
         # UI Theme Colors
@@ -154,17 +156,15 @@ class DrawUI:
         COLOR_BG = getattr(self, "COLOR_PANEL_BG", (10, 15, 20))
         COLOR_DIM = (0, 120, 120)
 
-        # 1. UPGRADED FONT (Bigger, readable, retro monospaced)
+        # 1. UPGRADED FONT
         font = pygame.font.SysFont("monospace", 17, bold=True)
 
-        # 2. VERTICAL CENTERING MATH
-        # 4 lines of text
+        # 2. VERTICAL CENTERING MATH (5 lines now for subsystems)
         line_h = font.get_height() + 2
-        total_text_h = line_h * 4
-        # Center text vertically within the box interior
+        total_text_h = line_h * 5
         start_y = box_y + (box_h - total_text_h) // 2
 
-        # 3. COLUMN POSITIONS (Balanced across box width)
+        # 3. COLUMN POSITIONS
         col1_x = box_x + 16
         col2_x = box_x + 300
         col3_x = box_x + 500
@@ -205,11 +205,27 @@ class DrawUI:
         self.screen.blit(font.render(hdg_str, True, COLOR_CYAN), (col1_x, y))
 
         # ==========================================
-        # COLUMN 2: HARDWARE & SUBSYSTEMS
+        # COLUMN 2: HARDWARE & CONTROL
         # ==========================================
         y = start_y
 
         self.screen.blit(font.render("[SUBSYSTEMS]", True, COLOR_DIM), (col2_x, y))
+        y += line_h
+
+        # Integrated Manual/Auto Control Indicator
+        ctrl_enabled = getattr(ship, "manual_control", False)
+        ctrl_stat = "MANUAL" if ctrl_enabled else "AUTO  "
+        ctrl_color = COLOR_CYAN if ctrl_enabled else COLOR_DIM
+
+        ctrl_surf = font.render(f"FLT MODE   [{ctrl_stat}]", True, ctrl_color)
+        self.screen.blit(ctrl_surf, (col2_x, y))
+
+        # Glowing LED indicator dot aligned right next to the text status
+        led_x = col2_x + ctrl_surf.get_width() + 10
+        led_y = y + (line_h // 2) - 1
+        pygame.draw.circle(self.screen, ctrl_color, (led_x, led_y), 4)
+        if ctrl_enabled:
+            pygame.draw.circle(self.screen, (255, 255, 255), (led_x, led_y), 2)  # Hot core
         y += line_h
 
         damp_stat = "ON " if ship.dampening else "OFF"
@@ -222,14 +238,17 @@ class DrawUI:
         laser_stat = "ACT" if ship.laser_on else "OFF"
         laser_color = COLOR_CYAN if ship.laser_on else COLOR_DIM
         self.screen.blit(
-            font.render(f"BEAM LASER [{laser_stat}]", True, laser_color), (col2_x, y)
+            font.render(f"BEAM LASER  [{laser_stat}]", True, laser_color), (col2_x, y)
         )
         y += line_h
 
-        dfs_stat = "ACT" if ship.dfs_on else "OFF"
-        dfs_color = COLOR_CYAN if ship.dfs_on else COLOR_DIM
+        # Close-Range Scanner Status
+        crs_active = getattr(ship, "close_range_scanning", False)
+        crs_contacts = len(getattr(ship, "confirmed_signatures", []))
+        crs_stat = "ON" if crs_active else "OFF"
+        crs_color = COLOR_CYAN if crs_active else COLOR_DIM
         self.screen.blit(
-            font.render(f"DFS RADAR  [{dfs_stat}]", True, dfs_color), (col2_x, y)
+            font.render(f"PROX SCAN   [{crs_stat}] ({crs_contacts} sig)", True, crs_color), (col2_x, y)
         )
 
         # ==========================================
@@ -260,32 +279,6 @@ class DrawUI:
             self.screen.blit(
                 font.render("NO THREAT LOCKS", True, COLOR_DIM), (col3_x, y)
             )
-
-    def draw_manual_control_indicator(self, enabled):
-        """Draw manual control status indicator in top right.
-
-        Args:
-            enabled: Boolean, True if manual control is active
-        """
-        screen_width = self.screen.get_width()
-        x = screen_width - 290
-        y = 30
-
-        light_color = self.COLOR_HUD_CYAN if enabled else self.COLOR_THREAT_DIM
-
-        # Draw indicator box
-        box_rect = pygame.Rect(x, y, 260, 40)
-        pygame.draw.rect(self.screen, self.COLOR_PANEL_BG, box_rect)
-        pygame.draw.rect(self.screen, self.COLOR_HUD_CYAN, box_rect, 1)
-
-        # Draw light indicator (circle)
-        light_x, light_y = x + 20, y + 20
-        pygame.draw.circle(self.screen, light_color, (light_x, light_y), 8)
-
-        # Draw text
-        status_text = "MANUAL CTRL" if enabled else "AUTO MODE"
-        text = self.font_body.render(status_text, True, self.COLOR_HUD_CYAN)
-        self.screen.blit(text, (x + 40, y + 8))
 
     def draw_ui_layout(self):
         """Draw UI panel backgrounds and borders with clean CRT chassis framing."""
@@ -458,48 +451,140 @@ class DrawUI:
                 self.LOCK_BORDER_WIDTH
             )
 
+    def draw_laser_painted_warning(self, painted):
+        """Draw flashing warning when ship is laser painted by enemy.
+
+        Args:
+            painted: Boolean indicating if ship is currently painted
+        """
+        if not painted:
+            return
+        world_left, world_right, world_top, world_bottom = self._get_world_bounds()
+
+        # Blink timing
+        self.lock_blink_counter += 1
+        blink_frequency = 8  # Faster than missile lock warning
+
+        if (self.lock_blink_counter // blink_frequency) % 2 == 0:
+            # Draw red corner brackets in all 4 corners of viewport
+            bracket_size = 20
+            bracket_width = 2
+            bracket_color = (255, 100, 100)
+
+            # Top-Left
+            pygame.draw.line(self.screen, bracket_color,
+                             (world_left, world_top), (world_left + bracket_size, world_top), bracket_width)
+            pygame.draw.line(self.screen, bracket_color,
+                             (world_left, world_top), (world_left, world_top + bracket_size), bracket_width)
+
+            # Top-Right
+            pygame.draw.line(self.screen, bracket_color,
+                             (world_right, world_top), (world_right - bracket_size, world_top), bracket_width)
+            pygame.draw.line(self.screen, bracket_color,
+                             (world_right, world_top), (world_right, world_top + bracket_size), bracket_width)
+
+            # Bottom-Left
+            pygame.draw.line(self.screen, bracket_color,
+                             (world_left, world_bottom), (world_left + bracket_size, world_bottom), bracket_width)
+            pygame.draw.line(self.screen, bracket_color,
+                             (world_left, world_bottom), (world_left, world_bottom - bracket_size), bracket_width)
+
+            # Bottom-Right
+            pygame.draw.line(self.screen, bracket_color,
+                             (world_right, world_bottom), (world_right - bracket_size, world_bottom), bracket_width)
+            pygame.draw.line(self.screen, bracket_color,
+                             (world_right, world_bottom), (world_right, world_bottom - bracket_size), bracket_width)
+
+            # Warning text in top-right corner
+            warning_text = self.font_body.render("LASER LOCK DETECTED", True, (255, 100, 100))
+            self.screen.blit(warning_text, (world_right - warning_text.get_width() - 20, world_top + 20))
+
     def draw_radar(self, player_ship, signatures, is_scanning=False):
         radar_x, radar_y, radar_size = self._get_radar_bounds()
-
-        # Draw radar background & border
         radar_rect = pygame.Rect(radar_x, radar_y, radar_size, radar_size)
-        pygame.draw.rect(self.screen, (10, 20, 10), radar_rect)
-        pygame.draw.rect(self.screen, self.COLOR_HUD_AMBER, radar_rect, 2)
-
-        # Draw center crosshair (player position)
         center_x = radar_x + radar_size // 2
         center_y = radar_y + radar_size // 2
-        pygame.draw.circle(self.screen, (0, 255, 0), (center_x, center_y), 5)
 
-        # Draw range grid
-        grid_spacing = radar_size // self.RADAR_GRID_COUNT
+        # FIX: Max radius is half the bounding box, not the full bounding box
+        max_radius = radar_size // 2
+
+        # --- CRT Phosphor Background & Scanlines ---
+        pygame.draw.rect(self.screen, (5, 10, 5), radar_rect)  # Deep murky green background
+
+        # Faux CRT scanlines
+        for y in range(radar_y, radar_y + radar_size, 4):
+            pygame.draw.line(self.screen, (10, 25, 10), (radar_x, y), (radar_x + radar_size, y))
+
+        # --- Arcade Corner Brackets (Replaces plain border) ---
+        b_len = 15
+        b_color = self.COLOR_HUD_AMBER
+        # Top-Left
+        pygame.draw.line(self.screen, b_color, (radar_x, radar_y), (radar_x + b_len, radar_y), 2)
+        pygame.draw.line(self.screen, b_color, (radar_x, radar_y), (radar_x, radar_y + b_len), 2)
+        # Top-Right
+        pygame.draw.line(self.screen, b_color, (radar_x + radar_size, radar_y), (radar_x + radar_size - b_len, radar_y), 2)
+        pygame.draw.line(self.screen, b_color, (radar_x + radar_size, radar_y), (radar_x + radar_size, radar_y + b_len), 2)
+        # Bottom-Left
+        pygame.draw.line(self.screen, b_color, (radar_x, radar_y + radar_size), (radar_x + b_len, radar_y + radar_size), 2)
+        pygame.draw.line(self.screen, b_color, (radar_x, radar_y + radar_size), (radar_x, radar_y + radar_size - b_len), 2)
+        # Bottom-Right
+        pygame.draw.line(self.screen, b_color, (radar_x + radar_size, radar_y + radar_size), (radar_x + radar_size - b_len, radar_y + radar_size), 2)
+        pygame.draw.line(self.screen, b_color, (radar_x + radar_size, radar_y + radar_size), (radar_x + radar_size, radar_y + radar_size - b_len), 2)
+
+        # --- Tactical Grid ---
+        # Hardware clip prevents edge blips or grid lines from ever drawing outside the radar box
+        old_clip = self.screen.get_clip()
+        self.screen.set_clip(radar_rect)
+
+        grid_color = (40, 100, 40)  # Glowing dim green
+        grid_spacing = max_radius // self.RADAR_GRID_COUNT
+
+        # Axis Crosshairs
+        pygame.draw.line(self.screen, grid_color, (radar_x, center_y), (radar_x + radar_size, center_y), 1)
+        pygame.draw.line(self.screen, grid_color, (center_x, radar_y), (center_x, radar_y + radar_size), 1)
+
+        # Distance Rings
         for i in range(1, self.RADAR_GRID_COUNT + 1):
             offset = grid_spacing * i
-            pygame.draw.circle(self.screen, (80, 80, 60), (center_x, center_y), offset, 1)
+            pygame.draw.circle(self.screen, grid_color, (center_x, center_y), offset, 1)
 
-        # Scale world coordinates to radar
-        radar_scale = radar_size / self.RADAR_SCALE
+        # Player position (Glowing cluster)
+        pygame.draw.circle(self.screen, (0, 255, 0), (center_x, center_y), 3)
+        pygame.draw.rect(self.screen, (200, 255, 200), (center_x - 1, center_y - 1, 3, 3))  # Hot core
 
-        # Plot signatures
+        # --- Plot Signatures ---
+        radar_scale = max_radius / self.RADAR_SCALE
         player_x, player_y = player_ship.rect.center
+
         for sig_x, sig_y, color in signatures:
             rel_x = sig_x - player_x
             rel_y = sig_y - player_y
 
-            radar_px = center_x + rel_x * radar_scale
-            radar_py = center_y + rel_y * radar_scale
+            radar_px = int(center_x + rel_x * radar_scale)
+            radar_py = int(center_y + rel_y * radar_scale)
 
-            if radar_x < radar_px < radar_x + radar_size and radar_y < radar_py < radar_y + radar_size:
-                pygame.draw.circle(self.screen, color, (int(radar_px), int(radar_py)), 2)
+            # Blocky retro blips instead of smooth circles
+            pygame.draw.rect(self.screen, color, (radar_px - 2, radar_py - 2, 4, 4))
+            pygame.draw.rect(self.screen, (255, 255, 255), (radar_px - 1, radar_py - 1, 2, 2))  # White hot center
 
-        # Radar label with background
-        label_text = "RADAR [ SCANNING... ]" if is_scanning else "RADAR"
-        label_color = self.COLOR_HUD_CYAN if is_scanning else self.COLOR_HUD_AMBER
-        label = self.font_radar_label.render(label_text, True, label_color)
+        # Restore rendering area
+        self.screen.set_clip(old_clip)
 
-        label_bg = pygame.Rect(radar_x + 8, radar_y + 8, label.get_width() + 6, label.get_height() + 2)
-        pygame.draw.rect(self.screen, (10, 20, 10), label_bg)
-        self.screen.blit(label, (radar_x + 11, radar_y + 9))
+        # --- Blinking Retro Label ---
+        show_label = True
+        if is_scanning:
+            # Blink every ~500ms
+            show_label = (pygame.time.get_ticks() // 500) % 2 == 0
+
+        if show_label:
+            label_text = "RADAR [ SCANNING... ]" if is_scanning else "RADAR"
+            label_color = self.COLOR_HUD_CYAN if is_scanning else self.COLOR_HUD_AMBER
+            label = self.font_radar_label.render(label_text, True, label_color)
+
+            label_bg = pygame.Rect(radar_x + 8, radar_y + 8, label.get_width() + 6, label.get_height() + 2)
+            pygame.draw.rect(self.screen, (0, 0, 0), label_bg)  # Solid black background behind text
+            pygame.draw.rect(self.screen, label_color, label_bg, 1)  # Thin neon border around text
+            self.screen.blit(label, (radar_x + 11, radar_y + 9))
 
     def draw_laser(self, laser, laser_endpoint, camera_x, camera_y):
         world_left, world_right, world_top, world_bottom = self._get_world_bounds()
@@ -516,32 +601,47 @@ class DrawUI:
             world_right - world_left, world_bottom - world_top
         )
         self.screen.set_clip(viewport)
-        pygame.draw.line(
-            self.screen, beam_color,
-            (origin_x - camera_x, origin_y - camera_y),
-            (end_x - camera_x, end_y - camera_y),
-            2
-        )
+
+        screen_origin = (origin_x - camera_x, origin_y - camera_y)
+        screen_end = (end_x - camera_x, end_y - camera_y)
+
+        # Retro glowing laser effect: thick colored base with a hot white core
+        pygame.draw.line(self.screen, beam_color, screen_origin, screen_end, 3)
+        pygame.draw.line(self.screen, (255, 255, 255), screen_origin, screen_end, 1)
+
+        # Impact flare at the endpoint
+        pygame.draw.circle(self.screen, (255, 255, 255), screen_end, 2)
+        pygame.draw.circle(self.screen, beam_color, screen_end, 4, 1)
+
         self.screen.set_clip(None)
 
         # --- 2. Radar panel beam ---
         center_x = radar_x + radar_size // 2
         center_y = radar_y + radar_size // 2
-        radar_scale = radar_size / self.RADAR_SCALE
+
+        # FIX: Align scale calculation with the radar's max_radius correction
+        max_radius = radar_size // 2
+        radar_scale = max_radius / self.RADAR_SCALE
 
         rel_x = end_x - origin_x
         rel_y = end_y - origin_y
-        radar_end_x = center_x + rel_x * radar_scale
-        radar_end_y = center_y + rel_y * radar_scale
+        radar_end_x = int(center_x + rel_x * radar_scale)
+        radar_end_y = int(center_y + rel_y * radar_scale)
 
         radar_rect = pygame.Rect(radar_x, radar_y, radar_size, radar_size)
         self.screen.set_clip(radar_rect)
+
+        # Sharp, thin vector line for the radar display
         pygame.draw.line(
             self.screen, beam_color,
             (center_x, center_y),
             (radar_end_x, radar_end_y),
             1
         )
+
+        # Square phosphor impact blip on the radar
+        pygame.draw.rect(self.screen, (255, 255, 255), (radar_end_x - 1, radar_end_y - 1, 2, 2))
+
         self.screen.set_clip(None)
 
     def draw_laser_targeting_info(self, signature_type: str, enabled: bool):
@@ -551,7 +651,7 @@ class DrawUI:
             signature_type: Text description of analyzed contact
             enabled: Boolean indicating if laser targeting is active
         """
-        screen_width = self.screen.get_width()
+
         radar_x, radar_y, radar_size = self._get_radar_bounds()
 
         # Position box directly under the radar face
@@ -582,13 +682,6 @@ class DrawUI:
         self.screen.blit(status_surface, (box_x + 8, box_y + 20))
 
     def draw_missile_vectors(self, player_id, missiles, camera_x, camera_y):
-        """Draw incoming missile trajectory vectors with screen-space alignment.
-
-        Draws high-visibility vector lines anchored at screen edges.
-        """
-        screen_width = self.screen.get_width()
-        screen_height = self.screen.get_height()
-
         world_left, world_right, world_top, world_bottom = self._get_world_bounds()
 
         # Viewport center (reference origin for edge projection)
@@ -741,7 +834,7 @@ class DrawUI:
 
         def world_to_screen(wx, wy):
             """World coords (relative to player) to map panel pixels."""
-            return (map_center[0] + wx * scale, map_center[1] + wy * scale)
+            return map_center[0] + wx * scale, map_center[1] + wy * scale
 
         # --- WORLD GRID (DIMMED) ---
         grid_color = (30, 40, 50)
@@ -841,17 +934,99 @@ class DrawUI:
         txt_footer = self.font_scan_body.render(footer, True, self.COLOR_DFS_CYAN)
         self.screen.blit(txt_footer, (map_rect.x + 15, map_rect.bottom - 35))
 
+    def draw_catastrophe_warning(self, active):
+        """Draw subtle catastrophe alert - pulsing red border and corner X.
+
+        Args:
+            active: Boolean indicating if catastrophe warning is active
+        """
+        if not active:
+            return
+
+        screen_width = self.screen.get_width()
+        screen_height = self.screen.get_height()
+
+        world_left, world_right, world_top, world_bottom = self._get_world_bounds()
+
+        # Slower pulse (more subtle)
+        self.lock_blink_counter += 1
+        strobe_frequency = 12  # Slower, less jarring
+
+        if (self.lock_blink_counter // strobe_frequency) % 2 == 0:
+            # Light red vignette (very subtle)
+            vignette_surface = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+            vignette_color = (255, 60, 60, 25)  # Lower alpha
+            pygame.draw.rect(vignette_surface, vignette_color, (0, 0, screen_width, screen_height))
+            self.screen.blit(vignette_surface, (0, 0))
+
+            # Small red X in corners only (not full viewport)
+            x_color = (255, 80, 80)
+            x_size = 30
+            thickness = 2
+
+            # Top-Left X
+            pygame.draw.line(self.screen, x_color,
+                             (world_left, world_top), (world_left + x_size, world_top + x_size), thickness)
+            pygame.draw.line(self.screen, x_color,
+                             (world_left + x_size, world_top), (world_left, world_top + x_size), thickness)
+
+            # Top-Right X
+            pygame.draw.line(self.screen, x_color,
+                             (world_right, world_top), (world_right - x_size, world_top + x_size), thickness)
+            pygame.draw.line(self.screen, x_color,
+                             (world_right - x_size, world_top), (world_right, world_top + x_size), thickness)
+
+            # Thin red border pulse
+            pygame.draw.rect(self.screen, (255, 100, 100),
+                             (world_left, world_top, world_right - world_left, world_bottom - world_top),
+                             2)
+
+    def draw_dfs_warning(self, active, timer=0.0):
+        """Draw pulsing scan sweep when being swept by DFS.
+
+        Args:
+            active: Boolean indicating if warning should display
+            timer: Current timer value (0-3 seconds). Caller handles incrementing.
+        """
+        if not active:
+            return
+
+        screen_width = self.screen.get_width()
+        screen_height = self.screen.get_height()
+
+        world_left, world_right, world_top, world_bottom = self._get_world_bounds()
+        center_x = (world_left + world_right) // 2
+        center_y = (world_top + world_bottom) // 2
+
+        # Pulse intensity based on time (0-1)
+        pulse = (timer % 1.0)
+        alpha = int(200 * (1.0 - pulse))  # Fade out as pulse completes
+
+        scan_color = (0, 255, 100, alpha)
+
+        # Draw expanding concentric circles (scan sweep effect)
+        max_radius = 150
+        radius = int(max_radius * pulse)
+
+        scan_surface = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+        pygame.draw.circle(scan_surface, scan_color, (center_x, center_y), radius, 2)
+        pygame.draw.circle(scan_surface, scan_color, (center_x, center_y), max(radius - 20, 0), 1)
+        self.screen.blit(scan_surface, (0, 0))
+
+        # Corner warning indicators
+        indicator_color = (0, 255, 100)
+        indicator_size = 8
+        pygame.draw.circle(self.screen, indicator_color, (world_left + 15, world_top + 15), indicator_size, 2)
+        pygame.draw.circle(self.screen, indicator_color, (world_right - 15, world_top + 15), indicator_size, 2)
+
+        # Warning text in center
+        warning_text = self.font_scan_body.render("DFS SWEEP DETECTED!", True, (255, 50, 50))
+        text_rect = warning_text.get_rect(center=(center_x, center_y + 80))
+        self.screen.blit(warning_text, text_rect)
+
     # Deep field scan stuff
 
     def draw_deep_field_panel(self, contacts, direction_index, system_online=True):
-        """Draw tactical deep field sensor display with minimal summary.
-
-        Args:
-            contacts: List of (range_km, contact_type, is_moving, confidence) tuples
-            direction_index: 0-7 scan direction (0=N, 1=NE, etc.)
-            system_online: Whether the deep field scanner is active
-        """
-        screen_width = self.screen.get_width()
         screen_height = self.screen.get_height()
 
         # Panel Geometry

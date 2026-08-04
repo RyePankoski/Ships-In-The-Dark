@@ -6,7 +6,7 @@ from ai.ai import AI
 
 
 class Ship:
-    def __init__(self, x=None, y=None, is_player=False, player_id=None, is_painted=False, is_ai=False):
+    def __init__(self, x=None, y=None, is_player=False, player_id=None, is_ai=False):
         self.player = is_player
         self.pos_x = x
         self.pos_y = y
@@ -14,7 +14,7 @@ class Ship:
         self.vel_y = 0
         self.velocity = 0
         self.player_id = player_id
-        self.painted = is_painted
+
         self.heading = 0
 
         if is_ai:
@@ -34,11 +34,14 @@ class Ship:
         self.missile_cooldown = 1
 
         self.enemy_has_missile_solution = False
+        self.catastrophic_warning = False
         self.has_missile_solution = True
+        self.close_range_scanning = True
         self.manual_control = True
         self.scan_used = False
         self.dampening = True
         self.laser_on = False
+        self.painted = True
         self.dfs_on = False
         self.alive = True
 
