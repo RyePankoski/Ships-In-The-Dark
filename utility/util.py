@@ -26,7 +26,8 @@ def collect_inputs():
         # Modifiers
         'shift': keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT],
         'ctrl': keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL],
-        'alt': keys[pygame.K_LALT] or keys[pygame.K_RALT],
+        'left_alt': keys[pygame.K_LALT],
+        'right_alt': keys[pygame.K_RALT],
 
         # Letters (your existing ones + common game keys)
         'q': keys[pygame.K_q],

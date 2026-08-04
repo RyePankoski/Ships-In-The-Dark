@@ -35,6 +35,7 @@ class DrawGame:
         self.missile_sprite = pygame.image.load(os.path.join(asset_path, "pngs/missile.png"))
         self.drone_sprite = pygame.image.load(os.path.join(asset_path, "pngs/drone.png"))
         self.drone_mining = pygame.image.load(os.path.join(asset_path, "pngs/drone_mining.png"))
+        self.decoy_sprite = pygame.image.load(os.path.join(asset_path, "pngs/decoy.png"))
 
         # Generate starfield
         self.stars = generate_stars(10000, WORLD_WIDTH, WORLD_HEIGHT)
@@ -91,6 +92,12 @@ class DrawGame:
                     self.screen.blit(self.drone_mining, (screen_x, screen_y))
                 else:
                     self.screen.blit(self.drone_sprite, (screen_x, screen_y))
+
+    def draw_decoys(self, decoys, camera_x, camera_y):
+        for decoy in decoys:
+            screen_x = decoy.pos_x - camera_x
+            screen_y = decoy.pos_y - camera_y
+            self.screen.blit(self.decoy_sprite, (screen_x, screen_y))
 
     def draw_ships(self, ships, camera_x, camera_y):
         for ship in ships:

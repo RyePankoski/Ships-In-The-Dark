@@ -52,6 +52,7 @@ class AudioManager:
             'laser_locked' : 'sounds/laser_locked.wav',
             'laser_turn_off' : 'sounds/laser_turn_off.wav',
             'laser_lock_lost': 'sounds/laser_lock_lost.mp3',
+            'deploy_decoy' : 'sounds/deploy_decoy.wav',
         }
 
         for name, filename in sound_files.items():

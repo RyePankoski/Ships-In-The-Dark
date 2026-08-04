@@ -23,7 +23,7 @@ WORLD_HEIGHT = 10000
 GRID_SIZE = 500
 
 # Radar configuration
-RADAR_PULSE_RANGE = 3000
+RADAR_PULSE_RANGE = 4000
 RADAR_PULSE_SPEED = 2
 
 # Laser configuration
@@ -36,5 +36,9 @@ CORRIDOR_WIDTH = 2000
 
 # Close range scanner
 CLOSE_RANGE_SCAN_RANGE = 800
+
+
+# Decoy
+DECOY_LIFETIME = 30
 
 PORT = 27015

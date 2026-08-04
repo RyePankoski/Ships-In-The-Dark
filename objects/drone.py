@@ -4,13 +4,13 @@ from utility.constants import *
 
 
 class Drone:
-    def __init__(self, x, y, dx=0, dy=0, v=0, is_painted=False):
+    def __init__(self, x, y, dx=0, dy=0, v=0):
         self.pos_x = x
         self.pos_y = y
         self.dx = dx
         self.dy = dy
         self.velocity = v
-        self.is_painted = is_painted
+
 
         self.velocity = 50
 
@@ -24,6 +24,7 @@ class Drone:
         self.am_mining = False
 
         self.target = None
+        self.painted = False
 
     def run_drone(self, asteroids, dt):
 

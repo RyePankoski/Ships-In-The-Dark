@@ -63,7 +63,7 @@ class Ship:
     def run(self, dt):
 
         if self.ai is not None:
-            self.ai.run_ai()
+            self.ai.run()
 
         self.move(dt)
         self.cooldowns(dt)

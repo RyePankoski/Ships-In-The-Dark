@@ -587,7 +587,9 @@ class DrawUI:
             pygame.draw.rect(self.screen, label_color, label_bg, 1)  # Thin neon border around text
             self.screen.blit(label, (radar_x + 11, radar_y + 9))
 
-    def draw_laser(self, laser, laser_endpoint, camera_x, camera_y):
+    def draw_laser(self, laser, laser_endpoint, camera_x, camera_y, active):
+        if not active:
+            return
         world_left, world_right, world_top, world_bottom = self._get_world_bounds()
         radar_x, radar_y, radar_size = self._get_radar_bounds()
 
@@ -820,8 +822,7 @@ class DrawUI:
                     (hx + self.MISSILE_LOCK_BOX_SIZE, hy + self.MISSILE_LOCK_BOX_SIZE - 5), 2
                 )
 
-    def draw_tactical_map(self, active, player_ship, confirmed_contacts, scan_active=False, scan_range=1000,
-                          laser_active=False, laser_direction=0, laser_locked=False, locked_object=None):
+    def draw_tactical_map(self, active, player_ship, confirmed_contacts, scan_active=False, scan_range=1000, laser_active=False, laser_direction=0, laser_locked=False, locked_object=None):
         """Draw tactical map showing confirmed contacts with confidence fading.
 
         Args:
@@ -1078,8 +1079,6 @@ class DrawUI:
         text_rect = warning_text.get_rect(center=(center_x, center_y + 80))
         self.screen.blit(warning_text, text_rect)
 
-    # Deep field scan stuff
-
     def draw_deep_field_panel(self, contacts, direction_index, system_online=True):
         screen_height = self.screen.get_height()
 
@@ -1192,7 +1191,10 @@ class DrawUI:
             no_threat = self.font_scan_body.render("NO MOVING CONTACTS", True, self.COLOR_DFS_GRAY)
             self.screen.blit(no_threat, (x, y))
 
-    def draw_dfs_corridor(self, player_ship, dfs_direction_index, camera_x, camera_y):
+    def draw_dfs_corridor(self, player_ship, dfs_direction_index, camera_x, camera_y, active=False):
+        if not active:
+            return
+
         """Draw deep field scan as an amber baseline perpendicular to the scan heading,
         centered on the player, with chevron arrows on the main viewport (cleared at center)
         and orange directional scan lines extending edge-to-edge on the radar panel."""

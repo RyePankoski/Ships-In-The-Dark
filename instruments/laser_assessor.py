@@ -21,26 +21,26 @@ class LaserAssessor:
         self.tracking_lost = False
 
     def lock_laser(self):
-
-        # print(f"Laser locked to {type(self.current_target)}")
+        if self.current_target is None:
+            return
 
         if isinstance(self.current_target, Ship):
             angle = math.atan2(
                 self.current_target.rect.center[1] - self.ship_of_origin.rect.center[1],
                 self.current_target.rect.center[0] - self.ship_of_origin.rect.center[0]
             )
-        elif isinstance(self.current_target, Asteroid) or isinstance(self.current_target, Drone):
+        else:
+            # Asteroid, Drone, Decoy, etc. — use pos_x/pos_y
             angle = math.atan2(
                 self.current_target.pos_y - self.ship_of_origin.rect.center[1],
                 self.current_target.pos_x - self.ship_of_origin.rect.center[0]
             )
-        else:
-            return
 
         self.direction = math.degrees(angle)
         self.direction = (self.direction + 360) % 360
 
     def assess_target(self, x, y, contact):
+        """Analyze a contacted object and return classification."""
         self.previous_signature_position = self.signature_position
         self.signature_position = (x, y)
 
@@ -52,24 +52,18 @@ class LaserAssessor:
             self.tracking_lost = True
 
         if self.previous_signature_position == self.signature_position:
-            return "Asteroid Likely"
+            return "STATIC"
         else:
-            return "Moving Object"
+            return "MOVING"
 
-    def shine_laser(self, ships, asteroids, drones):
+    def shine_laser(self, spatial_contacts, list_contacts):
         if self.laser_locked:
             self.lock_laser()
 
-        target_type = "Nothing"
+        target_type = "NOTHING"
 
-        for cell in drones.values():
-            for drone in cell:
-                drone.is_painted = False
-        for cell in asteroids.values():
-            for rock in cell:
-                rock.painted = False
-        for ship in ships:
-            ship.painted = False
+        # Clear all painted flags
+        self._clear_all_painted(spatial_contacts, list_contacts)
 
         rad = math.radians(self.direction)
         dx, dy = math.cos(rad), math.sin(rad)
@@ -83,39 +77,91 @@ class LaserAssessor:
             ray_x += dx * LASER_STEP
             ray_y += dy * LASER_STEP
 
-            for ship in ships:
-                if ship is self.ship_of_origin:
-                    continue
-                sx, sy = ship.rect.center
-                if (sx - ray_x) ** 2 + (sy - ray_y) ** 2 < ship.radar_cross_section ** 2:
-                    target_type = self.assess_target(ship.rect.center[0], ship.rect.center[1], ship)
-                    ship.painted = True
-                    self.current_target = ship
-                    return (ray_x, ray_y), target_type
-                else:
-                    ship.painted = False
+            # Check list contacts (ships, decoys, etc.)
+            hit = self._check_list_contacts_laser(ray_x, ray_y, list_contacts)
+            if hit:
+                contact, x, y, target_type = hit
+                self._set_painted(contact, True)
+                self.current_target = contact
+                return (ray_x, ray_y), target_type
 
-            cell = (int(ray_x // GRID_SIZE), int(ray_y // GRID_SIZE))
-            for rock in asteroids.get(cell, []):
-                if (rock.pos_x - ray_x) ** 2 + (rock.pos_y - ray_y) ** 2 < rock.size ** 2:
-                    target_type = self.assess_target(rock.pos_x, rock.pos_y, rock)
-                    rock.painted = True
-                    self.current_target = rock
-                    return (ray_x, ray_y), target_type
-                else:
-                    rock.painted = False
-
-            for cell in drones.values():
-                for drone in cell:
-                    if (drone.pos_x - ray_x) ** 2 + (drone.pos_y - ray_y) ** 2 < 50 ** 2:
-                        target_type = self.assess_target(drone.pos_x, drone.pos_y, drone)
-                        drone.is_painted = True
-                        self.current_target = drone
-                        return (ray_x, ray_y), target_type
-                    else:
-                        drone.is_painted = False
+            # Check spatial contacts (asteroids, drones, etc.) in current sector
+            ray_sector = (int(ray_x // GRID_SIZE), int(ray_y // GRID_SIZE))
+            hit = self._check_spatial_contacts_laser(ray_x, ray_y, ray_sector, spatial_contacts)
+            if hit:
+                contact, x, y, target_type = hit
+                self._set_painted(contact, True)
+                self.current_target = contact
+                return (ray_x, ray_y), target_type
 
         return (ray_x, ray_y), target_type
+
+    def _clear_all_painted(self, spatial_contacts, list_contacts):
+        """Clear painted flag on all contacts."""
+        # Spatial contacts
+        if spatial_contacts:
+            for contact_dict in spatial_contacts.values():
+                for cell_list in contact_dict.values():
+                    for contact in cell_list:
+                        self._set_painted(contact, False)
+
+        # List contacts
+        if list_contacts:
+            for contact_list in list_contacts.values():
+                for contact in contact_list:
+                    if contact is not self.ship_of_origin:
+                        self._set_painted(contact, False)
+
+    def _set_painted(self, contact, value):
+        """Set painted flag on a contact (handles different attribute names)."""
+        if hasattr(contact, 'painted'):
+            contact.painted = value
+        if hasattr(contact, 'is_painted'):
+            contact.is_painted = value
+
+    def _check_list_contacts_laser(self, ray_x, ray_y, list_contacts):
+        """Check list contacts against ray. Returns (contact, x, y, type) or None."""
+        if not list_contacts:
+            return None
+
+        for contact_type, contacts in list_contacts.items():
+            for contact in contacts:
+                if contact is self.ship_of_origin:
+                    continue
+
+                if hasattr(contact, 'rect'):
+                    c_x, c_y = contact.rect.center
+                else:
+                    c_x, c_y = contact.pos_x, contact.pos_y
+
+                dist_sq = (c_x - ray_x) ** 2 + (c_y - ray_y) ** 2
+                hit_radius = getattr(contact, 'radar_cross_section', 50)
+
+                if dist_sq < hit_radius ** 2:
+                    target_type = self.assess_target(c_x, c_y, contact)
+                    return (contact, c_x, c_y, target_type)
+
+        return None
+
+    def _check_spatial_contacts_laser(self, ray_x, ray_y, ray_sector, spatial_contacts):
+        """Check spatial contacts in current sector. Returns (contact, x, y, type) or None."""
+        if not spatial_contacts:
+            return None
+
+        for contact_type, contact_dict in spatial_contacts.items():
+            if ray_sector not in contact_dict:
+                continue
+
+            for contact in contact_dict[ray_sector]:
+                dist_sq = (contact.pos_x - ray_x) ** 2 + (contact.pos_y - ray_y) ** 2
+                hit_radius = getattr(contact, 'radar_cross_section',
+                                     getattr(contact, 'size', 50))
+
+                if dist_sq < hit_radius ** 2:
+                    target_type = self.assess_target(contact.pos_x, contact.pos_y, contact)
+                    return contact, contact.pos_x, contact.pos_y, target_type
+
+        return None
 
     def change_direction(self, inputs):
         if inputs['arrow_key_left']:

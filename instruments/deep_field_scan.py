@@ -3,9 +3,6 @@ from utility.constants import *
 from utility.util import distance, in_quadrant
 
 
-
-
-
 class DeepFieldScan:
     def __init__(self, player_ship):
         self.player_ship = player_ship
@@ -21,36 +18,79 @@ class DeepFieldScan:
         if inputs.get('arrow_key_up'):
             self.direction_index = (self.direction_index + 1) % 8
 
-    def run_scan(self, ships, asteroids, drones):
-        """Scan quadrant and return contacts with object references."""
+    def run_scan(self, spatial_contacts, list_contacts):
         contacts = []
         direction_deg = self.directions[self.direction_index]
         player_x, player_y = self.player_ship.rect.center
 
-        # Check ships
-        for ship in ships:
-            if ship is self.player_ship:
-                continue
-            if in_quadrant(player_x, player_y, direction_deg, ship.rect.center):
-                range_px = distance(player_x, player_y, ship.rect.center)
-                is_moving = ship.total_velocity > 0.1
-                ship.dfs_scanned = True
-                contacts.append((range_px, 'ship', is_moving, 0.8, ship))
+        # Check list contacts (ships, decoys, etc.)
+        self._check_list_contacts(
+            player_x, player_y, direction_deg, list_contacts, contacts
+        )
 
-        # Check asteroids
-        for cell in asteroids.values():
-            for asteroid in cell:
-                if in_quadrant(player_x, player_y, direction_deg, (asteroid.pos_x, asteroid.pos_y)):
-                    range_px = distance(player_x, player_y, (asteroid.pos_x, asteroid.pos_y))
-                    contacts.append((range_px, 'asteroid', False, 0.7, asteroid))
-
-        # Check drones
-        for cell in drones.values():
-            for drone in cell:
-                if in_quadrant(player_x, player_y, direction_deg, (drone.pos_x, drone.pos_y)):
-                    range_px = distance(player_x, player_y, (drone.pos_x, drone.pos_y))
-                    is_moving = drone.velocity > 0.1
-                    contacts.append((range_px, 'unknown', is_moving, 0.6, drone))
+        # Check spatial contacts (asteroids, drones, etc.)
+        self._check_spatial_contacts(
+            player_x, player_y, direction_deg, spatial_contacts, contacts
+        )
 
         return sorted(contacts, key=lambda x: x[0])
 
+    def _check_list_contacts(self, player_x, player_y, direction_deg, list_contacts, contacts):
+        """Check all list-based contacts (ships, decoys, etc.) in corridor."""
+        if not list_contacts:
+            return
+
+        for contact_type, contact_list in list_contacts.items():
+            for contact in contact_list:
+                if contact is self.player_ship:
+                    continue
+
+                # Get contact position
+                if hasattr(contact, 'rect'):
+                    c_x, c_y = contact.rect.center
+                else:
+                    c_x, c_y = contact.pos_x, contact.pos_y
+
+                if in_quadrant(player_x, player_y, direction_deg, (c_x, c_y)):
+                    range_px = distance(player_x, player_y, (c_x, c_y))
+                    is_moving = getattr(contact, 'total_velocity', 0) > 0.1
+
+                    # Type classification
+                    if contact_type == 'ships':
+                        contact_class = 'ship'
+                        confidence = 0.8
+                    elif contact_type == 'decoys':
+                        contact_class = 'decoy'
+                        confidence = 0.6
+                    else:
+                        contact_class = contact_type.rstrip('s')  # plurals -> singular
+                        confidence = 0.7
+
+                    contacts.append((range_px, contact_class, is_moving, confidence, contact))
+
+    def _check_spatial_contacts(self, player_x, player_y, direction_deg, spatial_contacts, contacts):
+        """Check all spatial contacts (grid-keyed) in corridor."""
+        if not spatial_contacts:
+            return
+
+        for contact_type, contact_dict in spatial_contacts.items():
+            for cell_list in contact_dict.values():
+                for contact in cell_list:
+                    c_x, c_y = contact.pos_x, contact.pos_y
+
+                    if in_quadrant(player_x, player_y, direction_deg, (c_x, c_y)):
+                        range_px = distance(player_x, player_y, (c_x, c_y))
+                        is_moving = getattr(contact, 'velocity', 0) > 0.1
+
+                        # Type classification
+                        if contact_type == 'asteroids':
+                            contact_class = 'asteroid'
+                            confidence = 0.7
+                        elif contact_type == 'drones':
+                            contact_class = 'unknown'
+                            confidence = 0.6
+                        else:
+                            contact_class = contact_type.rstrip('s')
+                            confidence = 0.65
+
+                        contacts.append((range_px, contact_class, is_moving, confidence, contact))

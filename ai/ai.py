@@ -8,7 +8,7 @@ class AI:
         self.destination = None
         self.ship = ship
 
-    def run_ai(self):
+    def run(self):
         if self.destination is None:
             self.destination = random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT)
         else:

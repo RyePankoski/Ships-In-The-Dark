@@ -8,7 +8,7 @@ class PlayerShipAI:
     def __init__(self):
         self.destination = None
 
-    def run_ship_ai(self, ship):
+    def run(self, ship):
         if self.destination:
             self.move_to_destination(ship)
         else:

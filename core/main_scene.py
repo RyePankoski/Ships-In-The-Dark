@@ -1,7 +1,8 @@
 import random
 import json
 
-from utility.constants import WORLD_HEIGHT, WORLD_WIDTH, GRID_SIZE, CLOSE_RANGE_SCAN_RANGE
+from objects.decoy import Decoy
+from utility.constants import WORLD_HEIGHT, WORLD_WIDTH, GRID_SIZE
 from utility.util import end_blit
 
 from asset_handlers.draw_game import DrawGame
@@ -34,10 +35,14 @@ class MainScene:
         # Lists
         self.explosions = []
         self.missiles = []
+        self.decoys = []
         self.ships = []
 
         self.asteroids = {}
         self.drones = {}
+
+        self.dict_objects = {}
+        self.list_objects = {}
 
         # Create player ship and enemy ship
         if not self.connected:
@@ -86,14 +91,16 @@ class MainScene:
             self.handle_missiles(dt)
             self.handle_ships(dt)
             self.handle_drones(dt)
+            self.handle_decoys(dt)
 
         if self.player_ship.close_range_scanning:
-            self.close_range_scan.update(self.ships, self.asteroids, self.drones)
+            self.close_range_scan.update(self.dict_objects, self.list_objects)
 
         self.timers(dt)
         self.handle_radar()
         self.handle_laser(inputs)
         self.handle_general_sound_effects()
+        self.build_object_dicts()
         self.draw_scene()
         self.explosions = []
 
@@ -115,9 +122,13 @@ class MainScene:
         if self.player_ship.manual_control:
             self.player_ship.apply_inputs(inputs, dt)
         else:
-            self.player_ship_ai.run_ship_ai(self.player_ship)
+            self.player_ship_ai.run(self.player_ship)
 
         if not self.input_cooling_down:
+            if inputs['right_alt']:
+                self.build_decoy()
+                self.input_cooling_down = True
+                self.audio_manager.play_sfx('deploy_decoy')
 
             if inputs['space'] and self.player_ship.laser_on:
                 if self.laser_assessor.laser_locked:
@@ -147,7 +158,7 @@ class MainScene:
             if inputs['r']:
                 self.audio_manager.play_sfx('radar')
                 self.player_ship.unconfirmed_signatures = []
-                self.radar_system.begin_scan(self.player_ship, self.ships, self.asteroids, self.drones)
+                self.radar_system.begin_scan(self.player_ship, self.dict_objects, self.list_objects)
                 self.input_cooling_down = True
             if inputs['i']:
                 self.player_ship.laser_on = not self.player_ship.laser_on
@@ -168,7 +179,7 @@ class MainScene:
                     self.audio_manager.play_sfx('map_close')
             if self.player_ship.dfs_on:
                 if inputs['o']:
-                    self.player_ship.deep_field_contacts = self.deep_field_scan.run_scan(self.ships, self.asteroids, self.drones)
+                    self.player_ship.deep_field_contacts = self.deep_field_scan.run_scan(self.dict_objects, self.list_objects)
                     self.audio_manager.play_sfx('dfs_scan')
                     self.input_cooling_down = True
                 if inputs['arrow_key_up'] or inputs['arrow_key_down']:
@@ -185,7 +196,7 @@ class MainScene:
 
     def handle_laser(self, inputs):
         if self.player_ship.laser_on:
-            self.laser_endpoint, self.laser_target_type = self.laser_assessor.shine_laser(self.ships, self.asteroids, self.drones)
+            self.laser_endpoint, self.laser_target_type = self.laser_assessor.shine_laser(self.dict_objects, self.list_objects)
             self.laser_assessor.change_direction(inputs)
             self.unpainted_all = False
         elif not self.unpainted_all:
@@ -239,7 +250,21 @@ class MainScene:
                         ship.vel_x *= -1.5
                         ship.vel_y *= -1.5
 
+    def build_object_dicts(self):
+        self.dict_objects = {
+            'asteroids' : self.asteroids,
+            'drones' : self.drones,
+        }
+
+        self.list_objects = {
+            'ships' : self.ships,
+            'missiles' : self.missiles,
+            'decoys' : self.decoys,
+        }
+
+
     def handle_missiles(self, dt):
+
         if not self.missiles:
             self.player_ship.enemy_has_missile_solution = False
 
@@ -266,6 +291,23 @@ class MainScene:
             self.explosions.append(missile.rect.center)
             self.missiles.remove(missile)
 
+    def handle_decoys(self, dt):
+        decoys_to_remove = []
+        for decoy in self.decoys:
+            decoy.run(dt)
+            if decoy.alive is False:
+                decoys_to_remove.append(decoy)
+
+        for decoy in decoys_to_remove:
+            self.decoys.remove(decoy)
+
+    def build_decoy(self):
+        dx = random.randint(-1,1)
+        dy = random.randint(-1,1)
+        v = random.randint(20,25)
+        decoy = Decoy(self.player_ship.rect.center[0], self.player_ship.rect.center[1], dx, dy, v)
+        self.decoys.append(decoy)
+
     def timers(self, dt):
         if self.input_cooling_down:
             self.input_timer += dt
@@ -289,20 +331,16 @@ class MainScene:
 
     def draw_scene(self):
         self.draw_game.start_blit()
-        # Find player ship and calculate camera position
         camera_x, camera_y = self.find_camera()
 
-        # Draw the starfield first (background)
         self.draw_game.draw_stars(camera_x, camera_y)
-
-        # Then draw game objects
         self.draw_game.draw_missiles(self.missiles, camera_x, camera_y)
         self.draw_game.draw_explosions(self.explosions, camera_x, camera_y)
         self.draw_game.draw_asteroids(self.asteroids, camera_x, camera_y)
         self.draw_game.draw_drones(self.drones, camera_x, camera_y)
         self.draw_game.draw_ships(self.ships, camera_x, camera_y)
+        self.draw_game.draw_decoys(self.decoys, camera_x, camera_y)
 
-        # UI elements
         self.draw_ui.draw_ui_layout()
         self.draw_ui.draw_world_grid(camera_x, camera_y, self.grid_on)
         self.draw_ui.draw_laser_painted_warning(self.player_ship.painted)
@@ -314,18 +352,11 @@ class MainScene:
         self.draw_ui.draw_deep_field_panel(self.player_ship.deep_field_contacts, self.deep_field_scan.direction_index, self.player_ship.dfs_on)
         self.draw_ui.draw_catastrophe_warning(self.player_ship.catastrophic_warning)
         self.draw_ui.draw_dfs_warning(self.player_ship.dfs_scanned, self.dfs_warning_timer)
-
-        # Context dependent
-        if self.player_ship.dfs_on:
-            self.draw_ui.draw_dfs_corridor(self.player_ship, self.deep_field_scan.direction_index, camera_x, camera_y)
-        if self.player_ship.laser_on:
-            self.draw_ui.draw_laser(self.laser_assessor, self.laser_endpoint, camera_x, camera_y)
-
+        self.draw_ui.draw_dfs_corridor(self.player_ship, self.deep_field_scan.direction_index, camera_x, camera_y, self.player_ship.dfs_on)
+        self.draw_ui.draw_laser(self.laser_assessor, self.laser_endpoint, camera_x, camera_y, self.player_ship.laser_on)
         self.draw_ui.draw_tactical_map(self.is_map_open, self.player_ship, self.close_range_scan.get_contacts())
-
-
-        # End
         self.draw_ui.draw_scanlines()
+
         end_blit()
 
     def unpaint_all(self):
