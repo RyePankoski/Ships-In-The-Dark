@@ -1,4 +1,6 @@
 import math
+
+from objects.asteroid import Asteroid
 from utility.constants import *
 
 import pygame
@@ -40,7 +42,6 @@ class Missile:
 
         self.move(dt)
 
-
     def steer(self, asteroids):
 
         if hasattr(self.contact, 'rect'):
@@ -57,6 +58,7 @@ class Missile:
             self.reached_target = True
 
             if hasattr(self.contact, 'alive'):
+                print(type(self.contact), self.contact.alive)
                 self.contact.alive = False
 
             return
@@ -82,6 +84,10 @@ class Missile:
         self.vel_y = (desired_y / d) * self.velocity
 
     def _avoidance(self, tx, ty, asteroids):
+
+        if isinstance(self.contact, Asteroid):
+            return 0.0, 0.0
+
         """One feeler marched ahead along the seek direction. On the first rock,
         return a perpendicular push away from it, strength scaled by nearness.
         Returns (0.0, 0.0) if the path ahead is clear."""

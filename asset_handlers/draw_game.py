@@ -284,3 +284,266 @@ class DrawGame:
         for y in range(0, h, 4):
             pygame.draw.line(scan, (0, 0, 0, 110), (0, y), (w, y), 2)
         self.screen.blit(scan, (0, 0))
+
+    def draw_ftl_jump_tunnel(self, ftl_jumping):
+        """Draw a hyperspace warp effect implying FTL speed, with a retro UI."""
+        if not ftl_jumping:
+            # Clear the particle system when FTL ends
+            if hasattr(self, 'ftl_particles'):
+                del self.ftl_particles
+            return
+
+        screen_width = self.screen.get_width()
+        screen_height = self.screen.get_height()
+        center_x = screen_width // 2
+        center_y = screen_height // 2
+        max_radius = math.hypot(center_x, center_y)
+
+        # 1. Initialize the particle system (Unchanged)
+        if not hasattr(self, 'ftl_particles'):
+            self.ftl_particles = []
+            for _ in range(150):
+                angle = random.uniform(0, 2 * math.pi)
+                radius = random.uniform(10, max_radius)
+                speed = random.uniform(2, 10)
+                color = random.choice([
+                    (200, 255, 255),
+                    (100, 150, 255),
+                    (255, 255, 255)
+                ])
+                self.ftl_particles.append([angle, radius, speed, color])
+
+        # 2. Update and draw the warp streaks (Unchanged)
+        for p in self.ftl_particles:
+            angle, radius, speed, color = p
+
+            tail_length = speed * 2.5
+            tail_radius = max(1, radius - tail_length)
+
+            x1 = center_x + math.cos(angle) * tail_radius
+            y1 = center_y + math.sin(angle) * tail_radius
+            x2 = center_x + math.cos(angle) * radius
+            y2 = center_y + math.sin(angle) * radius
+
+            thickness = int((radius / max_radius) * 4) + 1
+            pygame.draw.line(self.screen, color, (int(x1), int(y1)), (int(x2), int(y2)), thickness)
+
+            p[2] *= 1.08
+            p[1] += p[2]
+
+            if p[1] > max_radius * 1.2:
+                p[0] = random.uniform(0, 2 * math.pi)
+                p[1] = random.uniform(1, 15)
+                p[2] = random.uniform(1, 4)
+
+        # 3. Dashboard Text - Low-fidelity terminal styling
+        if not hasattr(self, 'font_ftl'):
+            # Force a chunky monospace font rather than the smooth default
+            self.font_ftl = pygame.font.SysFont('courier', 42, bold=True)
+
+        # Hard on/off blink every 500ms instead of a smooth sine wave
+        is_blink_on = (pygame.time.get_ticks() // 500) % 2 == 0
+
+        if is_blink_on:
+            ui_color = (50, 255, 50)  # High-contrast terminal green
+
+            # Anti-aliasing set to False (the middle argument) for pixelated edges
+            ftl_text = self.font_ftl.render("JUMP SOLUTION: FIXED", False, ui_color)
+
+            text_x = center_x - ftl_text.get_width() // 2
+            text_y = screen_height - (screen_height // 4)
+
+            # Calculate bounding box with padding
+            pad_x, pad_y = 24, 12
+            box_rect = pygame.Rect(
+                text_x - pad_x,
+                text_y - pad_y,
+                ftl_text.get_width() + (pad_x * 2),
+                ftl_text.get_height() + (pad_y * 2)
+            )
+
+            # Draw solid black background to block out warp streaks, then draw border
+            pygame.draw.rect(self.screen, (0, 0, 0), box_rect)
+            pygame.draw.rect(self.screen, ui_color, box_rect, width=3)
+
+            # Blit the text on top
+            self.screen.blit(ftl_text, (text_x, text_y))
+
+    def draw_ship_arrival(self, ship_position, arrival_timer, camera_x, camera_y, max_duration=1.0):
+        """Draw high-energy impact burst with directional spike lines radiating outward."""
+        if arrival_timer <= 0.0 or arrival_timer >= max_duration:
+            return
+
+        progress = max(0.0, min(1.0, arrival_timer / max_duration))
+
+        # Convert world coordinates to screen coordinates
+        sx = int(ship_position[0] - camera_x)
+        sy = int(ship_position[1] - camera_y)
+
+        alpha = int(255 * (1.0 - progress))
+        if alpha <= 0:
+            return
+
+        # Canvas size to contain the exploding lines
+        max_reach = 180
+        surf_size = max_reach * 2 + 20
+        surf = pygame.Surface((surf_size, surf_size), pygame.SRCALPHA)
+        center = (surf_size // 2, surf_size // 2)
+
+        # 1. Immediate Impact Core (Hot white/cyan flash at center)
+        if progress < 0.25:
+            core_p = progress / 0.25
+            core_radius = int(25 * math.sin(core_p * math.pi))
+            if core_radius > 0:
+                pygame.draw.circle(surf, (255, 255, 255, alpha), center, core_radius)
+                pygame.draw.circle(surf, (0, 220, 255, int(alpha * 0.6)), center, core_radius + 8, width=2)
+
+        # 2. Exploding Spike Lines
+        num_spikes = 16
+        for i in range(num_spikes):
+            # Seed generator per spike so paths remain consistent frame-to-frame
+            rng = random.Random(i * 307)
+            angle = rng.uniform(0, math.tau)
+            max_length = rng.uniform(80, max_reach)
+            speed = rng.uniform(0.85, 1.15)
+            color_choice = rng.choice([(255, 255, 255), (0, 220, 255), (100, 180, 255)])
+
+            # Fast outward movement with ease-out deceleration
+            eased_p = math.sin((progress * speed) * (math.pi / 2))
+
+            # Line start/end points travel outward together to create flying streaks
+            dist_head = eased_p * max_length
+            dist_tail = max(0.0, dist_head - (35 * (1.0 - progress)))
+
+            x1 = center[0] + int(math.cos(angle) * dist_tail)
+            y1 = center[1] + int(math.sin(angle) * dist_tail)
+            x2 = center[0] + int(math.cos(angle) * dist_head)
+            y2 = center[1] + int(math.sin(angle) * dist_head)
+
+            line_alpha = int(alpha * rng.uniform(0.7, 1.0))
+            if line_alpha > 0 and dist_head > dist_tail:
+                pygame.draw.line(surf, (*color_choice, line_alpha), (x1, y1), (x2, y2), width=2)
+
+        # 3. Outer Shockwave Edge (Thin, fast high-contrast shock ring)
+        shock_r = int(progress * (max_reach * 0.8))
+        if shock_r > 0:
+            pygame.draw.circle(surf, (180, 240, 255, int(alpha * 0.4)), center, shock_r, width=1)
+
+        # Blit centered on screen coordinates
+        self.screen.blit(surf, (sx - center[0], sy - center[1]))
+
+    def draw_ship_analysis(self, ship_position, arrival_timer, camera_x, camera_y, max_duration=1.0):
+        """Draw a diagnostic targeting sequence with a callout debug terminal."""
+        if arrival_timer <= 0.0 or arrival_timer >= max_duration:
+            return
+
+        progress = max(0.0, min(1.0, arrival_timer / max_duration))
+
+        sx = int(ship_position[0] - camera_x)
+        sy = int(ship_position[1] - camera_y)
+
+        alpha = 255 if progress < 0.85 else int(255 * (1.0 - (progress - 0.85) / 0.15))
+        if alpha <= 0:
+            return
+
+        # Canvas setup - Expanded to 400x400 to fit the external callout UI
+        box_size = 70
+        surf_size = 400
+        surf = pygame.Surface((surf_size, surf_size), pygame.SRCALPHA)
+        center = (surf_size // 2, surf_size // 2)
+
+        ui_green = (50, 255, 50)
+        ui_bright = (180, 255, 180)
+        ui_faint = (20, 100, 20)
+
+        # 1. Target Acquisition Box
+        box_p = min(1.0, progress * 5.0)
+        current_radius = int((box_size // 2) + 20 * (1.0 - math.sin(box_p * math.pi / 2)))
+
+        # 2. Diagnostic Grid Overlay
+        if progress > 0.1:
+            grid_step = 10
+            for i in range(-current_radius, current_radius + 1, grid_step):
+                pygame.draw.line(surf, (*ui_faint, alpha),
+                                 (center[0] + i, center[1] - current_radius),
+                                 (center[0] + i, center[1] + current_radius), 1)
+                pygame.draw.line(surf, (*ui_faint, alpha),
+                                 (center[0] - current_radius, center[1] + i),
+                                 (center[0] + current_radius, center[1] + i), 1)
+
+        # 3. Target Brackets
+        b_len = 12
+        for bx, by in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
+            cx = center[0] + (current_radius * bx)
+            cy = center[1] + (current_radius * by)
+            pygame.draw.line(surf, (*ui_bright, alpha), (cx, cy), (cx - (b_len * bx), cy), 2)
+            pygame.draw.line(surf, (*ui_bright, alpha), (cx, cy), (cx, cy - (b_len * by)), 2)
+
+        # 4. Scanning Sweep
+        if 0.2 < progress < 0.9:
+            scan_p = (progress - 0.2) / 0.7
+            scan_y = center[1] - current_radius + int((current_radius * 2) * scan_p)
+
+            pygame.draw.line(surf, (*ui_bright, alpha),
+                             (center[0] - current_radius, scan_y),
+                             (center[0] + current_radius, scan_y), 2)
+            pygame.draw.rect(surf, (*ui_green, int(alpha * 0.25)),
+                             (center[0] - current_radius, scan_y - 12, current_radius * 2, 12))
+
+        # 5. Data Readout Waterfall & Progress Bar
+        if progress > 0.3:
+            scroll_offset = int(arrival_timer * 60) % 8
+            block_x = center[0] + current_radius + 8
+            start_y = center[1] - current_radius + scroll_offset
+
+            for y in range(start_y, center[1] + current_radius, 8):
+                data_w = 6 + ((y * 7) % 24)
+                if y + 4 <= center[1] + current_radius:
+                    pygame.draw.rect(surf, (*ui_green, alpha), (block_x, y, data_w, 4))
+
+            bar_w = int((current_radius * 2) * progress)
+            bar_y = center[1] + current_radius + 8
+            pygame.draw.rect(surf, (*ui_faint, alpha), (center[0] - current_radius, bar_y, current_radius * 2, 4))
+            pygame.draw.rect(surf, (*ui_bright, alpha), (center[0] - current_radius, bar_y, bar_w, 4))
+
+        # 6. Diagonal Callout Line & Debug Console
+        if progress > 0.4:
+            # Define the path for the line: Start -> Diagonal elbow -> Horizontal end
+            call_start = (center[0] + current_radius, center[1] - current_radius + 10)
+            call_elbow = (call_start[0] + 35, call_start[1] - 35)
+            call_end = (call_elbow[0] + 20, call_elbow[1])
+
+            pygame.draw.line(surf, (*ui_bright, alpha), call_start, call_elbow, 1)
+            pygame.draw.line(surf, (*ui_bright, alpha), call_elbow, call_end, 1)
+
+            # Draw the rigid terminal box at the end of the line
+            box_width, box_height = 110, 64
+            box_rect = pygame.Rect(call_end[0], call_end[1] - 10, box_width, box_height)
+
+            # Black fill prevents background stars/grid from muddying the text
+            pygame.draw.rect(surf, (0, 0, 0, alpha), box_rect)
+            pygame.draw.rect(surf, (*ui_green, alpha), box_rect, 1)
+
+            # Load monospace font once
+            if not hasattr(self, '_diag_font'):
+                self._diag_font = pygame.font.SysFont('courier', 12)
+
+            # Generate rapidly scrambling hex values tied to the timer
+            # Updating the seed every ~0.08 seconds creates a harsh terminal flicker
+            rng = random.Random(int(arrival_timer * 12))
+            hex_chars = "0123456789ABCDEF"
+
+            # Draw header
+            header = self._diag_font.render("SIG_ANOMALY", False, ui_green)
+            header.set_alpha(alpha)
+            surf.blit(header, (box_rect.x + 4, box_rect.y + 4))
+
+            # Draw 3 rows of junk hex data
+            for row in range(3):
+                hex_str = "0x" + "".join(rng.choice(hex_chars) for _ in range(8))
+                text_surf = self._diag_font.render(hex_str, False, ui_bright)
+                text_surf.set_alpha(alpha)
+                surf.blit(text_surf, (box_rect.x + 4, box_rect.y + 20 + (row * 14)))
+
+        # Blit to screen
+        self.screen.blit(surf, (sx - center[0], sy - center[1]))

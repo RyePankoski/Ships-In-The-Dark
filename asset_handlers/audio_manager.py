@@ -56,6 +56,9 @@ class AudioManager:
             'pirate_warning' : 'sounds/pirate_warning.wav',
             'damage_taken' : 'sounds/damage_taken.wav',
             'low_health' : 'sounds/low_health.wav',
+            'startup_theme' : 'sounds/startup_theme.wav',
+            'ftl_jumping' : 'sounds/ftl_jumping.wav',
+            'ftl_arrival' : 'sounds/ftl_arrival.wav'
         }
 
         for name, filename in sound_files.items():

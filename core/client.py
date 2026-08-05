@@ -16,6 +16,7 @@ class Client:
         self.audio_manager = AudioManager()
         self.main_scene = MainScene(self.connected, screen, self.audio_manager)
         self.audio_manager.play_ambience('ambience')
+        # self.audio_manager.play_sfx('startup_theme')
 
         self.hosting = False
         self.joined = False

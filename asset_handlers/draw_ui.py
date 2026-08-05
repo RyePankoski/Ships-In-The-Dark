@@ -373,6 +373,82 @@ class DrawUI:
             (v_right, v_bottom - self.NOTCH_LENGTH), self.NOTCH_WIDTH
         )
 
+    def draw_ui_ftl_override(self, ftl_jumping):
+        """Draw simple FTL JUMPING text boxes that fade out.
+
+        Args:
+            ftl_jumping: Boolean indicating if FTL jump is active
+        """
+        if not ftl_jumping:
+            return
+
+        screen_width = self.screen.get_width()
+        screen_height = self.screen.get_height()
+
+        # Panel geometry
+        top_panel = pygame.Rect(0, 0, screen_width, self.THIN_HEIGHT)
+        bottom_panel = pygame.Rect(
+            0, screen_height - self.THIN_HEIGHT, screen_width, self.THIN_HEIGHT
+        )
+        left_panel = pygame.Rect(
+            0, self.THIN_HEIGHT, self.PANEL_WIDTH, screen_height - 2 * self.THIN_HEIGHT
+        )
+        right_panel = pygame.Rect(
+            screen_width - self.PANEL_WIDTH,
+            self.THIN_HEIGHT,
+            self.PANEL_WIDTH,
+            screen_height - 2 * self.THIN_HEIGHT,
+        )
+
+        COLOR_PHOSPHOR = (0, 255, 65)
+        COLOR_BLACK = (0, 0, 0)
+
+        # Boot timer
+        if not hasattr(self, 'ftl_boot_timer'):
+            self.ftl_boot_timer = 0
+
+        self.ftl_boot_timer += 1
+
+        # Fade out
+        opacity = max(0, 255 - (self.ftl_boot_timer * 2))
+
+        if opacity <= 0:
+            return
+
+        # Font
+        if not hasattr(self, 'font_crt'):
+            self.font_crt = pygame.font.Font(None, 20)
+
+        # Simple boxes with text in each panel
+        panels = [
+            (top_panel, "FTL JUMPING"),
+            (bottom_panel, "FTL JUMPING"),
+            (left_panel, "FTL\nJUMPING"),
+            (right_panel, "FTL\nJUMPING"),
+        ]
+
+        for panel, text in panels:
+            # Box
+            box = pygame.Rect(
+                panel.centerx - 60,
+                panel.centery - 25,
+                120,
+                50
+            )
+
+            # Draw box
+            surf = pygame.Surface(box.size, pygame.SRCALPHA)
+            surf.fill((*COLOR_BLACK, opacity))
+            pygame.draw.rect(surf, COLOR_PHOSPHOR, (0, 0, box.width, box.height), 2)
+
+            # Draw text
+            txt = self.font_crt.render(text, True, COLOR_PHOSPHOR)
+            txt_x = (box.width - txt.get_width()) // 2
+            txt_y = (box.height - txt.get_height()) // 2
+            surf.blit(txt, (txt_x, txt_y))
+
+            self.screen.blit(surf, box)
+
     def draw_scanlines(self):  # noqa
         scanline_surface = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
 

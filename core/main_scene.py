@@ -79,8 +79,20 @@ class MainScene:
         self.dfs_warning_cooldown = 3
         self.dfs_warning_timer = 0
 
-    def run(self, inputs, dt):
+        # Fun cinematic type stuff
+        self.ftl_traveling = True
+        self.ftl_travel_timer = 0
+        self.ftl_travel_cooldown = 5
 
+        self.ftl_arriving = False
+        self.ftl_arrival_timer = 0
+        self.ftl_arrival_cooldown = 2
+
+        self.sys_analyzing = False
+        self.sys_analyzing_timer = 0
+        self.sys_analyzing_cooldown = 2
+
+    def run(self, inputs, dt):
         # Handle end game scenario
         if not self.player_ship.alive:
             if not self.end_tripped:
@@ -144,6 +156,7 @@ class MainScene:
                 self.audio_manager.play_sfx('close_range_toggle')
                 self.input_cooling_down = True
             if inputs["p"] and self.player_ship.can_fire() and self.player_ship.has_missile_solution:
+                self.player_ship.laser_on = False
                 self.fire_missile()
                 self.player_ship.fire()
                 self.input_cooling_down = True
@@ -197,6 +210,9 @@ class MainScene:
             self.player_ship.unconfirmed_signatures.extend(self.radar_system.continue_scan())
 
     def handle_laser(self, inputs, dt):
+        if self.laser_assessor.laser_locked:
+            self.player_ship.target = self.laser_assessor.current_target
+
         if self.player_ship.laser_on:
             self.laser_endpoint, self.laser_target_type = self.laser_assessor.shine_laser(self.dict_objects, self.list_objects)
             self.laser_assessor.change_direction(inputs, dt)
@@ -228,6 +244,14 @@ class MainScene:
             self.audio_manager.play_sfx('low_health')
         else:
             self.audio_manager.stop_sfx('low_health')
+        if self.ftl_traveling:
+            self.audio_manager.play_sfx('ftl_jumping')
+        else:
+            self.audio_manager.stop_sfx('ftl_jumping')
+        if self.ftl_arriving:
+            self.audio_manager.play_sfx('ftl_arrival')
+        else:
+            self.audio_manager.stop_sfx('ftl_arrival')
 
     def build_object_dicts(self):
         self.dict_objects = {
@@ -266,7 +290,6 @@ class MainScene:
                 continue
             if missile.contact == self.player_ship:
                 self.player_ship.enemy_has_missile_solution = True
-
                 distance = (missile.pos_x - self.player_ship.rect.center[0]) ** 2 + (missile.pos_y - self.player_ship.rect.center[1]) ** 2
                 if distance < 1000 ** 2:
                     self.player_ship.catastrophic_warning = True
@@ -295,9 +318,13 @@ class MainScene:
             self.decoys.remove(decoy)
 
         # Drones
+        drones_to_remove = []
         for cell in list(self.drones.keys()):
             for drone in list(self.drones[cell]):
                 drone.run_drone(self.asteroids, dt)
+
+                if drone.alive is False:
+                    drones_to_remove.append(drone)
 
                 # Only update the grid if the cell changed
                 new_cell = (int(drone.pos_x // GRID_SIZE), int(drone.pos_y // GRID_SIZE))
@@ -310,6 +337,11 @@ class MainScene:
                         self.drones[new_cell] = []
                     self.drones[new_cell].append(drone)
                     drone.cell = new_cell
+
+        for drone in drones_to_remove:
+            self.drones[drone.cell].remove(drone)
+            if not self.drones[drone.cell]:
+                del self.drones[drone.cell]
 
         # Pirates
         for cell in list(self.pirates.keys()):
@@ -363,8 +395,25 @@ class MainScene:
                 self.player_ship.dfs_scanned = False
                 self.dfs_warning_timer = 0
 
+        if self.ftl_traveling:
+            self.ftl_travel_timer += dt
+            if self.ftl_travel_timer > self.ftl_travel_cooldown:
+                self.ftl_traveling = False
+                self.ftl_arriving = True
+
+        if self.ftl_arriving:
+            self.ftl_arrival_timer += dt
+            if self.ftl_arrival_timer > self.ftl_arrival_cooldown:
+                self.ftl_arriving = False
+                self.sys_analyzing = True
+
+        if self.sys_analyzing:
+            self.sys_analyzing_timer += dt
+            if self.sys_analyzing_timer > self.sys_analyzing_cooldown:
+                self.sys_analyzing = False
+
     def fire_missile(self):
-        missile = Missile(self.player_ship.rect.center[0], self.player_ship.rect.center[1], 0, 0, self.enemy_ship, self.player_ship.player_id)
+        missile = Missile(self.player_ship.rect.center[0], self.player_ship.rect.center[1], 0, 0, self.player_ship.target, self.player_ship.player_id)
         self.missiles.append(missile)
 
     def draw_death(self):
@@ -376,15 +425,27 @@ class MainScene:
         self.draw_game.start_blit()
         camera_x, camera_y = self.find_camera()
 
-        self.draw_game.draw_stars(camera_x, camera_y)
+        if self.ftl_traveling:
+            self.draw_game.draw_ftl_jump_tunnel(self.ftl_traveling)
+        else:
+            self.draw_game.draw_stars(camera_x, camera_y)
+            self.draw_game.draw_asteroids(self.asteroids, camera_x, camera_y)
+
+        if self.ftl_arriving:
+            self.draw_game.draw_ship_arrival((self.player_ship.rect.center[0], self.player_ship.rect.center[1]), self.ftl_arrival_timer, camera_x, camera_y, self.ftl_arrival_cooldown)
+
+        if self.sys_analyzing:
+            self.draw_game.draw_ship_analysis((self.player_ship.rect.center[0], self.player_ship.rect.center[1]), self.sys_analyzing_timer, camera_x, camera_y, self.sys_analyzing_cooldown)
+
+
+        self.draw_game.draw_ships(self.ships, camera_x, camera_y)
         self.draw_game.draw_missiles(self.missiles, camera_x, camera_y)
         self.draw_game.draw_explosions(self.explosions, camera_x, camera_y)
-        self.draw_game.draw_asteroids(self.asteroids, camera_x, camera_y)
+
         self.draw_game.draw_drones(self.drones, camera_x, camera_y)
         self.draw_game.draw_ships(self.ships, camera_x, camera_y)
         self.draw_game.draw_pirates(self.pirates, camera_x, camera_y)
         self.draw_game.draw_decoys(self.decoys, camera_x, camera_y)
-
         self.draw_game.draw_bullets(self.bullets, camera_x, camera_y)
 
         self.draw_ui.draw_ui_layout()

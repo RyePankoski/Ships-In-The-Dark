@@ -40,7 +40,7 @@ class Ship:
         self.close_range_scanning = True
         self.pirate_sees_you = False
         self.manual_control = True
-        self.dfs_scanned = True
+        self.dfs_scanned = False
         self.health_low = False
         self.thrusting = False
 
@@ -53,6 +53,7 @@ class Ship:
         self.alive = True
 
         self.scan_type = None
+        self.target = None
         self.repair_rate = 1
 
         self.ships = []

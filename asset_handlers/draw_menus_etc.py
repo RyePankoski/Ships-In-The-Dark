@@ -1,6 +1,7 @@
 import pygame
 import random
 
+
 class DrawMenusEtc:
     def __init__(self, screen):
         self.screen = screen
@@ -142,11 +143,34 @@ class DrawMenusEtc:
         # Boot Messages
         # ------------------------------------------------------------------
         lines = [
-            "INITIALIZING MEMORY.....................OK",
-            "CALIBRATING SENSOR ARRAY................OK",
-            "LINKING DEEP SPACE TELEMETRY............OK",
-            "VERIFYING NAVIGATION DATABASE...........OK",
-            "BOOTING FLIGHT COMPUTER.................OK",
+            "INITIALIZING MEMORY.........................OK",
+            "CHECKING ECC MEMORY BANKS...................OK",
+            "VERIFYING FIRMWARE CRC......................OK",
+            "STARTING SENSOR SUBSYSTEM...................OK",
+            "INITIALIZING INERTIAL GUIDANCE..............OK",
+            "LINKING DEEP SPACE TELEMETRY................OK",
+            "ESTABLISHING QUANTUM RELAY..................FAILED",
+            "FALLING BACK TO RADIO LINK..................OK",
+            "VERIFYING NAVIGATION DATABASE...............OK",
+            "LOADING STELLAR CATALOG.....................OK",
+            "UPDATING EPHEMERIS CACHE....................OK",
+            "CHECKING REACTION CONTROL THRUSTERS.........OK",
+            "INITIALIZING REACTOR CONTROL................OK",
+            "REACTOR OUTPUT..............................98.7%",
+            "SCANNING EXTERNAL HARDPOINTS................OK",
+            "BOOTING FLIGHT COMPUTER.....................OK",
+            "LOADING TARGETING MATRICES..................OK",
+            "INITIALIZING THREAT ANALYSIS................OK",
+            "ARMOR STATUS................................NOMINAL",
+            "LONG RANGE ARRAY............................ONLINE",
+            "PASSIVE RADAR...............................ONLINE",
+            "COMMUNICATIONS ARRAY........................ONLINE",
+            "DISTRESS RECEIVER...........................STANDBY",
+            "ENCRYPTION KEYS.............................VALID",
+            "AUTHENTICATING COMMAND AUTHORITY............OK",
+            "MISSION PROFILE.............................SEEK AND DESTROY",
+            "LOCAL TIME..................................03:17:44 UTC",
+            "DEBUG MONITOR: REF 218562B",
             "SYSTEM READY.",
         ]
 
@@ -183,7 +207,7 @@ class DrawMenusEtc:
 
             if int(timer * 2.5) % 2 == 0:
                 msg = boot_font.render(
-                    "PRESS ANY KEY _",
+                    "PRESS ENTER",
                     True,
                     BRIGHT,
                 )

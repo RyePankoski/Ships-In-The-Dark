@@ -25,6 +25,9 @@ class Drone:
         self.target = None
         self.painted = False
 
+        self.player_id = -2
+        self.alive = True
+
     def run_drone(self, asteroids, dt):
 
         if self.am_mining:

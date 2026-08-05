@@ -5,3 +5,6 @@ class Asteroid:
         self.size = size
         self.painted = False
         self.radar_cross_section = self.size
+
+        self.player_id = 0
+        self.alive = True

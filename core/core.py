@@ -1,4 +1,4 @@
-from utility.util import end_blit
+from utility.util import end_blit, collect_inputs
 from .client import Client  # noqa
 from asset_handlers.draw_menus_etc import DrawMenusEtc
 
@@ -13,8 +13,11 @@ class Core:
         self.splash_screen_duration = 5
         self.splashing = False
 
+
     def run(self, dt):
-        self.timer(dt)
+
+        inputs = collect_inputs()
+        self.timer(inputs, dt)
 
         if self.splashing:
             self.draw_stuff()
@@ -26,8 +29,9 @@ class Core:
         self.draw_menus_etc.draw_splash_screen(self.splashing, self.splash_screen_timer)
         end_blit()
 
-    def timer(self, dt):
+    def timer(self, inputs, dt):
         if self.splashing:
             self.splash_screen_timer += dt
             if self.splash_screen_timer > self.splash_screen_duration:
-                self.splashing = False
+                if inputs['enter']:
+                    self.splashing = False

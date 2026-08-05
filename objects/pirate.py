@@ -29,6 +29,9 @@ class Pirate:
         self.shoot_timer = 0
         self.shoot_cooldown = 0.05
 
+        self.player_id = -3
+        self.alive = True
+
     def run(self, ships, bullets, dt):
         self.fire_at_enemies(ships, bullets)
 

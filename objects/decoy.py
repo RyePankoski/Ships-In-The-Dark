@@ -14,6 +14,8 @@ class Decoy:
 
         self.lifetime = DECOY_LIFETIME
 
+        self.player_id = -1
+
 
 
     def run(self, dt):

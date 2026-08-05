@@ -31,8 +31,6 @@ class LaserAssessor:
 
         self.moving_laser = False
 
-
-
     def shine_laser(self, spatial_contacts, list_contacts):
         if self.laser_locked:
             self.lock_laser()
@@ -77,8 +75,13 @@ class LaserAssessor:
             return
 
         # All contacts use pos_x/pos_y
-        target_x = self.current_target.pos_x
-        target_y = self.current_target.pos_y
+
+        if isinstance(self.current_target, Ship):
+            target_x, target_y = self.current_target.rect.center
+        else:
+            target_x = self.current_target.pos_x
+            target_y = self.current_target.pos_y
+
         origin_x, origin_y = self.ship_of_origin.rect.center[0], self.ship_of_origin.rect.center[1]
 
         angle = math.atan2(target_y - origin_y, target_x - origin_x)
@@ -126,9 +129,12 @@ class LaserAssessor:
                 if contact is self.ship_of_origin:
                     continue
 
-                # All contacts use pos_x/pos_y
-                c_x = contact.pos_x
-                c_y = contact.pos_y
+                if isinstance(contact, Ship):
+                    c_x = contact.rect.center[0]
+                    c_y = contact.rect.center[1]
+                else:
+                    c_x = contact.pos_x
+                    c_y = contact.pos_y
 
                 dist_sq = (c_x - ray_x) ** 2 + (c_y - ray_y) ** 2
                 hit_radius = getattr(contact, 'radar_cross_section', 50)
@@ -149,9 +155,6 @@ class LaserAssessor:
 
             for contact in contact_dict[ray_sector]:
 
-                if isinstance(contact, Pirate):
-                    print("Yarrr")
-
                 dist_sq = (contact.pos_x - ray_x) ** 2 + (contact.pos_y - ray_y) ** 2
                 hit_radius = getattr(contact, 'radar_cross_section',
                                      getattr(contact, 'size', 50))
@@ -161,12 +164,13 @@ class LaserAssessor:
                     return contact, contact.pos_x, contact.pos_y, target_type
 
         return None  # After all contact types checked
+
     def change_direction(self, inputs, dt):
         if inputs['arrow_key_left']:
-            self.direction -= 20 * dt
+            self.direction -= 40 * dt
             self.laser_locked = False
         if inputs['arrow_key_right']:
-            self.direction += 20 * dt
+            self.direction += 40 * dt
             self.laser_locked = False
         # self.direction %= 360
 
