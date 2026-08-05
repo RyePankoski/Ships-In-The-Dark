@@ -104,8 +104,9 @@ class MainScene:
 
         # Let the server handle inputs and simulation
         if not self.connected:
-            self.handle_inputs(inputs, dt)
-            self.handle_alive_things(dt)
+            if not self.ftl_traveling:
+                self.handle_inputs(inputs, dt)
+                self.handle_alive_things(dt)
 
         if self.player_ship.close_range_scanning:
             self.close_range_scan.update(self.dict_objects, self.list_objects)
@@ -155,7 +156,7 @@ class MainScene:
                 self.player_ship.close_range_scanning = not self.player_ship.close_range_scanning
                 self.audio_manager.play_sfx('close_range_toggle')
                 self.input_cooling_down = True
-            if inputs["p"] and self.player_ship.can_fire() and self.player_ship.has_missile_solution:
+            if inputs["p"] and self.player_ship.can_fire() and self.player_ship.target:
                 self.player_ship.laser_on = False
                 self.fire_missile()
                 self.player_ship.fire()
@@ -212,6 +213,7 @@ class MainScene:
     def handle_laser(self, inputs, dt):
         if self.laser_assessor.laser_locked:
             self.player_ship.target = self.laser_assessor.current_target
+
 
         if self.player_ship.laser_on:
             self.laser_endpoint, self.laser_target_type = self.laser_assessor.shine_laser(self.dict_objects, self.list_objects)
@@ -430,23 +432,18 @@ class MainScene:
         else:
             self.draw_game.draw_stars(camera_x, camera_y)
             self.draw_game.draw_asteroids(self.asteroids, camera_x, camera_y)
+            self.draw_game.draw_ships(self.ships, camera_x, camera_y)
+            self.draw_game.draw_drones(self.drones, camera_x, camera_y)
+            self.draw_game.draw_pirates(self.pirates, camera_x, camera_y)
+            self.draw_game.draw_decoys(self.decoys, camera_x, camera_y)
+            self.draw_game.draw_bullets(self.bullets, camera_x, camera_y)
+            self.draw_game.draw_missiles(self.missiles, camera_x, camera_y)
+            self.draw_game.draw_explosions(self.explosions, camera_x, camera_y)
 
         if self.ftl_arriving:
             self.draw_game.draw_ship_arrival((self.player_ship.rect.center[0], self.player_ship.rect.center[1]), self.ftl_arrival_timer, camera_x, camera_y, self.ftl_arrival_cooldown)
-
         if self.sys_analyzing:
             self.draw_game.draw_ship_analysis((self.player_ship.rect.center[0], self.player_ship.rect.center[1]), self.sys_analyzing_timer, camera_x, camera_y, self.sys_analyzing_cooldown)
-
-
-        self.draw_game.draw_ships(self.ships, camera_x, camera_y)
-        self.draw_game.draw_missiles(self.missiles, camera_x, camera_y)
-        self.draw_game.draw_explosions(self.explosions, camera_x, camera_y)
-
-        self.draw_game.draw_drones(self.drones, camera_x, camera_y)
-        self.draw_game.draw_ships(self.ships, camera_x, camera_y)
-        self.draw_game.draw_pirates(self.pirates, camera_x, camera_y)
-        self.draw_game.draw_decoys(self.decoys, camera_x, camera_y)
-        self.draw_game.draw_bullets(self.bullets, camera_x, camera_y)
 
         self.draw_ui.draw_ui_layout()
         self.draw_ui.draw_world_grid(camera_x, camera_y, self.grid_on)
