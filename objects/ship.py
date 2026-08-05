@@ -27,6 +27,7 @@ class Ship:
 
         self.total_velocity = 0
         self.radar_cross_section = 100
+        self.health = 100
 
         self.total_missiles = TOTAL_MISSILES
         self.missile_cooling_down = False
@@ -37,16 +38,22 @@ class Ship:
         self.catastrophic_warning = False
         self.has_missile_solution = True
         self.close_range_scanning = True
+        self.pirate_sees_you = False
         self.manual_control = True
         self.dfs_scanned = True
+        self.health_low = False
+        self.thrusting = False
+
         self.scan_used = False
         self.dampening = True
+
         self.laser_on = False
         self.painted = True
         self.dfs_on = False
         self.alive = True
 
         self.scan_type = None
+        self.repair_rate = 1
 
         self.ships = []
         self.missiles = []
@@ -60,7 +67,30 @@ class Ship:
         self.drones = {}
         self.asteroids = {}
 
+        self.took_damage = False
+        self.damage_timer = 0
+        self.damage_cooldown = 0.2
+
     def run(self, dt):
+
+        if self.took_damage:
+            self.damage_timer += dt
+            if self.damage_timer > self.damage_cooldown:
+                self.damage_timer = 0
+                self.took_damage = False
+                self.health -= 1
+
+        if self.health < 20:
+            self.health_low = True
+
+            self.health += 1 * dt
+
+        else:
+            self.health_low = False
+
+        if self.health <= 0:
+            self.alive = False
+            return
 
         if self.ai is not None:
             self.ai.run()
@@ -110,10 +140,10 @@ class Ship:
     def apply_inputs(self, inputs, dt):
         boost_amount = 1
 
-        if inputs['shift']:
+        if inputs['left_shift']:
             boost_amount = 20
 
-        if inputs["space"]:
+        if inputs["tab"]:
             if self.vel_y > 0:
                 self.vel_y -= (SHIP_BRAKE_FORCE * dt)
             if self.vel_x > 0:
@@ -125,12 +155,24 @@ class Ship:
 
         if inputs["left"]:
             self.vel_x += (-SHIP_THRUST * dt) * boost_amount
+            self.thrusting = True
+
         if inputs["right"]:
             self.vel_x += (SHIP_THRUST * dt) * boost_amount
+            self.thrusting = True
+
         if inputs["up"]:
             self.vel_y += (-SHIP_THRUST * dt) * boost_amount
+            self.thrusting = True
+
         if inputs["down"]:
             self.vel_y += (SHIP_THRUST * dt) * boost_amount
+            self.thrusting = True
+
+        if inputs["left"] or inputs["right"] or inputs["up"] or inputs["down"]:
+            self.thrusting = True
+        else:
+            self.thrusting = False
 
         if self.vel_x > SHIP_MAX_SPEED or self.vel_x < -SHIP_MAX_SPEED:
             self.vel_x *= 0.999

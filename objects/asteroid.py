@@ -4,3 +4,4 @@ class Asteroid:
         self.pos_y = y
         self.size = size
         self.painted = False
+        self.radar_cross_section = self.size

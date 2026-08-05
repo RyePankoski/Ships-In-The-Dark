@@ -8,7 +8,7 @@ class CloseRangeScan:
         self.scan_range = CLOSE_RANGE_SCAN_RANGE
         self.confirmed_contacts = []  # [x, y, contact_type, (vx, vy), confidence, age, object_ref]
 
-        self.confidence_decay = 0.98  # Per frame multiplier
+        self.confidence_decay = 0.999 # Per frame multiplier
         self.confirmation_time = 60  # Frames to reach full confidence (1.0)
 
     def update(self, spatial_contacts, list_contacts):

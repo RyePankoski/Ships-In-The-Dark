@@ -7,7 +7,6 @@ import pygame
 class Missile:
     def __init__(self, x, y, vx, vy, contact, owner):
         self.fuel = MISSILE_FUEL
-
         self.pos_x = x
         self.pos_y = y
         self.velocity = 0
@@ -18,10 +17,10 @@ class Missile:
         self.owner = owner
 
         self.heading = 0
-        self.rect = pygame.Rect(self.pos_x, self.pos_y, 200, 200)
         self.has_solution = False
         self.alive = True
         self.reached_target = False
+        self.radar_cross_section = 30
 
         # Smoothed avoidance vector (eases toward the feeler's push instead of
         # snapping, so on/off transitions glide rather than jerk).
@@ -40,11 +39,17 @@ class Missile:
             self.steer(asteroids)
 
         self.move(dt)
-        self.update_rect()
+
 
     def steer(self, asteroids):
-        dx = self.contact.pos_x - self.pos_x
-        dy = self.contact.pos_y - self.pos_y
+
+        if hasattr(self.contact, 'rect'):
+            dx = self.contact.rect.center[0] - self.pos_x
+            dy = self.contact.rect.center[1] - self.pos_y
+        else:
+            dx = self.contact.pos_x - self.pos_x
+            dy = self.contact.pos_y - self.pos_y
+
         distance = math.hypot(dx, dy)
 
         if distance < 50:
@@ -92,11 +97,11 @@ class Missile:
             for rock in asteroids.get(cell, []):
                 rx, ry = rock.pos_x - fx, rock.pos_y - fy
                 if rx * rx + ry * ry < (rock.size + MISSILE_AVOID_CLEARANCE) ** 2:
-                    cross = tx * ry - ty * rx           # which side is the rock on?
+                    cross = tx * ry - ty * rx  # which side is the rock on?
                     if cross > 0:
-                        px, py = ty, -tx                # rock left  -> push right
+                        px, py = ty, -tx  # rock left  -> push right
                     else:
-                        px, py = -ty, tx                # rock right -> push left
+                        px, py = -ty, tx  # rock right -> push left
                     strength = (1.0 - travelled / MISSILE_FEELER_LENGTH) * MISSILE_AVOID_WEIGHT
                     return px * strength, py * strength
 
@@ -115,7 +120,3 @@ class Missile:
         if self.velocity > MISSILE_MAX_SPEED:
             self.velocity = MISSILE_MAX_SPEED
         self.fuel -= MISSILE_FUEL_USE_RATE * dt
-
-    def update_rect(self):
-        self.rect.x = self.pos_x
-        self.rect.y = self.pos_y

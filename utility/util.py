@@ -24,7 +24,8 @@ def collect_inputs():
         'tab': keys[pygame.K_TAB],
 
         # Modifiers
-        'shift': keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT],
+        'left_shift': keys[pygame.K_LSHIFT] ,
+        'right_shift': keys[pygame.K_RSHIFT],
         'ctrl': keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL],
         'left_alt': keys[pygame.K_LALT],
         'right_alt': keys[pygame.K_RALT],

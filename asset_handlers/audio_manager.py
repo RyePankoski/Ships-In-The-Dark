@@ -53,6 +53,9 @@ class AudioManager:
             'laser_turn_off' : 'sounds/laser_turn_off.wav',
             'laser_lock_lost': 'sounds/laser_lock_lost.mp3',
             'deploy_decoy' : 'sounds/deploy_decoy.wav',
+            'pirate_warning' : 'sounds/pirate_warning.wav',
+            'damage_taken' : 'sounds/damage_taken.wav',
+            'low_health' : 'sounds/low_health.wav',
         }
 
         for name, filename in sound_files.items():

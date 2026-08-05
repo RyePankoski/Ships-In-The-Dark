@@ -1,4 +1,6 @@
 import math
+import random
+
 import pygame
 from utility.constants import *
 from utility.ui_constants import COLOR_DFS_GRAY
@@ -229,15 +231,15 @@ class DrawUI:
             pygame.draw.circle(self.screen, (255, 255, 255), (led_x, led_y), 2)  # Hot core
         y += line_h
 
-        damp_stat = "ON " if ship.dampening else "OFF"
-        damp_color = COLOR_CYAN if ship.dampening else COLOR_DIM
+        damp_stat = "ON " if getattr(ship, "dampening", True) else "OFF"
+        damp_color = COLOR_CYAN if getattr(ship, "dampening", True) else COLOR_DIM
         self.screen.blit(
             font.render(f"INERT DAMP  [{damp_stat}]", True, damp_color), (col2_x, y)
         )
         y += line_h
 
-        laser_stat = "ACT" if ship.laser_on else "OFF"
-        laser_color = COLOR_CYAN if ship.laser_on else COLOR_DIM
+        laser_stat = "ACT" if getattr(ship, "laser_on", False) else "OFF"
+        laser_color = COLOR_CYAN if getattr(ship, "laser_on", False) else COLOR_DIM
         self.screen.blit(
             font.render(f"BEAM LASER  [{laser_stat}]", True, laser_color), (col2_x, y)
         )
@@ -267,6 +269,15 @@ class DrawUI:
             m_str = f"MSL [{ship.total_missiles:02d}] READY"
             m_color = COLOR_CYAN
         self.screen.blit(font.render(m_str, True, m_color), (col3_x, y))
+        y += line_h
+
+        # Health Status
+        health = getattr(ship, "health", 5)
+        health = int(health)
+        health_color = COLOR_RED if health <= 2 else (COLOR_AMBER if health <= 3 else COLOR_CYAN)
+        self.screen.blit(
+            font.render(f"HULL INTEGRITY [{health}]", True, health_color), (col3_x, y)
+        )
         y += line_h
 
         if ship.painted or ship.enemy_has_missile_solution:
@@ -823,19 +834,6 @@ class DrawUI:
                 )
 
     def draw_tactical_map(self, active, player_ship, confirmed_contacts, scan_active=False, scan_range=1000, laser_active=False, laser_direction=0, laser_locked=False, locked_object=None):
-        """Draw tactical map showing confirmed contacts with confidence fading.
-
-        Args:
-            active: Boolean indicating if the map display is active.
-            player_ship: Player ship object.
-            confirmed_contacts: List of (pos_x, pos_y, contact_type, velocity_tuple, confidence) tuples.
-            scan_active: Boolean indicating if close-range scan is active.
-            scan_range: Close-range scan radius in world units.
-            laser_active: Boolean indicating if laser is on.
-            laser_direction: Laser heading in degrees.
-            laser_locked: Boolean indicating if laser is locked to target.
-            locked_object: The object laser is locked to.
-        """
         if not active:
             return
 
@@ -1316,3 +1314,141 @@ class DrawUI:
             pygame.draw.line(self.screen, orange_color, (anchor_rx, anchor_ry), (end_rx, end_ry), 1)
 
         self.screen.set_clip(None)
+
+    def draw_pirate_fire_warning(self, pirate_firing):
+        """Draw a single orange line sweeping left to right across viewport.
+
+        Args:
+            pirate_firing: Boolean indicating if pirates have lock and are firing
+        """
+        if not pirate_firing:
+            return
+
+        screen_width = self.screen.get_width()
+        screen_height = self.screen.get_height()
+
+        # UI panel dimensions
+        panel_width = 600
+        thin_height = 200
+
+        # World area bounds
+        world_left = panel_width
+        world_right = screen_width - panel_width
+        world_top = thin_height
+        world_bottom = screen_height - thin_height
+
+        viewport_width = world_right - world_left
+        viewport_height = world_bottom - world_top
+
+        # Timing
+        if not hasattr(self, 'pirate_sweep_counter'):
+            self.pirate_sweep_counter = 0
+
+        self.pirate_sweep_counter += 1
+
+        # Sweep position (0.0 to 1.0, then repeat)
+        sweep_progress = (self.pirate_sweep_counter * 0.02) % 1.0
+        line_x = world_left + (sweep_progress * viewport_width)
+
+        # Pulsing brightness
+        pulse = 0.4 + 0.6 * abs(math.sin(self.pirate_sweep_counter * 0.05))
+        brightness = int(255 * pulse)
+        color = (brightness, brightness // 3, 0)
+
+        # Draw vertical line
+        import pygame
+        pygame.draw.line(self.screen, color,
+                         (line_x, world_top),
+                         (line_x, world_bottom),
+                         2)
+
+        # Draw "PIRATE LOCK" text at top center
+        if not hasattr(self, 'font_pirate_lock'):
+            self.font_pirate_lock = pygame.font.Font(None, 24)
+
+        warning_text = self.font_pirate_lock.render("PIRATE LOCK", True, color)
+        text_x = screen_width // 2 - warning_text.get_width() // 2
+        text_y = world_top + 15
+        self.screen.blit(warning_text, (text_x, text_y))
+
+    def draw_bullet_damage_glitch(self, ship_took_damage):
+
+        if not ship_took_damage:
+            return
+
+        screen_width = self.screen.get_width()
+        screen_height = self.screen.get_height()
+
+        # Create glitch surface
+        glitch = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+
+        # Random horizontal line disruptions
+        num_glitch_lines = random.randint(3, 8)
+        for _ in range(num_glitch_lines):
+            glitch_y = random.randint(0, screen_height)
+            glitch_height = random.randint(2, 8)
+            glitch_width = random.randint(100, 400)
+            glitch_x = random.randint(0, screen_width - glitch_width)
+
+            # Bright white/cyan distortion
+            glitch_color = (255, 255, random.randint(100, 200), 120)
+            pygame.draw.rect(glitch, glitch_color, (glitch_x, glitch_y, glitch_width, glitch_height))
+
+        self.screen.blit(glitch, (0, 0))
+
+    def draw_low_health_warning(self, low_health):
+        """Draw flashing red warning box in bottom left of viewport.
+
+        Args:
+            low_health: Boolean indicating if ship is at low health
+        """
+        if not low_health:
+            return
+
+        screen_width = self.screen.get_width()
+        screen_height = self.screen.get_height()
+
+        # UI panel dimensions
+        panel_width = 600
+        thin_height = 200
+
+        # World area bounds
+        world_left = panel_width
+        world_bottom = screen_height - thin_height
+
+        # Box position and size (bottom left)
+        box_x = world_left + 10
+        box_y = world_bottom - 120
+        box_w = 150
+        box_h = 100
+
+        # Simple blink (on/off)
+        if not hasattr(self, 'health_blink_counter'):
+            self.health_blink_counter = 0
+
+        self.health_blink_counter += 1
+        blink_frequency = 10  # Frames on/off
+
+        # Only draw if in "on" state of blink
+        if (self.health_blink_counter // blink_frequency) % 2 == 0:
+            color = (255, 50, 50)
+
+            # Draw box
+            pygame.draw.rect(self.screen, color, (box_x, box_y, box_w, box_h), 2)
+
+            # Draw simple X
+            pygame.draw.line(self.screen, color,
+                             (box_x, box_y),
+                             (box_x + box_w, box_y + box_h), 2)
+            pygame.draw.line(self.screen, color,
+                             (box_x + box_w, box_y),
+                             (box_x, box_y + box_h), 2)
+
+            # Draw text
+            if not hasattr(self, 'font_critical'):
+                self.font_critical = pygame.font.Font(None, 14)
+
+            text = self.font_critical.render("HULL CRITICAL", True, color)
+            text_x = box_x + (box_w - text.get_width()) // 2
+            text_y = box_y + box_h - 18
+            self.screen.blit(text, (text_x, text_y))

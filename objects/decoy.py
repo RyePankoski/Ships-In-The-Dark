@@ -10,6 +10,7 @@ class Decoy:
 
         self.alive = True
         self.painted = False
+        self.radar_cross_section = 100
 
         self.lifetime = DECOY_LIFETIME
 

@@ -1,7 +1,7 @@
 SHIP_THRUST = 100  # was 1
 SHIP_BRAKE_FORCE = 20  # was 0.4
 SHIP_MAX_SPEED = 75  # was 1.5
-DAMPENING_FORCE = 0.999  # This one stays the same (it's multiplicative)
+DAMPENING_FORCE = 0.9999  # This one stays the same (it's multiplicative)
 
 MISSILE_THRUST = 50  # was 0.4
 MISSILE_MAX_SPEED = 500  # was 10
@@ -27,7 +27,7 @@ RADAR_PULSE_RANGE = 4000
 RADAR_PULSE_SPEED = 2
 
 # Laser configuration
-LASER_STEP = 5
+LASER_STEP = 2
 LASER_RANGE = 5000
 
 # Deep field scan configuration
@@ -35,10 +35,14 @@ CORRIDOR_DEPTH = 8000
 CORRIDOR_WIDTH = 2000
 
 # Close range scanner
-CLOSE_RANGE_SCAN_RANGE = 800
+CLOSE_RANGE_SCAN_RANGE = 1200
 
 
 # Decoy
 DECOY_LIFETIME = 30
+
+# Bullets
+BULLET_SPEED = 600
+BULLET_LIFETIME = 3
 
 PORT = 27015

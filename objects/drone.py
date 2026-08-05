@@ -11,14 +11,13 @@ class Drone:
         self.dy = dy
         self.velocity = v
 
-
         self.velocity = 50
+        self.radar_cross_section = 60
 
         grid_x = int(x // GRID_SIZE)
         grid_y = int(y // GRID_SIZE)
         self.cell = (grid_x, grid_y)
 
-        self.mining_time = 0
         self.mining_timer = 0
         self.mining_timer_cooldown = 10
         self.am_mining = False
