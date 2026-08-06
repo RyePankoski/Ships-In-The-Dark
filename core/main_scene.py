@@ -44,6 +44,7 @@ class MainScene:
 
         self.asteroids = {}
         self.pirates = {}
+        self.p_field = {}
         self.drones = {}
 
         self.dict_objects = {}
@@ -56,6 +57,7 @@ class MainScene:
             self.ships.append(self.player_ship)
             self.ships.append(self.enemy_ship)
             self.init_asteroids_and_drones()
+            self.init_p_field()
 
         # Subsystems
         self.close_range_scan = CloseRangeScan(self.player_ship)
@@ -71,6 +73,7 @@ class MainScene:
         self.is_map_open = False
         self.end_tripped = False
         self.grid_on = True
+        self.p_field_open = False
 
         # input timer
         self.input_timer_cooldown = 0.2
@@ -79,8 +82,11 @@ class MainScene:
         self.dfs_warning_cooldown = 3
         self.dfs_warning_timer = 0
 
+        # Control
+        self.lock_inputs = False
+
         # Fun cinematic type stuff
-        self.ftl_traveling = True
+        self.ftl_traveling = False
         self.ftl_travel_timer = 0
         self.ftl_travel_cooldown = 5
 
@@ -91,6 +97,11 @@ class MainScene:
         self.sys_analyzing = False
         self.sys_analyzing_timer = 0
         self.sys_analyzing_cooldown = 2
+
+        self.blinking = False
+        self.blinking_timer = 0
+        self.blinking_cooldown = 4
+        self.has_blinked = False
 
     def run(self, inputs, dt):
         # Handle end game scenario
@@ -104,24 +115,56 @@ class MainScene:
 
         # Let the server handle inputs and simulation
         if not self.connected:
-            if not self.ftl_traveling:
-                self.handle_inputs(inputs, dt)
-                self.handle_alive_things(dt)
+            self.handle_inputs(inputs, dt)
+            self.handle_alive_things(dt)
 
         if self.player_ship.close_range_scanning:
             self.close_range_scan.update(self.dict_objects, self.list_objects)
 
         self.timers(dt)
         self.handle_radar()
+        self.handle_p_field(dt)
         self.handle_laser(inputs, dt)
         self.handle_general_sound_effects()
         self.build_object_dicts()
         self.draw_scene()
         self.explosions = []
 
-    def handle_inputs(self, inputs, dt):
-        if self.player_ship.laser_on:
+    def update_p_field(self, strength, p_type):
 
+        x, y = self.player_ship.rect.center[0], self.player_ship.rect.center[1]
+
+        if x < 0 or y < 0:
+            return
+        if x > WORLD_WIDTH or y > WORLD_HEIGHT:
+            return
+
+        cx = x // GRID_SIZE
+        cy = y // GRID_SIZE
+
+        self.p_field[(cx, cy)].append((strength, p_type, (x, y)))
+
+    def handle_p_field(self, dt):
+        for cell in self.p_field.values():
+            if len(cell) == 0:
+                continue
+
+            entries_to_remove = []
+            for i, entry in enumerate(cell):
+                strength = entry[0] - dt
+                if strength <= 0:
+                    entries_to_remove.append(entry)
+                    continue
+                cell[i] = [strength, entry[1], entry[2]]
+
+            for entry in entries_to_remove:
+                cell.remove(entry)
+
+    def handle_inputs(self, inputs, dt):
+        if self.lock_inputs:
+            return
+
+        if self.player_ship.laser_on:
             if inputs['arrow_key_left'] or inputs['arrow_key_right']:
                 self.audio_manager.play_sfx('laser_dir_change')
             else:
@@ -130,6 +173,7 @@ class MainScene:
         if self.player_ship.manual_control:
             if inputs['up'] or inputs['left'] or inputs['down'] or inputs['right']:
                 self.audio_manager.play_sfx('thrust')
+                self.update_p_field(1, 'movement')
             else:
                 self.audio_manager.stop_sfx('thrust')
 
@@ -139,19 +183,21 @@ class MainScene:
             self.player_ship_ai.run(self.player_ship)
 
         if not self.input_cooling_down:
+            # Flat inputs
+            if inputs['n']:
+                if self.p_field_open:
+                    self.audio_manager.play_sfx('p_field_close')
+                else:
+                    self.audio_manager.play_sfx('p_field_open')
+
+                self.input_cooling_down = True
+                self.p_field_open = not self.p_field_open
+                if self.is_map_open:
+                    self.is_map_open = False
             if inputs['right_alt']:
                 self.build_decoy()
                 self.input_cooling_down = True
                 self.audio_manager.play_sfx('deploy_decoy')
-
-            if inputs['space'] and self.player_ship.laser_on:
-                if self.laser_assessor.laser_locked:
-                    self.audio_manager.play_sfx('laser_turn_off')
-                    self.laser_assessor.laser_locked = False
-                elif self.laser_assessor.current_target is not None:
-                    self.audio_manager.play_sfx('laser_locked')
-                    self.laser_assessor.laser_locked = True
-                self.input_cooling_down = True
             if inputs['q']:
                 self.player_ship.close_range_scanning = not self.player_ship.close_range_scanning
                 self.audio_manager.play_sfx('close_range_toggle')
@@ -162,6 +208,8 @@ class MainScene:
                 self.player_ship.fire()
                 self.input_cooling_down = True
                 self.audio_manager.play_sfx('fire_missile')
+                self.update_p_field(20, 'movement')
+
             if inputs["l"]:
                 self.player_ship.manual_control = not self.player_ship.manual_control
                 self.audio_manager.play_sfx('retro_beep')
@@ -175,6 +223,7 @@ class MainScene:
                 self.player_ship.unconfirmed_signatures = []
                 self.radar_system.begin_scan(self.player_ship, self.dict_objects, self.list_objects)
                 self.input_cooling_down = True
+                self.update_p_field(5, 'movement')
             if inputs['i']:
                 self.player_ship.laser_on = not self.player_ship.laser_on
                 self.laser_assessor.laser_locked = False
@@ -186,6 +235,7 @@ class MainScene:
                 self.audio_manager.play_sfx('dfs_toggle')
                 self.input_cooling_down = True
                 self.player_ship.deep_field_contacts = []
+
             if inputs['m']:
                 self.is_map_open = not self.is_map_open
                 self.input_cooling_down = True
@@ -193,11 +243,20 @@ class MainScene:
                     self.audio_manager.play_sfx('map_open')
                 else:
                     self.audio_manager.play_sfx('map_close')
+            if inputs['t']:
+                self.blinking = True
+                self.lock_inputs = True
+                self.audio_manager.play_sfx('blink')
+                self.has_blinked = False
+                self.update_p_field(40, 'movement')
+
+            # Complex inputs
             if self.player_ship.dfs_on:
                 if inputs['o']:
                     self.player_ship.deep_field_contacts = self.deep_field_scan.run_scan(self.dict_objects, self.list_objects)
                     self.audio_manager.play_sfx('dfs_scan')
                     self.input_cooling_down = True
+                    self.update_p_field(8, 'movement')
                 if inputs['arrow_key_up'] or inputs['arrow_key_down']:
                     self.deep_field_scan.change_direction(inputs)
                     self.audio_manager.play_sfx('dfs_dir_change')
@@ -206,6 +265,15 @@ class MainScene:
                 else:
                     self.audio_manager.stop_sfx('dfs_dir_change')
 
+            if inputs['space'] and self.player_ship.laser_on:
+                if self.laser_assessor.laser_locked:
+                    self.audio_manager.play_sfx('laser_turn_off')
+                    self.laser_assessor.laser_locked = False
+                elif self.laser_assessor.current_target is not None:
+                    self.audio_manager.play_sfx('laser_locked')
+                    self.laser_assessor.laser_locked = True
+                self.input_cooling_down = True
+
     def handle_radar(self):
         if self.radar_system.scanning:
             self.player_ship.unconfirmed_signatures.extend(self.radar_system.continue_scan())
@@ -213,7 +281,6 @@ class MainScene:
     def handle_laser(self, inputs, dt):
         if self.laser_assessor.laser_locked:
             self.player_ship.target = self.laser_assessor.current_target
-
 
         if self.player_ship.laser_on:
             self.laser_endpoint, self.laser_target_type = self.laser_assessor.shine_laser(self.dict_objects, self.list_objects)
@@ -398,10 +465,12 @@ class MainScene:
                 self.dfs_warning_timer = 0
 
         if self.ftl_traveling:
+            self.lock_inputs = True
             self.ftl_travel_timer += dt
             if self.ftl_travel_timer > self.ftl_travel_cooldown:
                 self.ftl_traveling = False
                 self.ftl_arriving = True
+                self.lock_inputs = False
 
         if self.ftl_arriving:
             self.ftl_arrival_timer += dt
@@ -413,6 +482,20 @@ class MainScene:
             self.sys_analyzing_timer += dt
             if self.sys_analyzing_timer > self.sys_analyzing_cooldown:
                 self.sys_analyzing = False
+                self.sys_analyzing_timer = 0
+
+        if self.blinking:
+            self.blinking_timer += dt
+
+            if self.blinking_timer > self.blinking_cooldown - 1 and not self.has_blinked:
+                self.player_ship.pos_x = random.randint(0, WORLD_WIDTH)
+                self.player_ship.pos_y = random.randint(0, WORLD_HEIGHT)
+                self.has_blinked = True
+
+            if self.blinking_timer > self.blinking_cooldown:
+                self.blinking = False
+                self.lock_inputs = False
+                self.blinking_timer = 0
 
     def fire_missile(self):
         missile = Missile(self.player_ship.rect.center[0], self.player_ship.rect.center[1], 0, 0, self.player_ship.target, self.player_ship.player_id)
@@ -444,9 +527,12 @@ class MainScene:
             self.draw_game.draw_ship_arrival((self.player_ship.rect.center[0], self.player_ship.rect.center[1]), self.ftl_arrival_timer, camera_x, camera_y, self.ftl_arrival_cooldown)
         if self.sys_analyzing:
             self.draw_game.draw_ship_analysis((self.player_ship.rect.center[0], self.player_ship.rect.center[1]), self.sys_analyzing_timer, camera_x, camera_y, self.sys_analyzing_cooldown)
+        if self.blinking:
+            self.draw_game.draw_blink_tunnel((self.player_ship.rect.center[0], self.player_ship.rect.center[1]), self.blinking_timer, camera_x, camera_y, self.blinking_cooldown)
+        else:
+            self.draw_ui.draw_world_grid(camera_x, camera_y, self.grid_on)
 
         self.draw_ui.draw_ui_layout()
-        self.draw_ui.draw_world_grid(camera_x, camera_y, self.grid_on)
         self.draw_ui.draw_laser_painted_warning(self.player_ship.painted)
         self.draw_ui.draw_ship_info(self.player_ship)
         self.draw_ui.draw_missile_lock_warning(self.player_ship.enemy_has_missile_solution)
@@ -462,6 +548,7 @@ class MainScene:
         self.draw_ui.draw_pirate_fire_warning(self.player_ship.pirate_sees_you)
         self.draw_ui.draw_bullet_damage_glitch(self.player_ship.took_damage)
         self.draw_ui.draw_low_health_warning(self.player_ship.health_low)
+        self.draw_ui.draw_p_field_scanner(self.p_field, self.player_ship.rect.center[0], self.player_ship.rect.center[1], self.p_field_open)
         self.draw_ui.draw_scanlines()
 
         end_blit()
@@ -534,6 +621,14 @@ class MainScene:
 
             pirate = Pirate(pos_x, pos_y, v=40)
             self.pirates[cell].append(pirate)
+
+    def init_p_field(self):
+        i = WORLD_WIDTH // GRID_SIZE
+        j = WORLD_HEIGHT // GRID_SIZE
+        for x in range(i):
+            for z in range(j):
+                cell = (x, z)
+                self.p_field[cell] = []
 
     def inject_server_data(self, message):
         message_dict = json.loads(message)

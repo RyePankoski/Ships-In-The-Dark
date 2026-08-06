@@ -27,7 +27,7 @@ class Pirate:
 
         self.shooting = False
         self.shoot_timer = 0
-        self.shoot_cooldown = 0.05
+        self.shoot_cooldown = 0.07
 
         self.player_id = -3
         self.alive = True

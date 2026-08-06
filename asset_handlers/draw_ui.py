@@ -88,6 +88,10 @@ class DrawUI:
     LOCK_BLINK_FREQUENCY = 10
     LOCK_BORDER_WIDTH = 10
 
+    # P field config
+    P_FIELD_MAX_STRENGTH = 40.0  # the value you append signatures with
+    P_FIELD_STABLE_STATIC = False  # True = frozen snapshot, False = live shimmer
+
     # endregion
 
     def __init__(self, screen):
@@ -1528,3 +1532,161 @@ class DrawUI:
             text_x = box_x + (box_w - text.get_width()) // 2
             text_y = box_y + box_h - 18
             self.screen.blit(text, (text_x, text_y))
+
+    def draw_p_field_scanner(self, p_field, player_x, player_y, is_p_field_open, world_size=WORLD_HEIGHT):
+
+        if not is_p_field_open:
+            return
+
+        # --- 1. Viewport geometry -------------------------------------------------
+        world_left, world_right, world_top, world_bottom = self._get_world_bounds()
+        viewport_width = world_right - world_left
+        viewport_height = world_bottom - world_top
+        viewport_rect = pygame.Rect(world_left, world_top, viewport_width, viewport_height)
+
+        # --- 2. Base & borders ----------------------------------------------------
+        pygame.draw.rect(self.screen, self.COLOR_PANEL_BG, viewport_rect)
+        pygame.draw.rect(self.screen, self.COLOR_BORDER_INSET, viewport_rect, 2)
+
+        header_surf = self.font_scan_header.render(
+            "GLOBAL P-FIELD TELEMETRY", True, self.COLOR_HUD_AMBER)
+        self.screen.blit(header_surf, (world_left + 25, world_top + 25))
+
+        sub_surf = self.font_tiny.render(
+            f"SCALE: 1:{world_size} | SENSITIVITY: DIFFUSE", True, self.COLOR_GRID_TEXT)
+        self.screen.blit(sub_surf, (world_left + 25, world_top + 55))
+
+        old_clip = self.screen.get_clip()
+        self.screen.set_clip(viewport_rect)
+
+        # --- 3. Projection --------------------------------------------------------
+        # Uniform scale on both axes so the square world isn't stretched into the
+        # panel's aspect ratio. Blobs stay circular and distances read correctly.
+        # The map is letterboxed and centered in the viewport.
+        # (To revert to the old stretched behaviour: set scale_x/scale_y to
+        #  viewport_width / world_size and viewport_height / world_size, and set
+        #  both origins to world_left / world_top.)
+        scale = min(viewport_width, viewport_height) / float(world_size)
+        map_width = world_size * scale
+        map_height = world_size * scale
+        origin_x = world_left + (viewport_width - map_width) * 0.5
+        origin_y = world_top + (viewport_height - map_height) * 0.5
+
+        def to_screen(wx, wy):
+            return origin_x + wx * scale, origin_y + wy * scale
+
+        # Faint frame showing the actual world bounds inside the letterbox
+        pygame.draw.rect(
+            self.screen, self.COLOR_BORDER_INSET,
+            pygame.Rect(int(origin_x), int(origin_y), int(map_width), int(map_height)), 1)
+
+        # --- 4. Noise setup -------------------------------------------------------
+        color_ghost = (60, 40, 0)  # ambient CMB dash colour
+        color_hot = (140, 100, 10)  # hottest a signature ever gets
+
+        # Dashes per screen pixel². Ambient and signatures share this rate, which
+        # is what makes an injected trace read as "more of the same" rather than
+        # as a different element drawn on top.
+        noise_rate = 1.0 / 1000.0
+
+        if self.P_FIELD_STABLE_STATIC:
+            # Frozen snapshot: dash positions persist frame to frame, only density
+            # changes as signatures decay. Applies to ambient too — a still patch
+            # inside a shimmering field would stand out more than a bright one.
+            rng = random.Random(0x50F1E1D)
+        else:
+            rng = random
+
+        # --- 5. Ambient background noise -----------------------------------------
+        base_noise_density = int(viewport_width * viewport_height * noise_rate)
+
+        for _ in range(base_noise_density):
+            nx = rng.randint(world_left, world_right - 10)
+            ny = rng.randint(world_top, world_bottom - 1)
+            dash_len = rng.randint(2, 6)
+            pygame.draw.line(self.screen, color_ghost, (nx, ny), (nx + dash_len, ny), 1)
+
+        # --- 6. Signature injection ----------------------------------------------
+        grid_size = GRID_SIZE
+
+        if p_field:
+            for (grid_x, grid_y), signatures in p_field.items():
+                if not signatures:
+                    continue
+
+                strengths = [s for s, p_type, _ in signatures if p_type == 'movement']
+                if not strengths:
+                    continue
+
+                # Normalise to 0..1 so the thresholds below actually mean something
+                norm = max(strengths) / float(self.P_FIELD_MAX_STRENGTH)
+                norm = max(0.0, min(1.0, norm))
+                if norm <= 0.0:
+                    continue
+
+                # Deterministic offset so the disturbance never sits exactly on the
+                # cell centre — keeps the grid from being readable as a grid.
+                shift_x = ((grid_x * 73856093) ^ (grid_y * 19349663)) % grid_size - (grid_size // 2)
+                shift_y = ((grid_y * 83492791) ^ (grid_x * 39916801)) % grid_size - (grid_size // 2)
+
+                cx_world = grid_x * grid_size + grid_size * 0.5 + shift_x
+                cy_world = grid_y * grid_size + grid_size * 0.5 + shift_y
+
+                # Radius is near-constant. A ship perturbs roughly a cell and a
+                # half either way regardless of how fresh the trace is; strength
+                # controls density and temperature instead.
+                radius_world = grid_size * 1.2 + norm * grid_size * 0.6
+                radius_px = radius_world * scale
+                if radius_px < 1.0:
+                    continue
+
+                cx, cy = to_screen(cx_world, cy_world)
+
+                # Cheap reject for blobs entirely off-panel
+                if (cx + radius_px * 2 < world_left or cx - radius_px * 2 > world_right or
+                        cy + radius_px * 2 < world_top or cy - radius_px * 2 > world_bottom):
+                    continue
+
+                # Added dashes as a fraction of the ambient already in that area,
+                # scaled by area so big and small blobs look equally dense.
+                boost = 0.30 + 1.20 * norm
+                added = int(math.pi * radius_px * radius_px * noise_rate * boost)
+                added = max(3, min(added, 250))
+
+                # Same hue as the ghost, only warmer — no hue jump, no hard cutoff
+                t = 0.35 + 0.65 * norm
+                color = (
+                    int(color_ghost[0] + (color_hot[0] - color_ghost[0]) * t),
+                    int(color_ghost[1] + (color_hot[1] - color_ghost[1]) * t),
+                    int(color_ghost[2] + (color_hot[2] - color_ghost[2]) * t),
+                )
+
+                # Gaussian scatter — density falls off with distance from centre so
+                # the disturbance has no edge. A uniform box would draw a rectangle
+                # no amount of colour matching can hide.
+                sigma = radius_px / 2.5
+
+                if self.P_FIELD_STABLE_STATIC:
+                    cell_rng = random.Random((grid_x << 16) ^ grid_y)
+                else:
+                    cell_rng = rng
+
+                for _ in range(added):
+                    static_x = cell_rng.gauss(cx, sigma)
+                    static_y = cell_rng.gauss(cy, sigma)
+
+                    if not (world_left <= static_x < world_right and
+                            world_top <= static_y < world_bottom):
+                        continue
+
+                    dash_len = cell_rng.randint(2, 6)  # identical to ambient
+                    pygame.draw.line(self.screen, color,
+                                     (static_x, static_y),
+                                     (static_x + dash_len, static_y), 1)
+
+        # --- 7. Player marker -----------------------------------------------------
+        player_px, player_py = to_screen(player_x, player_y)
+        player_px, player_py = int(player_px), int(player_py)
+
+        pygame.draw.circle(self.screen, (0,255,0), (player_px, player_py), 1)
+        self.screen.set_clip(old_clip)

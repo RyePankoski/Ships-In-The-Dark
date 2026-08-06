@@ -48,6 +48,7 @@ def collect_inputs():
         'f': keys[pygame.K_f],
         'z': keys[pygame.K_z],
         't': keys[pygame.K_t],
+        'n': keys[pygame.K_n],
 
         # Numbers
         '1': keys[pygame.K_1],

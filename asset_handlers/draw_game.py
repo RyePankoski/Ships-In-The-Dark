@@ -547,3 +547,110 @@ class DrawGame:
 
         # Blit to screen
         self.screen.blit(surf, (sx - center[0], sy - center[1]))
+
+    import pygame
+    import random
+    import math
+
+    def draw_blink_tunnel(self, ship_position, blink_timer, camera_x, camera_y, max_duration=120):
+        """Draw low-tech 1980s CRT blink-space transit effect (2-second duration)."""
+        if blink_timer <= 0:
+            return
+
+        screen_width = self.screen.get_width()
+        screen_height = self.screen.get_height()
+
+        # Phosphor palette (Classic terminal green & dim retention artifacts)
+        PHOSPHOR_GREEN = (0, 255, 70)
+        PHOSPHOR_DIM = (0, 90, 25)
+        BLACK = (0, 0, 0)
+
+        # Severe 80s CRT hardware jitter / tracking error during deep transit
+        jitter_x = random.randint(-2, 2)
+        jitter_y = random.randint(-2, 2)
+
+        ship_screen_x = ship_position[0] - camera_x + jitter_x
+        ship_screen_y = ship_position[1] - camera_y + jitter_y
+
+        # Progress counts down from 1.0 to 0.0 over the max_duration
+        progress = blink_timer / max_duration
+
+        # --- ANIMATION PHASES ---
+        # Calculate a scale factor (0.0 to 1.0) to animate the arrival and departure
+        if progress > 0.8:
+            # First 20% of duration (Departure): expand out from 0.0 to 1.0
+            scale = (1.0 - progress) / 0.2
+        elif progress < 0.2:
+            # Last 20% of duration (Arrival): shrink from 1.0 down to 0.0
+            scale = progress / 0.2
+        else:
+            # Middle 60% of duration (Transit): hold at full size
+            scale = 1.0
+
+        max_radius = math.hypot(screen_width // 2, screen_height // 2)
+
+        # 1. High-frequency random digital static / snow
+        # Now multiplied by `scale` so the static stays confined to the diamond's current size
+        static_surface = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+        for _ in range(40):
+            sx = ship_screen_x + random.uniform(-max_radius * scale, max_radius * scale)
+            sy = ship_screen_y + random.uniform(-max_radius * scale, max_radius * scale)
+            pygame.draw.circle(static_surface, (*PHOSPHOR_DIM, random.randint(100, 200)), (int(sx), int(sy)), 1)
+        self.screen.blit(static_surface, (0, 0))
+
+        # 2. Opaque Diamond / Radar Sweep
+        grid_size = int(max_radius * scale)
+        if grid_size > 5:
+            # Define the 4 points of the diamond relative to the ship's center
+            diamond_points = [
+                (ship_screen_x, ship_screen_y - grid_size),  # Top
+                (ship_screen_x + grid_size, ship_screen_y),  # Right
+                (ship_screen_x, ship_screen_y + grid_size),  # Bottom
+                (ship_screen_x - grid_size, ship_screen_y)  # Left
+            ]
+
+            # Draw a solid black polygon first to block out the background stars
+            pygame.draw.polygon(self.screen, BLACK, diamond_points)
+
+            # Draw the phosphor green outline of the diamond
+            pygame.draw.polygon(self.screen, PHOSPHOR_DIM, diamond_points, 1)
+
+            # Vector intersection lines (crosshairs inside the diamond)
+            pygame.draw.line(self.screen, PHOSPHOR_DIM,
+                             (ship_screen_x, ship_screen_y - grid_size),
+                             (ship_screen_x, ship_screen_y + grid_size), 1)
+            pygame.draw.line(self.screen, PHOSPHOR_DIM,
+                             (ship_screen_x - grid_size, ship_screen_y),
+                             (ship_screen_x + grid_size, ship_screen_y), 1)
+
+        # 3. Retro Terminal Text & Telemetry UI
+        if not hasattr(self, 'font_blink'):
+            self.font_blink = pygame.font.SysFont("Courier", 18, bold=True)
+
+        # Display countdown frames and status
+        time_left_sec = max(0.0, blink_timer / 60.0)
+        status_str = f"BLINK_SPACE // T-{time_left_sec:.1f}s"
+
+        text_surf = self.font_blink.render(status_str, True, PHOSPHOR_GREEN)
+        text_x = int(ship_screen_x) - text_surf.get_width() // 2
+        text_y = int(ship_screen_y) - 45
+
+        box_rect = pygame.Rect(
+            text_x - 8,
+            text_y - 4,
+            text_surf.get_width() + 16,
+            text_surf.get_height() + 8
+        )
+
+        # Solid black cutout box for sharp vector UI isolation
+        pygame.draw.rect(self.screen, BLACK, box_rect)
+        pygame.draw.rect(self.screen, PHOSPHOR_GREEN, box_rect, 1)
+
+        self.screen.blit(text_surf, (text_x, text_y))
+
+        # 4. CRT Horizontal Scanlines Overlay (Full screen pass)
+        scanline_surface = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+        for y in range(0, screen_height, 3):
+            pygame.draw.line(scanline_surface, (0, 0, 0, 120), (0, y), (screen_width, y), 1)
+
+        self.screen.blit(scanline_surface, (0, 0))
