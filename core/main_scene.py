@@ -53,8 +53,8 @@ class MainScene:
         # Create player ship and enemy ship
         if not self.connected:
             self.enemy_ship = Ship(random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT), is_player=False, is_ai=True)
-            # self.player_ship = Ship(random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT), is_player=True, player_id=1)
-            self.player_ship = Ship(200, 200, is_player=True, player_id=1)
+            self.player_ship = Ship(random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT), is_player=True, player_id=1)
+            # self.player_ship = Ship(200, 200, is_player=True, player_id=1)
             self.ships.append(self.player_ship)
             self.ships.append(self.enemy_ship)
             self.init_asteroids_and_drones()
@@ -87,7 +87,7 @@ class MainScene:
         self.lock_inputs = False
 
         # Fun cinematic type stuff
-        self.ftl_traveling = False
+        self.ftl_traveling = True
         self.ftl_travel_timer = 0
         self.ftl_travel_cooldown = 5
 
@@ -116,13 +116,11 @@ class MainScene:
         # self.lasers.append([self.player_ship, (self.player_ship.rect.center[0] + 50, self.player_ship.rect.center[1]), 2, None])
 
     def run(self, inputs, dt):
-        # Handle end game scenario
         if not self.player_ship.alive:
             if not self.end_tripped:
                 self.audio_manager.stop_all()
                 self.audio_manager.play_sfx('death_screen')
                 self.end_tripped = True
-            self.draw_death()
             return
 
         # Let the server handle inputs and simulation
@@ -285,13 +283,13 @@ class MainScene:
                     self.audio_manager.stop_sfx('dfs_dir_change')
 
             if inputs['space'] and self.player_ship.laser_on:
+                self.input_cooling_down = True
                 if self.laser_assessor.laser_locked:
                     self.audio_manager.play_sfx('laser_turn_off')
                     self.laser_assessor.laser_locked = False
                 elif self.laser_assessor.current_target is not None:
                     self.audio_manager.play_sfx('laser_locked')
                     self.laser_assessor.laser_locked = True
-                self.input_cooling_down = True
 
     def handle_asteroid_lasers(self, dt):
 
@@ -377,133 +375,141 @@ class MainScene:
         }
 
     def handle_alive_things(self, dt):
-        # Ships
-        for ship in self.ships:
-            ship.run(dt)
 
-            ship_grid_x = int(ship.rect.center[0] // GRID_SIZE)
-            ship_grid_y = int(ship.rect.center[1] // GRID_SIZE)
-
-            if (ship_grid_x, ship_grid_y) in self.asteroids:
-                for asteroid in self.asteroids[(ship_grid_x, ship_grid_y)]:
-                    distance = (ship.rect.center[0] - asteroid.pos_x) ** 2 + (ship.rect.center[1] - asteroid.pos_y) ** 2
-                    if distance < asteroid.size ** 2:
-                        ship.vel_x *= -1.5
-                        ship.vel_y *= -1.5
-
-        # Missiles
-        if not self.missiles:
-            self.player_ship.enemy_has_missile_solution = False
-
-        for missile in self.missiles:
-            if missile.owner == self.player_ship.player_id:
-                continue
-            if missile.contact == self.player_ship:
-                self.player_ship.enemy_has_missile_solution = True
-                distance = (missile.pos_x - self.player_ship.rect.center[0]) ** 2 + (missile.pos_y - self.player_ship.rect.center[1]) ** 2
-                if distance < 1000 ** 2:
-                    self.player_ship.catastrophic_warning = True
-                    self.audio_manager.play_sfx('catastrophic_warning')
-                else:
-                    self.player_ship.catastrophic_warning = False
-
-        missiles_to_remove = []
-        for missile in self.missiles:
-            missile.run(dt, self.asteroids)
-            if missile.alive is False:
-                missiles_to_remove.append(missile)
-
-        for missile in missiles_to_remove:
-            self.explosions.append((missile.pos_x, missile.pos_y))
-            self.missiles.remove(missile)
-
-        # Decoys
-        decoys_to_remove = []
-        for decoy in self.decoys:
-            decoy.run(dt)
-            if decoy.alive is False:
-                decoys_to_remove.append(decoy)
-
-        for decoy in decoys_to_remove:
-            self.decoys.remove(decoy)
-
-        # Asteroids
-        asteroids_to_remove = []
-        for cell in self.asteroids.values():
-            for asteroid in cell:
-                if not asteroid.alive:
-                    asteroids_to_remove.append(asteroid)
-                    continue
-        for asteroid in asteroids_to_remove:
-            self.asteroids[asteroid.cell].remove(asteroid)
-            if not self.asteroids[asteroid.cell]:
-                del self.asteroids[asteroid.cell]
-
-        # Drones
-        drones_to_remove = []
-        for cell in list(self.drones.keys()):
-            for drone in list(self.drones[cell]):
-                drone.run_drone(self.asteroids, dt)
-
-                if drone.alive is False:
-                    drones_to_remove.append(drone)
-
-                # Only update the grid if the cell changed
-                new_cell = (int(drone.pos_x // GRID_SIZE), int(drone.pos_y // GRID_SIZE))
-                if new_cell != drone.cell:
-                    self.drones[drone.cell].remove(drone)
-                    if not self.drones[drone.cell]:
-                        del self.drones[drone.cell]
-
-                    if new_cell not in self.drones:
-                        self.drones[new_cell] = []
-                    self.drones[new_cell].append(drone)
-                    drone.cell = new_cell
-
-        for drone in drones_to_remove:
-            self.drones[drone.cell].remove(drone)
-            if not self.drones[drone.cell]:
-                del self.drones[drone.cell]
-
-        # Pirates
-        for cell in list(self.pirates.keys()):
-            for pirate in list(self.pirates[cell]):
-                pirate.run(self.ships, self.bullets, self.lasers, self.asteroids, dt)
-
-                new_cell = (int(pirate.pos_x // GRID_SIZE), int(pirate.pos_y // GRID_SIZE))
-                if new_cell != cell:
-                    # Remove from old cell
-                    self.pirates[cell].remove(pirate)
-                    if not self.pirates[cell]:
-                        del self.pirates[cell]
-
-                    if new_cell not in self.pirates:
-                        self.pirates[new_cell] = []
-                    self.pirates[new_cell].append(pirate)
-
-        # Bullets
-        bullets_to_remove = []
-        for bullet in self.bullets:
-            bullet.run(dt)
-
+        def _handle_ships():
             for ship in self.ships:
-                distance = (bullet.pos_x - ship.rect.center[0]) ** 2 + (bullet.pos_y - ship.rect.center[1]) ** 2
-                if distance < 25 ** 2:
-                    ship.health -= 2
-                    ship.took_damage = True
-                    self.audio_manager.play_sfx('damage_taken')
-                    bullets_to_remove.append(bullet)
+                ship.run(dt)
 
+                ship_grid_x = int(ship.rect.center[0] // GRID_SIZE)
+                ship_grid_y = int(ship.rect.center[1] // GRID_SIZE)
+
+                if (ship_grid_x, ship_grid_y) in self.asteroids:
+                    for asteroid in self.asteroids[(ship_grid_x, ship_grid_y)]:
+                        distance = (ship.rect.center[0] - asteroid.pos_x) ** 2 + (ship.rect.center[1] - asteroid.pos_y) ** 2
+                        if distance < asteroid.size ** 2:
+                            ship.vel_x *= -1.5
+                            ship.vel_y *= -1.5
+
+        def _handle_missiles():
+            if not self.missiles:
+                self.player_ship.enemy_has_missile_solution = False
+
+            for missile in self.missiles:
+                if missile.owner == self.player_ship.player_id:
+                    continue
+                if missile.contact == self.player_ship:
+                    self.player_ship.enemy_has_missile_solution = True
+                    distance = (missile.pos_x - self.player_ship.rect.center[0]) ** 2 + (missile.pos_y - self.player_ship.rect.center[1]) ** 2
+                    if distance < 1000 ** 2:
+                        self.player_ship.catastrophic_warning = True
+                        self.audio_manager.play_sfx('catastrophic_warning')
+                    else:
+                        self.player_ship.catastrophic_warning = False
+
+            missiles_to_remove = []
+            for missile in self.missiles:
+                missile.run(dt, self.asteroids)
+                if missile.alive is False:
+                    missiles_to_remove.append(missile)
+
+            for missile in missiles_to_remove:
+                self.explosions.append((missile.pos_x, missile.pos_y))
+                self.missiles.remove(missile)
+
+        def _handle_decoys():
+            decoys_to_remove = []
+            for decoy in self.decoys:
+                decoy.run(dt)
+                if decoy.alive is False:
+                    decoys_to_remove.append(decoy)
+
+            for decoy in decoys_to_remove:
+                self.decoys.remove(decoy)
+
+        def _handle_asteroids():
+            asteroids_to_remove = []
             for cell in self.asteroids.values():
                 for asteroid in cell:
-                    distance = (bullet.pos_x - asteroid.pos_x)**2 + (bullet.pos_y - asteroid.pos_y)**2
-                    if distance < asteroid.size**2:
+                    if not asteroid.alive:
+                        asteroids_to_remove.append(asteroid)
+                        continue
+            for asteroid in asteroids_to_remove:
+                self.asteroids[asteroid.cell].remove(asteroid)
+                if not self.asteroids[asteroid.cell]:
+                    del self.asteroids[asteroid.cell]
+
+        def _handle_drones():
+            drones_to_remove = []
+            for cell in list(self.drones.keys()):
+                for drone in list(self.drones[cell]):
+                    drone.run_drone(self.asteroids, dt)
+
+                    if drone.alive is False:
+                        drones_to_remove.append(drone)
+
+                    # Only update the grid if the cell changed
+                    new_cell = (int(drone.pos_x // GRID_SIZE), int(drone.pos_y // GRID_SIZE))
+                    if new_cell != drone.cell:
+                        self.drones[drone.cell].remove(drone)
+                        if not self.drones[drone.cell]:
+                            del self.drones[drone.cell]
+
+                        if new_cell not in self.drones:
+                            self.drones[new_cell] = []
+                        self.drones[new_cell].append(drone)
+                        drone.cell = new_cell
+
+            for drone in drones_to_remove:
+                self.drones[drone.cell].remove(drone)
+                if not self.drones[drone.cell]:
+                    del self.drones[drone.cell]
+
+        def _handle_pirates():
+            for cell in list(self.pirates.keys()):
+                for pirate in list(self.pirates[cell]):
+                    pirate.run(self.ships, self.bullets, self.lasers, self.asteroids, dt)
+
+                    new_cell = (int(pirate.pos_x // GRID_SIZE), int(pirate.pos_y // GRID_SIZE))
+                    if new_cell != cell:
+                        # Remove from old cell
+                        self.pirates[cell].remove(pirate)
+                        if not self.pirates[cell]:
+                            del self.pirates[cell]
+
+                        if new_cell not in self.pirates:
+                            self.pirates[new_cell] = []
+                        self.pirates[new_cell].append(pirate)
+
+        def _handle_bullets():
+            bullets_to_remove = []
+            for bullet in self.bullets:
+                bullet.run(dt)
+
+                for ship in self.ships:
+                    distance = (bullet.pos_x - ship.rect.center[0]) ** 2 + (bullet.pos_y - ship.rect.center[1]) ** 2
+                    if distance < 25 ** 2:
+                        ship.health -= 2
+                        ship.took_damage = True
+                        self.audio_manager.play_sfx('damage_taken')
                         bullets_to_remove.append(bullet)
 
+                for cell in self.asteroids.values():
+                    for asteroid in cell:
+                        distance = (bullet.pos_x - asteroid.pos_x) ** 2 + (bullet.pos_y - asteroid.pos_y) ** 2
+                        if distance < asteroid.size ** 2:
+                            bullets_to_remove.append(bullet)
 
-        for bullet in bullets_to_remove:
-            if bullet in self.bullets:
-                self.bullets.remove(bullet)
+            for bullet in bullets_to_remove:
+                if bullet in self.bullets:
+                    self.bullets.remove(bullet)
+
+        _handle_ships()
+        _handle_missiles()
+        _handle_decoys()
+        _handle_asteroids()
+        _handle_drones()
+        _handle_pirates()
+        _handle_bullets()
 
     def build_decoy(self):
         dx = random.randint(-1, 1)
@@ -571,12 +577,13 @@ class MainScene:
         missile = Missile(self.player_ship.rect.center[0], self.player_ship.rect.center[1], 0, 0, self.player_ship.target, self.player_ship.player_id)
         self.missiles.append(missile)
 
-    def draw_death(self):
-        self.draw_game.start_blit()
-        self.draw_game.draw_end_game()
-        end_blit()
-
     def draw_scene(self):
+        if not self.player_ship.alive:
+            self.draw_game.start_blit()
+            self.draw_game.draw_end_game()
+            end_blit()
+            return
+
         self.draw_game.start_blit()
         camera_x, camera_y = self.find_camera()
 
