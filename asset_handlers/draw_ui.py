@@ -1395,7 +1395,7 @@ class DrawUI:
 
         self.screen.set_clip(None)
 
-    def draw_pirate_fire_warning(self, pirate_firing):
+    def draw_corpo_miner_fire_warning(self, pirate_firing):
         """Draw a single orange line sweeping left to right across viewport.
 
         Args:
@@ -1446,7 +1446,7 @@ class DrawUI:
         if not hasattr(self, 'font_pirate_lock'):
             self.font_pirate_lock = pygame.font.Font(None, 24)
 
-        warning_text = self.font_pirate_lock.render("PIRATE LOCK", True, color)
+        warning_text = self.font_pirate_lock.render("HOSTILE GUN SOLUTION DETECTED", True, color)
         text_x = screen_width // 2 - warning_text.get_width() // 2
         text_y = world_top + 15
         self.screen.blit(warning_text, (text_x, text_y))
@@ -1688,5 +1688,5 @@ class DrawUI:
         player_px, player_py = to_screen(player_x, player_y)
         player_px, player_py = int(player_px), int(player_py)
 
-        pygame.draw.circle(self.screen, (0,255,0), (player_px, player_py), 1)
+        pygame.draw.circle(self.screen, (0, 255, 0), (player_px, player_py), 1)
         self.screen.set_clip(old_clip)

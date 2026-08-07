@@ -18,8 +18,8 @@ MISSILE_AVOID_CLEARANCE = 250  # berth given to a rock; tune to visible missile 
 MISSILE_AVOID_WEIGHT = 1.0  # 1.0 = up to ~45 deg deflection from straight-at-target
 MISSILE_AVOID_SMOOTH = 0.15  # 0.1 = heavy smoothing (gliding), 0.4 = snappier
 
-WORLD_WIDTH = 10000
-WORLD_HEIGHT = 10000
+WORLD_WIDTH = 15000
+WORLD_HEIGHT = 15000
 GRID_SIZE = 500
 
 # Radar configuration

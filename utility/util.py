@@ -22,6 +22,7 @@ def collect_inputs():
         'enter': keys[pygame.K_RETURN],
         'escape': keys[pygame.K_ESCAPE],
         'tab': keys[pygame.K_TAB],
+        'esc' : keys[pygame.K_ESCAPE],
 
         # Modifiers
         'left_shift': keys[pygame.K_LSHIFT] ,

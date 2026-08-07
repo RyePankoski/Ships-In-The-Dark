@@ -38,7 +38,7 @@ class Ship:
         self.catastrophic_warning = False
         self.has_missile_solution = True
         self.close_range_scanning = True
-        self.pirate_sees_you = False
+        self.mining_vessel_sees_you = False
         self.manual_control = True
         self.dfs_scanned = False
         self.health_low = False

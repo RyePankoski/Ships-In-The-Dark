@@ -2,7 +2,7 @@ import math
 
 from objects.asteroid import Asteroid
 from objects.drone import Drone
-from objects.pirate import Pirate
+from objects.mining_vessel import MiningVessel
 from objects.ship import Ship
 from utility.constants import *
 

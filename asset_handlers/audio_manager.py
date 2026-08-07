@@ -59,6 +59,7 @@ class AudioManager:
             'startup_theme': 'sounds/startup_theme.wav',
             'ftl_jumping': 'sounds/ftl_jumping.wav',
             'ftl_arrival': 'sounds/ftl_arrival.wav',
+            'blink_arrival': 'sounds/blink_arrival.wav',
             'blink': 'sounds/blink.wav',
             'p_field_open': 'sounds/p_field_open.wav',
             'p_field_close': 'sounds/p_field_close.wav',

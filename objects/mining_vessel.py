@@ -7,7 +7,7 @@ from objects.bullet import Bullet
 from utility.constants import *
 
 
-class Pirate:
+class MiningVessel:
     def __init__(self, x, y, dx=0, dy=0, v=0):
         self.pos_x = x
         self.pos_y = y
@@ -21,9 +21,10 @@ class Pirate:
         self.target = None
         self.painted = False
 
-        self.ambushing = False
-        self.ambush_timer = 0
-        self.ambush_timer_cooldown = 10
+        self.resting = True
+
+        self.resting_timer = 0
+        self.resting_cooldown = 10
 
         self.shooting = False
         self.shoot_timer = 0
@@ -32,14 +33,22 @@ class Pirate:
         self.player_id = -3
         self.alive = True
 
-    def run(self, ships, bullets, dt):
-        self.fire_at_enemies(ships, bullets)
+        self.asteroids_destroyed = 0
 
-        if self.ambushing:
-            self.ambush(dt)
+    def run(self, ships, bullets, laser_list, asteroids, dt):
+        if not self.alive:
             return
 
+        self.fire_at_enemies(ships, bullets)
         self.gun_timer(dt)
+        self.detect_asteroids(laser_list, asteroids)
+
+        if self.resting:
+            self.rest(dt)
+            return
+
+        if self.asteroids_destroyed == 50:
+            self.target = -1000, -1000
 
         if self.target is None:
             self.target = (random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT))
@@ -48,21 +57,47 @@ class Pirate:
 
         self.update_rect()
 
+    def detect_asteroids(self, laser_list, asteroids):
+        detect_radius = 300
+        radius_sq = detect_radius ** 2
+
+        cell_x = int(self.pos_x // GRID_SIZE)
+        cell_y = int(self.pos_y // GRID_SIZE)
+
+        # How many cells the radius can reach past the ship's own cell.
+        reach = math.ceil(detect_radius / GRID_SIZE)
+
+        for gx in range(cell_x - reach, cell_x + reach + 1):
+            for gy in range(cell_y - reach, cell_y + reach + 1):
+                cell = (gx, gy)
+                if cell not in asteroids:
+                    continue
+
+                for asteroid in asteroids[cell]:
+                    dx = self.pos_x - asteroid.pos_x
+                    dy = self.pos_y - asteroid.pos_y
+                    distance_sq = dx ** 2 + dy ** 2
+
+                    if distance_sq < radius_sq:
+                        if not any(laser[3] is asteroid for laser in laser_list):
+                            self.asteroids_destroyed += 1
+                            laser_list.append(
+                                [self, (asteroid.pos_x, asteroid.pos_y), 1.5, asteroid]
+                            )
+
     def fire_at_enemies(self, ships, bullets):
         for ship in ships:
             ship_x = ship.pos_x if hasattr(ship, 'pos_x') else ship.rect.center[0]
             ship_y = ship.pos_y if hasattr(ship, 'pos_y') else ship.rect.center[1]
 
             distance = math.sqrt((ship_x - self.pos_x) ** 2 + (ship_y - self.pos_y) ** 2)
-            if distance < 800:
-                ship.pirate_sees_you = True
+            if distance < 700:
+                ship.mining_vessel_sees_you = True
                 if not self.shooting:
                     self.shooting = True
 
                     dx = ship.rect.center[0] - self.rect.center[0]
                     dy = ship.rect.center[1] - self.rect.center[1]
-
-
 
                     length = math.hypot(dx, dy)
                     if length > 0:
@@ -76,7 +111,7 @@ class Pirate:
                     bullet = Bullet(self.pos_x, self.pos_y, dx, dy, BULLET_SPEED)
                     bullets.append(bullet)
             else:
-                ship.pirate_sees_you = False
+                ship.mining_vessel_sees_you = False
 
     def gun_timer(self, dt):
         if self.shooting:
@@ -85,11 +120,11 @@ class Pirate:
                 self.shoot_timer = 0
                 self.shooting = False
 
-    def ambush(self, dt):
-        self.ambush_timer += dt
-        if self.ambush_timer > self.ambush_timer_cooldown:
-            self.ambush_timer = 0
-            self.ambushing = False
+    def rest(self, dt):
+        self.resting_timer += dt
+        if self.resting_timer > self.resting_cooldown:
+            self.resting_timer = 0
+            self.resting = False
 
     def move_to_target(self, dt):
         dx = self.target[0] - self.pos_x
@@ -99,7 +134,11 @@ class Pirate:
         # Check if arrived
         if distance < 50.0:
             self.target = None
-            self.ambushing = True
+            self.resting = True
+
+            if self.asteroids_destroyed < 50:
+                self.alive = False
+
             return
 
         # Normalize and apply velocity

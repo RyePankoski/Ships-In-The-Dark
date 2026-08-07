@@ -159,7 +159,7 @@ class DrawGame:
                 screen_x = pirate.rect.center[0] - camera_x
                 screen_y = pirate.rect.center[1] - camera_y
 
-                if pirate.ambushing:
+                if pirate.resting:
                     rotated_sprite = pygame.transform.rotate(self.pirate_ship_ambushing, pirate.heading)
                     rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
                     self.screen.blit(rotated_sprite, rotated_rect)
@@ -369,7 +369,85 @@ class DrawGame:
             # Blit the text on top
             self.screen.blit(ftl_text, (text_x, text_y))
 
-    def draw_ship_arrival(self, ship_position, arrival_timer, camera_x, camera_y, max_duration=1.0):
+    def draw_ftl_arrival(self, ship_position, arrival_timer, camera_x, camera_y, max_duration=1.0):
+        """Draw a high-impact FTL arrival: rupture flash, spike burst, and stacked shockwaves."""
+        if arrival_timer <= 0.0 or arrival_timer >= max_duration:
+            return
+
+        progress = max(0.0, min(1.0, arrival_timer / max_duration))
+
+        sx = int(ship_position[0] - camera_x)
+        sy = int(ship_position[1] - camera_y)
+
+        alpha = int(255 * (1.0 - progress))
+        if alpha <= 0:
+            return
+
+        screen_w = self.screen.get_width()
+        screen_h = self.screen.get_height()
+
+        # --- 0. Rupture flash: brief full-frame wash as the ship tears in ---
+        # Only in the first ~15% so it reads as the moment of arrival, not a fade.
+        if progress < 0.15:
+            flash_p = 1.0 - (progress / 0.15)
+            flash_alpha = int(220 * flash_p)
+            flash = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
+            flash.fill((200, 240, 255, flash_alpha))
+            self.screen.blit(flash, (0, 0))
+
+        # Canvas for the radial elements
+        max_reach = 260
+        surf_size = max_reach * 2 + 20
+        surf = pygame.Surface((surf_size, surf_size), pygame.SRCALPHA)
+        center = (surf_size // 2, surf_size // 2)
+
+        # --- 1. Impact core: hot flash that lingers longer than before ---
+        if progress < 0.4:
+            core_p = progress / 0.4
+            core_radius = int(40 * math.sin(core_p * math.pi))
+            if core_radius > 0:
+                pygame.draw.circle(surf, (255, 255, 255, alpha), center, core_radius)
+                pygame.draw.circle(surf, (0, 220, 255, int(alpha * 0.7)), center, core_radius + 12, width=3)
+                pygame.draw.circle(surf, (120, 200, 255, int(alpha * 0.35)), center, core_radius + 24, width=2)
+
+        # --- 2. Exploding spike lines with bright leading heads ---
+        num_spikes = 26
+        for i in range(num_spikes):
+            rng = random.Random(i * 307)
+            angle = rng.uniform(0, math.tau)
+            max_length = rng.uniform(120, max_reach)
+            speed = rng.uniform(0.85, 1.15)
+            color_choice = rng.choice([(255, 255, 255), (0, 220, 255), (100, 180, 255), (200, 255, 255)])
+
+            eased_p = math.sin((progress * speed) * (math.pi / 2))
+            dist_head = eased_p * max_length
+            # Longer tails for a stronger sense of speed
+            dist_tail = max(0.0, dist_head - (55 * (1.0 - progress)))
+
+            x1 = center[0] + int(math.cos(angle) * dist_tail)
+            y1 = center[1] + int(math.sin(angle) * dist_tail)
+            x2 = center[0] + int(math.cos(angle) * dist_head)
+            y2 = center[1] + int(math.sin(angle) * dist_head)
+
+            line_alpha = int(alpha * rng.uniform(0.7, 1.0))
+            if line_alpha > 0 and dist_head > dist_tail:
+                pygame.draw.line(surf, (*color_choice, line_alpha), (x1, y1), (x2, y2), width=2)
+                # Bright head dot at the leading tip
+                pygame.draw.circle(surf, (255, 255, 255, line_alpha), (x2, y2), 2)
+
+        # --- 3. Stacked shockwaves: three rings released in sequence ---
+        for wave in range(3):
+            wave_delay = wave * 0.12
+            wave_p = (progress - wave_delay) / (1.0 - wave_delay) if progress > wave_delay else -1.0
+            if 0.0 < wave_p < 1.0:
+                shock_r = int(wave_p * max_reach)
+                shock_alpha = int(alpha * (1.0 - wave_p) * 0.6)
+                if shock_r > 0 and shock_alpha > 0:
+                    pygame.draw.circle(surf, (180, 240, 255, shock_alpha), center, shock_r, width=2)
+
+        self.screen.blit(surf, (sx - center[0], sy - center[1]))
+
+    def draw_blink_arrival(self, ship_position, arrival_timer, camera_x, camera_y, max_duration=1.0):
         """Draw high-energy impact burst with directional spike lines radiating outward."""
         if arrival_timer <= 0.0 or arrival_timer >= max_duration:
             return
@@ -548,11 +626,7 @@ class DrawGame:
         # Blit to screen
         self.screen.blit(surf, (sx - center[0], sy - center[1]))
 
-    import pygame
-    import random
-    import math
-
-    def draw_blink_tunnel(self, ship_position, blink_timer, camera_x, camera_y, max_duration=120):
+    def draw_transfer_animation(self, ship_position, blink_timer, camera_x, camera_y, max_duration=120):
         """Draw low-tech 1980s CRT blink-space transit effect (2-second duration)."""
         if blink_timer <= 0:
             return
@@ -654,3 +728,94 @@ class DrawGame:
             pygame.draw.line(scanline_surface, (0, 0, 0, 120), (0, y), (screen_width, y), 1)
 
         self.screen.blit(scanline_surface, (0, 0))
+
+    def draw_charge_animation(self, is_charging, charge_timer, max_charge_time=2.0):
+        """Draw blink drive charge-up: a ring that fills as it charges.
+
+        Args:
+            is_charging (bool): Whether actively charging
+            charge_timer (float): Current charge timer in seconds
+            camera_x, camera_y (float): Kept for call-site consistency; unused
+            max_charge_time (float): Time to reach full charge
+        """
+        if not is_charging or charge_timer <= 0:
+            return
+
+        screen_x = self.screen.get_width() // 2
+        screen_y = self.screen.get_height() // 2
+        progress = min(1.0, charge_timer / max_charge_time)
+
+        PHOSPHOR_DIM = (0, 90, 25)
+        BLACK = (0, 0, 0)
+        ready = progress >= 1.0
+        accent = (255, 200, 40) if ready else (0, 255, 70)
+        radius = 55
+
+        # Dim base ring, then the charge arc filling clockwise from the top
+        pygame.draw.circle(self.screen, PHOSPHOR_DIM, (screen_x, screen_y), radius, 1)
+
+        steps = int(40 * progress)
+        for i in range(steps):
+            a = -math.pi / 2 + (2 * math.pi * progress) * (i / 40)
+            px = screen_x + math.cos(a) * radius
+            py = screen_y + math.sin(a) * radius
+            pygame.draw.circle(self.screen, accent, (int(px), int(py)), 2)
+
+        # Status text in an opaque box below
+        if not hasattr(self, 'font_charge'):
+            self.font_charge = pygame.font.SysFont("Courier", 15, bold=True)
+
+        label = "BLINK READY" if ready else f"CHARGING {int(progress * 100)}%"
+        text_surf = self.font_charge.render(label, True, accent)
+        text_x = screen_x - text_surf.get_width() // 2
+        text_y = screen_y + radius + 14
+
+        box_rect = pygame.Rect(text_x - 6, text_y - 3,
+                               text_surf.get_width() + 12, text_surf.get_height() + 6)
+        pygame.draw.rect(self.screen, BLACK, box_rect)
+        pygame.draw.rect(self.screen, accent, box_rect, 1)
+        self.screen.blit(text_surf, (text_x, text_y))
+
+    def draw_laser(self, lasers, camera):
+        camera_x, camera_y = camera
+
+        # Hotter color profile: white core, vibrant inner red, deep outer red glow
+        LASER_CORE = (255, 255, 255)
+        LASER_GLOW_INNER = (255, 80, 80)
+        LASER_GLOW_OUTER = (150, 10, 10)
+
+        for start, end, t, target in lasers:
+            ship = start
+
+            sx = int(ship.rect.center[0] - camera_x)
+            sy = int(ship.rect.center[1] - camera_y)
+            ex = int(end[0] - camera_x)
+            ey = int(end[1] - camera_y)
+
+            # Beam: 3 layers for a richer, more intense gradient
+            pygame.draw.line(self.screen, LASER_GLOW_OUTER, (sx, sy), (ex, ey), 8)
+            pygame.draw.line(self.screen, LASER_GLOW_INNER, (sx, sy), (ex, ey), 4)
+            pygame.draw.line(self.screen, LASER_CORE, (sx, sy), (ex, ey), 2)
+
+            # Impact animation
+            pulse = (t * 3) % 1.0  # 0 -> 1, repeating
+            radius = int(4 + pulse * 12)  # grows slightly larger now (4 -> 16 px)
+            alpha = int(255 * (1.0 - pulse))  # fades as it grows
+
+            # Surface expanded slightly to accommodate the larger radius
+            ring = pygame.Surface((40, 40), pygame.SRCALPHA)
+
+            # Impact ring
+            pygame.draw.circle(ring, (*LASER_GLOW_INNER, alpha), (20, 20), radius, 2)
+
+            # Impact flare: a crosshair that shrinks/flickers as the ring expands
+            flare_size = 6 - int(pulse * 4)
+            if flare_size > 0:
+                pygame.draw.line(ring, (*LASER_CORE, alpha), (20 - flare_size, 20), (20 + flare_size, 20), 1)
+                pygame.draw.line(ring, (*LASER_CORE, alpha), (20, 20 - flare_size), (20, 20 + flare_size), 1)
+
+            self.screen.blit(ring, (ex - 20, ey - 20))
+
+            # Two-tone hot spot at the exact contact point
+            pygame.draw.circle(self.screen, LASER_GLOW_INNER, (ex, ey), 4)
+            pygame.draw.circle(self.screen, LASER_CORE, (ex, ey), 2)
