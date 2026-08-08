@@ -204,7 +204,7 @@ class DrawUI:
         self.screen.blit(font.render(pos_str, True, COLOR_CYAN), (col1_x, y))
         y += line_h
 
-        vel_str = f"VEL X:{ship.vel_x:+04.1f} Y:{ship.vel_y:+04.1f} [{ship.total_velocity:03.0f}u]"
+        vel_str = f"VEL X:{ship.dx:+04.1f} Y:{ship.dy:+04.1f} [{ship.total_velocity:03.0f}u]"
         self.screen.blit(font.render(vel_str, True, COLOR_CYAN), (col1_x, y))
         y += line_h
 
@@ -278,7 +278,7 @@ class DrawUI:
         # Health Status
         health = getattr(ship, "health", 5)
         health = int(health)
-        health_color = COLOR_RED if health <= 2 else (COLOR_AMBER if health <= 3 else COLOR_CYAN)
+        health_color = COLOR_RED if health <= 20 else (COLOR_AMBER if health <= 40 else COLOR_CYAN)
         self.screen.blit(
             font.render(f"HULL INTEGRITY [{health}]", True, health_color), (col3_x, y)
         )
@@ -835,10 +835,10 @@ class DrawUI:
                 edge_y = center_y + rel_y * scale
 
                 # Missile Velocity Vector Alignment
-                vel_mag = math.hypot(missile.vel_x, missile.vel_y)
+                vel_mag = math.hypot(missile.dx, missile.dy)
                 if vel_mag > 0:
-                    dir_x = missile.vel_x / vel_mag
-                    dir_y = missile.vel_y / vel_mag
+                    dir_x = missile.dx / vel_mag
+                    dir_y = missile.dy / vel_mag
                 else:
                     dir_x = -rel_x / math.hypot(rel_x, rel_y)
                     dir_y = -rel_y / math.hypot(rel_x, rel_y)

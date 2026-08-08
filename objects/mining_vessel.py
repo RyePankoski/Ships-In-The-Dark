@@ -5,6 +5,7 @@ import pygame
 
 from objects.bullet import Bullet
 from utility.constants import *
+from utility.util import squared_distance, sqrt_distance
 
 
 class MiningVessel:
@@ -51,6 +52,7 @@ class MiningVessel:
             self.target = -1000, -1000
 
         if self.target is None:
+            print("finding new target")
             self.target = (random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT))
         else:
             self.move_to_target(dt)
@@ -90,8 +92,9 @@ class MiningVessel:
             ship_x = ship.pos_x if hasattr(ship, 'pos_x') else ship.rect.center[0]
             ship_y = ship.pos_y if hasattr(ship, 'pos_y') else ship.rect.center[1]
 
-            distance = math.sqrt((ship_x - self.pos_x) ** 2 + (ship_y - self.pos_y) ** 2)
-            if distance < 700:
+            distance, in_range = squared_distance((ship_x, ship_y), (self.pos_x, self.pos_y), 800)
+
+            if in_range:
                 ship.mining_vessel_sees_you = True
                 if not self.shooting:
                     self.shooting = True
@@ -125,21 +128,18 @@ class MiningVessel:
         if self.resting_timer > self.resting_cooldown:
             self.resting_timer = 0
             self.resting = False
+            print("done resting")
 
     def move_to_target(self, dt):
-        dx = self.target[0] - self.pos_x
-        dy = self.target[1] - self.pos_y
-        distance = math.sqrt(dx ** 2 + dy ** 2)
-
-        # Check if arrived
-        if distance < 50.0:
+        distance, in_range = sqrt_distance((self.pos_x, self.pos_y), (self.target[0], self.target[1]), 50)
+        if in_range:
+            print("target reached")
             self.target = None
             self.resting = True
-
-            if self.asteroids_destroyed < 50:
-                self.alive = False
-
             return
+
+        dx = self.target[0] - self.pos_x
+        dy = self.target[1] - self.pos_y
 
         # Normalize and apply velocity
         self.dx = (dx / distance) * self.v

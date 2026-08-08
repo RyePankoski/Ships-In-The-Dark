@@ -18,7 +18,6 @@ class ServerScene:
         self.player_ships.append(ship)
 
     def step(self, messages, dt):
-
         for message in messages:
             player_id = message.get('player_id')
             input_data = message.get('input_data')

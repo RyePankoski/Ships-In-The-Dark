@@ -2,6 +2,7 @@ import math
 import random
 
 from utility.constants import *
+from utility.util import squared_distance, sqrt_distance
 
 
 class PlayerShipAI:
@@ -18,16 +19,15 @@ class PlayerShipAI:
         """Navigate ship to destination"""
         dx = self.destination[0] - ship.pos_x
         dy = self.destination[1] - ship.pos_y
-        distance = math.sqrt(dx ** 2 + dy ** 2)
 
-        # Check if arrived
-        if distance < 50.0:
+        distance, in_range = sqrt_distance((ship.pos_x, ship.pos_y), (self.destination[0], self.destination[1]), 50)
+        if in_range:
             self.destination = None
             return
 
         speed = min(SHIP_MAX_SPEED, distance)  # noqa
-        ship.vel_x = (dx / distance) * speed
-        ship.vel_y = (dy / distance) * speed
+        ship.dx = (dx / distance) * speed
+        ship.dy = (dy / distance) * speed
 
     def set_destination(self, destination):
         self.destination = destination

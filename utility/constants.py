@@ -1,7 +1,9 @@
 SHIP_THRUST = 100  # was 1
-SHIP_BRAKE_FORCE = 20  # was 0.4
-SHIP_MAX_SPEED = 75  # was 1.5
-DAMPENING_FORCE = 0.9999  # This one stays the same (it's multiplicative)
+
+ANGLE_CHANGE_SPEED = 3  # was 0.4
+SHIP_MAX_SPEED = 200
+DAMPENING_FORCE = 0.9999
+SHIP_BRAKE_FORCE = 0.99
 
 MISSILE_THRUST = 50  # was 0.4
 MISSILE_MAX_SPEED = 500  # was 10
@@ -18,8 +20,8 @@ MISSILE_AVOID_CLEARANCE = 250  # berth given to a rock; tune to visible missile 
 MISSILE_AVOID_WEIGHT = 1.0  # 1.0 = up to ~45 deg deflection from straight-at-target
 MISSILE_AVOID_SMOOTH = 0.15  # 0.1 = heavy smoothing (gliding), 0.4 = snappier
 
-WORLD_WIDTH = 15000
-WORLD_HEIGHT = 15000
+WORLD_WIDTH = 10000
+WORLD_HEIGHT = 10000
 GRID_SIZE = 500
 
 # Radar configuration
@@ -36,7 +38,6 @@ CORRIDOR_WIDTH = 2000
 
 # Close range scanner
 CLOSE_RANGE_SCAN_RANGE = 1000
-
 
 # Decoy
 DECOY_LIFETIME = 30

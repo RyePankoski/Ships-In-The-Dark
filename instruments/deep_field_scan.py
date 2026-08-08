@@ -1,6 +1,6 @@
 import math
 from utility.constants import *
-from utility.util import distance, in_quadrant
+from utility.util import in_quadrant, dfs_sqrt_distance
 
 
 class DeepFieldScan:
@@ -52,7 +52,7 @@ class DeepFieldScan:
                     c_x, c_y = contact.pos_x, contact.pos_y
 
                 if in_quadrant(player_x, player_y, direction_deg, (c_x, c_y)):
-                    range_px = distance(player_x, player_y, (c_x, c_y))
+                    range_px = dfs_sqrt_distance(player_x, player_y, (c_x, c_y))
                     is_moving = getattr(contact, 'total_velocity', 0) > 0.1
 
                     # Type classification
@@ -79,7 +79,7 @@ class DeepFieldScan:
                     c_x, c_y = contact.pos_x, contact.pos_y
 
                     if in_quadrant(player_x, player_y, direction_deg, (c_x, c_y)):
-                        range_px = distance(player_x, player_y, (c_x, c_y))
+                        range_px = dfs_sqrt_distance(player_x, player_y, (c_x, c_y))
                         is_moving = getattr(contact, 'velocity', 0) > 0.1
 
                         # Type classification

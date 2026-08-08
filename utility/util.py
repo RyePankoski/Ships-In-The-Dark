@@ -22,10 +22,10 @@ def collect_inputs():
         'enter': keys[pygame.K_RETURN],
         'escape': keys[pygame.K_ESCAPE],
         'tab': keys[pygame.K_TAB],
-        'esc' : keys[pygame.K_ESCAPE],
+        'esc': keys[pygame.K_ESCAPE],
 
         # Modifiers
-        'left_shift': keys[pygame.K_LSHIFT] ,
+        'left_shift': keys[pygame.K_LSHIFT],
         'right_shift': keys[pygame.K_RSHIFT],
         'ctrl': keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL],
         'left_alt': keys[pygame.K_LALT],
@@ -66,8 +66,49 @@ def collect_inputs():
 
     return inputs
 
-def in_quadrant(origin_x, origin_y, direction_deg, target_pos):
 
+# Main scene methods
+def update_p_field(ship, p_field, strength, p_type):
+    x, y = ship.rect.center[0], ship.rect.center[1]
+
+    if x < 0 or y < 0:
+        return
+    if x > WORLD_WIDTH or y > WORLD_HEIGHT:
+        return
+
+    cx = x // GRID_SIZE
+    cy = y // GRID_SIZE
+
+    p_field[(cx, cy)].append((strength, p_type, (x, y)))
+
+
+def dfs_sqrt_distance(x1, y1, pos):
+    dx = pos[0] - x1
+    dy = pos[1] - y1
+    return math.sqrt(dx ** 2 + dy ** 2)
+
+
+def squared_distance(start, end, min_distance):
+    dx = start[0] - end[0]
+    dy = start[1] - end[1]
+    distance = (dx ** 2) + (dy ** 2)
+    state = False
+    if distance < min_distance ** 2:
+        state = True
+    return distance, state
+
+
+def sqrt_distance(start, end, min_distance):
+    dx = start[0] - end[0]
+    dy = start[1] - end[1]
+    distance = math.sqrt((dx ** 2) + (dy ** 2))
+    state = False
+    if distance < min_distance:
+        state = True
+    return distance, state
+
+
+def in_quadrant(origin_x, origin_y, direction_deg, target_pos):
     target_x, target_y = target_pos
     rel_x = target_x - origin_x
     rel_y = target_y - origin_y
@@ -90,13 +131,6 @@ def in_quadrant(origin_x, origin_y, direction_deg, target_pos):
         return rel_x < 0 and rel_y < 0
 
     return False
-
-
-def distance(x1, y1, pos):
-    """Euclidean distance."""
-    dx = pos[0] - x1
-    dy = pos[1] - y1
-    return math.sqrt(dx ** 2 + dy ** 2)
 
 
 def end_blit():

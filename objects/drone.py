@@ -1,6 +1,7 @@
 import math
 import random
 from utility.constants import *
+from utility.util import sqrt_distance
 
 
 class Drone:
@@ -50,10 +51,10 @@ class Drone:
     def move_to_target(self, dt):
         dx = self.target.pos_x - self.pos_x
         dy = self.target.pos_y - self.pos_y
-        distance = math.sqrt(dx ** 2 + dy ** 2)
 
-        # Check if arrived
-        if distance < 50.0:
+        distance, in_range = sqrt_distance((self.pos_x, self.pos_y), (self.target.pos_x, self.target.pos_y), 50)
+
+        if in_range:
             self.target = None
             self.am_mining = True
             return

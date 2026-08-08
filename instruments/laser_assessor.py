@@ -149,21 +149,29 @@ class LaserAssessor:
         if not spatial_contacts:
             return None
 
+        # Calculate neighbor cell reach based on laser step size
+        reach = math.ceil(LASER_STEP / GRID_SIZE)
+        ray_grid_x, ray_grid_y = ray_sector
+
         for contact_type, contact_dict in spatial_contacts.items():
-            if ray_sector not in contact_dict:
-                continue
+            # Check ray sector and neighbor cells
+            for grid_dx in range(-reach, reach + 1):
+                for grid_dy in range(-reach, reach + 1):
+                    neighbor_cell = (ray_grid_x + grid_dx, ray_grid_y + grid_dy)
 
-            for contact in contact_dict[ray_sector]:
+                    if neighbor_cell not in contact_dict:
+                        continue
 
-                dist_sq = (contact.pos_x - ray_x) ** 2 + (contact.pos_y - ray_y) ** 2
-                hit_radius = getattr(contact, 'radar_cross_section',
-                                     getattr(contact, 'size', 50))
+                    for contact in contact_dict[neighbor_cell]:
+                        dist_sq = (contact.pos_x - ray_x) ** 2 + (contact.pos_y - ray_y) ** 2
+                        hit_radius = getattr(contact, 'radar_cross_section',
+                                             getattr(contact, 'size', 50))
 
-                if dist_sq < hit_radius ** 2:
-                    target_type = self.assess_target(contact.pos_x, contact.pos_y, contact)
-                    return contact, contact.pos_x, contact.pos_y, target_type
+                        if dist_sq < hit_radius ** 2:
+                            target_type = self.assess_target(contact.pos_x, contact.pos_y, contact)
+                            return contact, contact.pos_x, contact.pos_y, target_type
 
-        return None  # After all contact types checked
+        return None
 
     def change_direction(self, inputs, dt):
         if inputs['arrow_key_left']:

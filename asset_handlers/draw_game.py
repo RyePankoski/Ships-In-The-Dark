@@ -56,7 +56,8 @@ class DrawGame:
             base_path = Path(__file__).resolve().parent.parent
 
         asset_path = base_path / "assets"
-        self.player_ship_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship.png"))
+        self.player_ship_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship2.png"))
+        self.player_ship_moving_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship2_moving.png"))
         self.enemy_ship_sprite = pygame.image.load(os.path.join(asset_path, "pngs/enemy_ship.png"))
         self.missile_sprite = pygame.image.load(os.path.join(asset_path, "pngs/missile.png"))
         self.drone_sprite = pygame.image.load(os.path.join(asset_path, "pngs/drone.png"))
@@ -64,7 +65,7 @@ class DrawGame:
         self.decoy_sprite = pygame.image.load(os.path.join(asset_path, "pngs/decoy.png"))
         self.pirate_ship_sprite = pygame.image.load(os.path.join(asset_path, "pngs/pirate.png"))
         self.pirate_ship_ambushing = pygame.image.load(os.path.join(asset_path, "pngs/pirate_ambushing.png"))
-        self.player_ship_moving_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship_moving.png"))
+
 
         # Generate starfield
         self.stars = generate_stars(10000, WORLD_WIDTH, WORLD_HEIGHT)
@@ -777,6 +778,7 @@ class DrawGame:
         self.screen.blit(text_surf, (text_x, text_y))
 
     def draw_laser(self, lasers, camera):
+
         camera_x, camera_y = camera
 
         # Hotter color profile: white core, vibrant inner red, deep outer red glow
@@ -785,6 +787,7 @@ class DrawGame:
         LASER_GLOW_OUTER = (150, 10, 10)
 
         for start, end, t, target in lasers:
+
             ship = start
 
             sx = int(ship.rect.center[0] - camera_x)

@@ -9,8 +9,8 @@ def serialize_state(state):
             'pos_x': ship.pos_x,
             'pos_y': ship.pos_y,
             'heading': ship.heading,
-            'vel_x': ship.vel_x,
-            'vel_y': ship.vel_y,
+            'vel_x': ship.dx,
+            'vel_y': ship.dy,
             'player_id': str(ship.player_id) if ship.player_id else None,
         }
         serialized_ships.append(ship_dict)

@@ -1,25 +1,20 @@
-import random
 import json
-
-from objects.decoy import Decoy
-from utility.constants import WORLD_HEIGHT, WORLD_WIDTH, GRID_SIZE
-from utility.util import end_blit
-
-from asset_handlers.draw_game import DrawGame
-from asset_handlers.draw_ui import DrawUI
+import random
 
 from ai.player_ship_ai import PlayerShipAI
-
-from objects.asteroid import Asteroid
-from objects.missile import Missile
-from objects.mining_vessel import MiningVessel
-from objects.drone import Drone
-from objects.ship import Ship
-
+from asset_handlers.draw_game import DrawGame
+from asset_handlers.draw_ui import DrawUI
 from instruments.close_range_scan import CloseRangeScan
 from instruments.deep_field_scan import DeepFieldScan
 from instruments.laser_assessor import LaserAssessor
 from instruments.radar_system import RadarSystem
+from objects.asteroid import Asteroid
+from objects.decoy import Decoy
+from objects.drone import Drone
+from objects.mining_vessel import MiningVessel
+from objects.missile import Missile
+from objects.ship import Ship
+from utility.util import *
 
 
 class MainScene:
@@ -52,12 +47,22 @@ class MainScene:
 
         # Create player ship and enemy ship
         if not self.connected:
+
+            self.init_asteroids_and_drones()
+
+            while True:
+                x = random.randint(0, WORLD_WIDTH)
+                y = random.randint(0, WORLD_HEIGHT)
+
+                if self.is_empty_space(x, y):
+                    self.player_ship = Ship(x, y, is_player=True, player_id=1)
+                    break
+                else:
+                    continue
+
             self.enemy_ship = Ship(random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT), is_player=False, is_ai=True)
-            self.player_ship = Ship(random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT), is_player=True, player_id=1)
-            # self.player_ship = Ship(200, 200, is_player=True, player_id=1)
             self.ships.append(self.player_ship)
             self.ships.append(self.enemy_ship)
-            self.init_asteroids_and_drones()
             self.init_p_field()
 
         # Subsystems
@@ -87,7 +92,7 @@ class MainScene:
         self.lock_inputs = False
 
         # Fun cinematic type stuff
-        self.ftl_traveling = True
+        self.ftl_traveling = False
         self.ftl_travel_timer = 0
         self.ftl_travel_cooldown = 5
 
@@ -116,7 +121,9 @@ class MainScene:
         # self.lasers.append([self.player_ship, (self.player_ship.rect.center[0] + 50, self.player_ship.rect.center[1]), 2, None])
 
     def run(self, inputs, dt):
+
         if not self.player_ship.alive:
+            self.death_screen()
             if not self.end_tripped:
                 self.audio_manager.stop_all()
                 self.audio_manager.play_sfx('death_screen')
@@ -132,28 +139,17 @@ class MainScene:
             self.close_range_scan.update(self.dict_objects, self.list_objects)
 
         self.timers(dt)
+
         self.handle_radar()
         self.handle_p_field(dt)
         self.handle_laser_assessor(inputs, dt)
+        self.handle_asteroid_lasers(dt)
+
         self.handle_general_sound_effects()
         self.build_object_dicts()
         self.draw_scene()
-        self.handle_asteroid_lasers(dt)
+
         self.explosions = []
-
-    def update_p_field(self, strength, p_type):
-
-        x, y = self.player_ship.rect.center[0], self.player_ship.rect.center[1]
-
-        if x < 0 or y < 0:
-            return
-        if x > WORLD_WIDTH or y > WORLD_HEIGHT:
-            return
-
-        cx = x // GRID_SIZE
-        cy = y // GRID_SIZE
-
-        self.p_field[(cx, cy)].append((strength, p_type, (x, y)))
 
     def handle_p_field(self, dt):
         for cell in self.p_field.values():
@@ -184,7 +180,7 @@ class MainScene:
         if self.player_ship.manual_control:
             if inputs['up'] or inputs['left'] or inputs['down'] or inputs['right']:
                 self.audio_manager.play_sfx('thrust')
-                self.update_p_field(1, 'movement')
+                update_p_field(self.player_ship, self.p_field, 1, 'movement')
             else:
                 self.audio_manager.stop_sfx('thrust')
 
@@ -211,8 +207,7 @@ class MainScene:
                 self.player_ship.fire()
                 self.input_cooling_down = True
                 self.audio_manager.play_sfx('fire_missile')
-                self.update_p_field(20, 'movement')
-
+                update_p_field(self.player_ship, self.p_field, 20, 'movement')
             if inputs["l"]:
                 self.player_ship.manual_control = not self.player_ship.manual_control
                 self.audio_manager.play_sfx('retro_beep')
@@ -226,7 +221,7 @@ class MainScene:
                 self.player_ship.unconfirmed_signatures = []
                 self.radar_system.begin_scan(self.player_ship, self.dict_objects, self.list_objects)
                 self.input_cooling_down = True
-                self.update_p_field(5, 'movement')
+                update_p_field(self.player_ship, self.p_field, 5, 'movement')
             if inputs['i']:
                 self.player_ship.laser_on = not self.player_ship.laser_on
                 self.laser_assessor.laser_locked = False
@@ -238,7 +233,6 @@ class MainScene:
                 self.audio_manager.play_sfx('dfs_toggle')
                 self.input_cooling_down = True
                 self.player_ship.deep_field_contacts = []
-
             if inputs['m']:
                 self.is_map_open = not self.is_map_open
                 self.input_cooling_down = True
@@ -249,7 +243,7 @@ class MainScene:
             if inputs['t']:
                 self.blinking = True
                 self.audio_manager.play_sfx('blink')
-                self.update_p_field(40, 'movement')
+                update_p_field(self.player_ship, self.p_field, 40, 'movement')
 
             # Complex inputs
             if inputs['esc']:
@@ -273,7 +267,7 @@ class MainScene:
                     self.player_ship.deep_field_contacts = self.deep_field_scan.run_scan(self.dict_objects, self.list_objects)
                     self.audio_manager.play_sfx('dfs_scan')
                     self.input_cooling_down = True
-                    self.update_p_field(8, 'movement')
+                    update_p_field(self.player_ship, self.p_field, 8, 'movement')
                 if inputs['arrow_key_up'] or inputs['arrow_key_down']:
                     self.deep_field_scan.change_direction(inputs)
                     self.audio_manager.play_sfx('dfs_dir_change')
@@ -292,7 +286,6 @@ class MainScene:
                     self.laser_assessor.laser_locked = True
 
     def handle_asteroid_lasers(self, dt):
-
         lasers_to_remove = []
         for laser in self.lasers:
             laser[2] -= dt
@@ -300,9 +293,7 @@ class MainScene:
                 lasers_to_remove.append(laser)
                 if laser[3] is not None:
                     laser[3].alive = False
-
                 continue
-
         for laser in lasers_to_remove:
             self.lasers.remove(laser)
 
@@ -313,7 +304,6 @@ class MainScene:
     def handle_laser_assessor(self, inputs, dt):
         if self.laser_assessor.laser_locked:
             self.player_ship.target = self.laser_assessor.current_target
-
         if self.player_ship.laser_on:
             self.laser_endpoint, self.laser_target_type = self.laser_assessor.shine_laser(self.dict_objects, self.list_objects)
             self.laser_assessor.change_direction(inputs, dt)
@@ -385,10 +375,10 @@ class MainScene:
 
                 if (ship_grid_x, ship_grid_y) in self.asteroids:
                     for asteroid in self.asteroids[(ship_grid_x, ship_grid_y)]:
-                        distance = (ship.rect.center[0] - asteroid.pos_x) ** 2 + (ship.rect.center[1] - asteroid.pos_y) ** 2
-                        if distance < asteroid.size ** 2:
-                            ship.vel_x *= -1.5
-                            ship.vel_y *= -1.5
+                        distance, in_range = squared_distance(self.player_ship.rect.center, (asteroid.pos_x, asteroid.pos_y), asteroid.size)
+                        if in_range:
+                            ship.dx *= -1.5
+                            ship.dy *= -1.5
 
         def _handle_missiles():
             if not self.missiles:
@@ -399,8 +389,9 @@ class MainScene:
                     continue
                 if missile.contact == self.player_ship:
                     self.player_ship.enemy_has_missile_solution = True
-                    distance = (missile.pos_x - self.player_ship.rect.center[0]) ** 2 + (missile.pos_y - self.player_ship.rect.center[1]) ** 2
-                    if distance < 1000 ** 2:
+
+                    distance, in_range = squared_distance(self.player_ship.rect.center, (missile.pos_x, missile.pos_y), 800)
+                    if in_range:
                         self.player_ship.catastrophic_warning = True
                         self.audio_manager.play_sfx('catastrophic_warning')
                     else:
@@ -486,8 +477,8 @@ class MainScene:
                 bullet.run(dt)
 
                 for ship in self.ships:
-                    distance = (bullet.pos_x - ship.rect.center[0]) ** 2 + (bullet.pos_y - ship.rect.center[1]) ** 2
-                    if distance < 25 ** 2:
+                    distance, in_range = squared_distance(ship.rect.center, (bullet.pos_x, bullet.pos_y), 25)
+                    if in_range:
                         ship.health -= 2
                         ship.took_damage = True
                         self.audio_manager.play_sfx('damage_taken')
@@ -495,8 +486,8 @@ class MainScene:
 
                 for cell in self.asteroids.values():
                     for asteroid in cell:
-                        distance = (bullet.pos_x - asteroid.pos_x) ** 2 + (bullet.pos_y - asteroid.pos_y) ** 2
-                        if distance < asteroid.size ** 2:
+                        distance, in_range = squared_distance((bullet.pos_x, bullet.pos_y), (asteroid.pos_x, asteroid.pos_y), asteroid.size)
+                        if in_range:
                             bullets_to_remove.append(bullet)
 
             for bullet in bullets_to_remove:
@@ -552,8 +543,14 @@ class MainScene:
                 self.blink_arriving = True
                 self.blinking_timer = 0
 
-                self.player_ship.pos_x = random.randint(0, WORLD_WIDTH)
-                self.player_ship.pos_y = random.randint(0, WORLD_HEIGHT)
+                while True:
+                    self.player_ship.pos_x = random.randint(0, WORLD_WIDTH)
+                    self.player_ship.pos_y = random.randint(0, WORLD_HEIGHT)
+
+                    if self.is_empty_space(self.player_ship.rect.center[0], self.player_ship.rect.center[1]):
+                        break
+                    else:
+                        continue
 
         if self.blink_arriving:
             self.blink_arrival_timer += dt
@@ -577,12 +574,13 @@ class MainScene:
         missile = Missile(self.player_ship.rect.center[0], self.player_ship.rect.center[1], 0, 0, self.player_ship.target, self.player_ship.player_id)
         self.missiles.append(missile)
 
+    def death_screen(self):
+        # Need this function otherwise the animation doesn't play
+        self.draw_game.start_blit()
+        self.draw_game.draw_end_game()
+        end_blit()
+
     def draw_scene(self):
-        if not self.player_ship.alive:
-            self.draw_game.start_blit()
-            self.draw_game.draw_end_game()
-            end_blit()
-            return
 
         self.draw_game.start_blit()
         camera_x, camera_y = self.find_camera()
@@ -657,8 +655,27 @@ class MainScene:
 
         return camera_x, camera_y
 
+    def is_empty_space(self, x, y):
+        cell = (int(x // GRID_SIZE), int(y // GRID_SIZE))
+        if cell in self.asteroids:
+            for asteroid in self.asteroids[cell]:
+                distance, in_range = squared_distance((x, y), (asteroid.pos_x, asteroid.pos_y), asteroid.size + 50)
+
+                if in_range:
+                    # We collide with an asteroid, return false
+                    return False
+                else:
+                    # Keep searching for asteroids
+                    continue
+
+            # No asteroids in the cell collide, so return True
+            return True
+        else:
+            # If there isn't even a cell here, there are no asteroids, return True.
+            return True
+
     def init_asteroids_and_drones(self):
-        for i in range(800):
+        for i in range(10):
             pos_x = random.randint(0, WORLD_WIDTH)
             pos_y = random.randint(0, WORLD_HEIGHT)
 
@@ -730,8 +747,8 @@ class MainScene:
                 player_id=ship_dict['player_id']
             )
             ship.heading = ship_dict['heading']
-            ship.vel_x = ship_dict['vel_x']
-            ship.vel_y = ship_dict['vel_y']
+            ship.dx = ship_dict['vel_x']
+            ship.dy = ship_dict['vel_y']
             self.ships.append(ship)
 
         # Reconstruct missiles from server data
