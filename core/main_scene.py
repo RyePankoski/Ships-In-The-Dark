@@ -483,6 +483,8 @@ class MainScene:
                         ship.took_damage = True
                         self.audio_manager.play_sfx('damage_taken')
                         bullets_to_remove.append(bullet)
+                    if bullet.alive is False:
+                        bullets_to_remove.append(bullet)
 
                 for cell in self.asteroids.values():
                     for asteroid in cell:
@@ -675,7 +677,7 @@ class MainScene:
             return True
 
     def init_asteroids_and_drones(self):
-        for i in range(10):
+        for i in range(100):
             pos_x = random.randint(0, WORLD_WIDTH)
             pos_y = random.randint(0, WORLD_HEIGHT)
 

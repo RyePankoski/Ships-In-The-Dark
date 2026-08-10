@@ -20,6 +20,9 @@ class Bullet:
         if self.lifetime <= 0:
             self.alive = False
 
+        if self.pos_x < 0 or self.pos_x > WORLD_WIDTH or self.pos_y < 0 or self.pos_y > WORLD_HEIGHT:
+            self.alive = False
+
         ratio = max(0, self.lifetime / BULLET_LIFETIME) # noqa
         r = 255
         g = int(255 * ratio)

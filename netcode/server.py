@@ -1,37 +1,6 @@
 import json
 from netcode.server_scene import ServerScene
-
-
-def serialize_state(state):
-    serialized_ships = []
-    for ship in state.get('player_ships', []):
-        ship_dict = {
-            'pos_x': ship.pos_x,
-            'pos_y': ship.pos_y,
-            'heading': ship.heading,
-            'vel_x': ship.dx,
-            'vel_y': ship.dy,
-            'player_id': str(ship.player_id) if ship.player_id else None,
-        }
-        serialized_ships.append(ship_dict)
-
-    # Serialize missiles
-    serialized_missiles = []
-    for missile in state.get('missiles', []):
-        missile_dict = {
-            'pos_x': missile.pos_x,
-            'pos_y': missile.pos_y,
-            'heading': missile.heading,
-            'velocity': missile.velocity,
-            'fuel': missile.fuel,
-            'alive': missile.alive,
-        }
-        serialized_missiles.append(missile_dict)
-
-    return {
-        'player_ships': serialized_ships,
-        'missiles': serialized_missiles,
-    }
+from utility.util import serialize_state
 
 
 class Server:
@@ -49,7 +18,6 @@ class Server:
             self.listen_for_messages()
             self.parse_messages()
             self.step_if_ready(dt)
-
             state = self.server_scene.get_state()
             if state and state.get('player_ships'):
                 serialized_state = serialize_state(state)

@@ -3,6 +3,7 @@ from objects.ship import Ship
 from objects.missile import Missile
 
 
+
 class ServerScene:
     def __init__(self, connected_players=None):
         self.connected_players = []
@@ -38,7 +39,7 @@ class ServerScene:
             if input_data['p'] and player_ship is not None:
                 if player_ship.can_fire():
                     print(f"[SERVER] Player {player_id} fired")
-                    missile = Missile(player_ship.pos_x, player_ship.pos_y, 0, 0, other_ship)
+                    missile = Missile(player_ship.pos_x, player_ship.pos_y, 0, 0, other_ship, player_id)
                     self.missiles.append(missile)
                     player_ship.fire()
 
