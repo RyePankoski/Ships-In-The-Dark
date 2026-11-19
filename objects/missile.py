@@ -5,19 +5,22 @@ from utility.constants import *
 
 import pygame
 
+from objects.base import WorldObject
 
-class Missile:
-    def __init__(self, x, y, vx, vy, contact, owner):
+
+class Missile(WorldObject):
+    kind = 'missile'
+
+    def __init__(self, x, y, vel_x, vel_y, target, owner):
         self.fuel = MISSILE_FUEL
         self.pos_x = x
         self.pos_y = y
-        self.velocity = 0
-        self.dx = vx
-        self.dy = vy
-        self.player_id = owner
+        self.speed = 0
+        self.vel_x = vel_x
+        self.vel_y = vel_y
 
-        self.contact = contact
-        self.owner = owner
+        self.target = target
+        self.owner = owner  # player_id of whoever fired it
 
         self.heading = 0
         self.has_solution = False
@@ -32,7 +35,7 @@ class Missile:
 
     def run(self, dt, asteroids):
 
-        if self.contact is not None:
+        if self.target is not None:
             self.has_solution = True
 
         if self.fuel > 0:
@@ -45,12 +48,9 @@ class Missile:
 
     def steer(self, asteroids):
 
-        if hasattr(self.contact, 'rect'):
-            dx = self.contact.rect.center[0] - self.pos_x
-            dy = self.contact.rect.center[1] - self.pos_y
-        else:
-            dx = self.contact.pos_x - self.pos_x
-            dy = self.contact.pos_y - self.pos_y
+        target_x, target_y = self.target.center
+        dx = target_x - self.pos_x
+        dy = target_y - self.pos_y
 
         distance = math.hypot(dx, dy)
 
@@ -58,9 +58,9 @@ class Missile:
             self.alive = False
             self.reached_target = True
 
-            if hasattr(self.contact, 'alive'):
-                print(type(self.contact), self.contact.alive)
-                self.contact.alive = False
+            if hasattr(self.target, 'alive'):
+                print(type(self.target), self.target.alive)
+                self.target.alive = False
 
             return
 
@@ -81,12 +81,12 @@ class Missile:
         desired_y = ty + self.avoid_y
         d = math.hypot(desired_x, desired_y) or 1.0
 
-        self.dx = (desired_x / d) * self.velocity
-        self.dy = (desired_y / d) * self.velocity
+        self.vel_x = (desired_x / d) * self.speed
+        self.vel_y = (desired_y / d) * self.speed
 
     def _avoidance(self, tx, ty, asteroids):
 
-        if isinstance(self.contact, Asteroid):
+        if isinstance(self.target, Asteroid):
             return 0.0, 0.0
 
         """One feeler marched ahead along the seek direction. On the first rock,
@@ -115,15 +115,15 @@ class Missile:
         return 0.0, 0.0
 
     def move(self, dt):
-        self.pos_x += self.dx * dt
-        self.pos_y += self.dy * dt
+        self.pos_x += self.vel_x * dt
+        self.pos_y += self.vel_y * dt
 
-        angle = math.atan2(self.dy, -self.dx)
+        angle = math.atan2(self.vel_y, -self.vel_x)
         angle = math.degrees(angle) + 90
         self.heading = angle
 
     def propel(self, dt):
-        self.velocity += MISSILE_THRUST * dt
-        if self.velocity > MISSILE_MAX_SPEED:
-            self.velocity = MISSILE_MAX_SPEED
+        self.speed += MISSILE_THRUST * dt
+        if self.speed > MISSILE_MAX_SPEED:
+            self.speed = MISSILE_MAX_SPEED
         self.fuel -= MISSILE_FUEL_USE_RATE * dt

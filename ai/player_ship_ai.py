@@ -26,8 +26,8 @@ class PlayerShipAI:
             return
 
         speed = min(SHIP_MAX_SPEED, distance)  # noqa
-        ship.dx = (dx / distance) * speed
-        ship.dy = (dy / distance) * speed
+        ship.dir_x = (dx / distance) * speed
+        ship.dir_y = (dy / distance) * speed
 
     def set_destination(self, destination):
         self.destination = destination

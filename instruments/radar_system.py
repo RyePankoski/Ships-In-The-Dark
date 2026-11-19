@@ -1,18 +1,25 @@
 import math
+
+from instruments.instrument import Instrument
+from utility import theme
 from utility.constants import (
-    WORLD_WIDTH, WORLD_HEIGHT, GRID_SIZE,
+    WORLD_WIDTH, WORLD_HEIGHT,
     RADAR_PULSE_RANGE, RADAR_PULSE_SPEED,
 )
 from utility.precomputed_angles import RADAR_DIRECTIONS
 
-from utility import theme
-
-RED = theme.AMBER_BRIGHT   # a return off something you've painted with your laser
-WHITE = theme.GREEN        # an ordinary radar return
+PAINTED_COLOR = theme.AMBER_BRIGHT   # a return off something you've painted with your laser
+RETURN_COLOR = theme.GREEN           # an ordinary radar return
 
 
-class RadarSystem:
-    def __init__(self):
+class RadarSystem(Instrument):
+    """Active sonar-style sweep: rays go out in a circle over many frames and
+    each one leaves a blip where it first hits something."""
+
+    keys = (('r', 'radar_sweep'),)
+
+    def __init__(self, ctx):
+        super().__init__(ctx)
         self.scanning = False
         self.current_frame = 1
         self.scan_frames = 100
@@ -21,31 +28,41 @@ class RadarSystem:
         self.rays_per_frame = None
         self.radar_rays = None
 
-        self.passed_ship = None
-        self.spatial_contacts = None  # Dict of dicts: {'asteroids': {...}, 'drones': {...}}
-        self.list_contacts = None  # Dict of lists: {'ships': [...], 'decoys': [...]}
+        self.signatures = []  # (x, y, color) blips from the current sweep
 
-    def begin_scan(self, passed_ship, spatial_contacts, list_contacts):
-        """Start a radar scan.
+    # --- Instrument ---------------------------------------------------------
+    def actions(self):
+        return {'radar_sweep': self.sweep}
 
-        Args:
-            passed_ship: The scanning ship
-            spatial_contacts: Dict of grid-keyed dicts {'asteroids': {...}, 'drones': {...}, ...}
-            list_contacts: Dict of flat lists {'ships': [...], 'decoys': [...], ...}
-        """
+    def sweep(self):
+        self.ctx.sfx('radar')
+        self.signatures = []
+        self.begin_scan()
+        self.ctx.start_cooldown()
+        self.ctx.noise(5)
+
+    def update(self, dt, inputs):
+        if self.scanning:
+            self.signatures.extend(self.continue_scan())
+
+    def draw_panel(self, ui):
+        ui.draw_radar(self.ship, self.signatures, self.scanning)
+
+    def draw_controls(self, ui):
+        ui.draw_radar_controls(self.scanning)
+
+    # --- The scan -----------------------------------------------------------
+    def begin_scan(self):
         self.scanning = True
         self.current_frame = 1
         self.current_ray = 0
-        self.passed_ship = passed_ship
-        self.spatial_contacts = spatial_contacts
-        self.list_contacts = list_contacts
 
         self.scan_frames = min(100, self.scan_resolution)
         self.radar_rays = RADAR_DIRECTIONS[self.scan_resolution]
         self.rays_per_frame = self.scan_resolution // self.scan_frames
 
     def continue_scan(self):
-        """Continue an ongoing scan. Returns list of signatures found this frame."""
+        """Continue an ongoing scan. Returns the signatures found this frame."""
         signatures = []
 
         if self.current_frame >= self.scan_frames:
@@ -55,7 +72,7 @@ class RadarSystem:
             completion_ratio = self.current_frame / self.scan_frames
             target_ray = int(completion_ratio * self.scan_resolution)
 
-        origin_x, origin_y = self.passed_ship.rect.center
+        origin_x, origin_y = self.ship.center
 
         while self.current_ray < target_ray:
             dx, dy = self.radar_rays[self.current_ray]
@@ -63,91 +80,26 @@ class RadarSystem:
 
             ray_distance = 0
             ray_x, ray_y = origin_x, origin_y
-            hit_found = False
 
             while (0 < ray_x < WORLD_WIDTH and 0 < ray_y < WORLD_HEIGHT
-                   and ray_distance < RADAR_PULSE_RANGE and not hit_found):
+                   and ray_distance < RADAR_PULSE_RANGE):
                 ray_distance += RADAR_PULSE_SPEED
                 ray_x += dx * RADAR_PULSE_SPEED
                 ray_y += dy * RADAR_PULSE_SPEED
-                ray_sector = (int(ray_x // GRID_SIZE), int(ray_y // GRID_SIZE))
 
-                # Check list contacts (ships, decoys, etc.)
-                hit_found = self._check_list_contacts(
-                    ray_x, ray_y, origin_x, origin_y, signatures
-                )
-                if hit_found:
-                    break
-
-                hit_found = self._check_spatial_contacts(
-                    ray_x, ray_y, ray_sector, signatures
-                )
-                if hit_found:
+                hit = self._first_hit(ray_x, ray_y)
+                if hit is not None:
+                    c_x, c_y = hit.center
+                    hit.on_radar_ping(math.atan2(origin_y - c_y, origin_x - c_x))
+                    signatures.append((ray_x, ray_y, PAINTED_COLOR if hit.painted else RETURN_COLOR))
                     break
 
         self.current_frame += 1
         return signatures
 
-    def _check_list_contacts(self, ray_x, ray_y, origin_x, origin_y, signatures):
-        """Check all list-based contacts (ships, decoys, etc.) against the ray.
-
-        Returns True if a hit was found.
-        """
-        if not self.list_contacts:
-            return False
-
-        for contact_type, contacts in self.list_contacts.items():
-            for contact in contacts:
-                if contact is self.passed_ship:
-                    continue
-
-                # Get contact position
-                if hasattr(contact, 'rect'):
-                    c_x, c_y = contact.rect.center
-                else:
-                    c_x, c_y = contact.pos_x, contact.pos_y
-
-                # Check hit
-                dist_sq = (c_x - ray_x) ** 2 + (c_y - ray_y) ** 2
-
-                # Determine hit radius
-                hit_radius = getattr(contact, 'radar_cross_section', 50)
-
-                if dist_sq < hit_radius ** 2:
-                    # Record ping angle
-                    angle = math.atan2(origin_y - c_y, origin_x - c_x)
-                    if hasattr(contact, 'enemy_radar_ping_coordinates'):
-                        contact.enemy_radar_ping_coordinates.append(angle)
-
-                    # Determine color
-                    painted = getattr(contact, 'painted', False)
-                    color = RED if painted else WHITE
-
-                    signatures.append((ray_x, ray_y, color))
-                    return True
-
-        return False
-
-    def _check_spatial_contacts(self, ray_x, ray_y, ray_sector, signatures):
-        if not self.spatial_contacts:
-            return False
-
-        for contact_type, contact_dict in self.spatial_contacts.items():
-            if ray_sector not in contact_dict:
-                continue
-
-            for contact in contact_dict[ray_sector]:
-                dist_sq = (contact.pos_x - ray_x) ** 2 + (contact.pos_y - ray_y) ** 2
-
-                # Determine hit radius
-                hit_radius = getattr(contact, 'radar_cross_section',
-                                     getattr(contact, 'size', 50))
-
-                if dist_sq < hit_radius ** 2:
-                    painted = getattr(contact, 'painted', False) or getattr(contact, 'is_painted', False)
-                    color = RED if painted else WHITE
-
-                    signatures.append((ray_x, ray_y, color))
-                    return True
-
-        return False
+    def _first_hit(self, ray_x, ray_y):
+        for contact in self.contacts.near(ray_x, ray_y, exclude=self.ship):
+            c_x, c_y = contact.center
+            if (c_x - ray_x) ** 2 + (c_y - ray_y) ** 2 < contact.radar_cross_section ** 2:
+                return contact
+        return None

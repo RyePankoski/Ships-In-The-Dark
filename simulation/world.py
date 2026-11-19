@@ -6,6 +6,7 @@ from objects.drone import Drone
 from objects.mining_vessel import MiningVessel
 from objects.missile import Missile
 from objects.ship import Ship
+from simulation.contacts import Contacts
 from utility.constants import *
 from utility.util import squared_distance
 
@@ -72,6 +73,9 @@ class World:
         # (sounds etc). Only meaningful when the world is stepped locally.
         self.events = []
 
+        # How sensors look at everything above (see simulation/contacts.py)
+        self.contacts = Contacts(self)
+
         self._next_id = FIRST_OBJECT_ID
         self._generate(random.Random(seed))
 
@@ -107,7 +111,7 @@ class World:
             drone.net_id = self.new_id()
             self.drones.setdefault(drone.cell, []).append(drone)
 
-        pirate = MiningVessel(100, 100, v=40)
+        pirate = MiningVessel(100, 100, speed=40)
         pirate.net_id = self.new_id()
         self.pirates.setdefault((int(100 // GRID_SIZE), int(100 // GRID_SIZE)), []).append(pirate)
 
@@ -173,16 +177,7 @@ class World:
         """Any world object by id, or None."""
         if net_id is None:
             return None
-        for group in (self.ships, self.decoys, self.missiles):
-            for obj in group:
-                if obj.net_id == net_id:
-                    return obj
-        for grid in (self.asteroids, self.drones, self.pirates):
-            for cell in grid.values():
-                for obj in cell:
-                    if obj.net_id == net_id:
-                        return obj
-        return None
+        return self.contacts.find(net_id)
 
     # ------------------------------------------------------------------
     # Stepping
@@ -255,8 +250,8 @@ class World:
             for asteroid in self.asteroids.get(cell, []):
                 distance, in_range = squared_distance(ship.rect.center, (asteroid.pos_x, asteroid.pos_y), asteroid.size)
                 if in_range:
-                    ship.dx *= -1.5
-                    ship.dy *= -1.5
+                    ship.dir_x *= -1.5
+                    ship.dir_y *= -1.5
 
     def _step_missiles(self, dt):
         for missile in list(self.missiles):

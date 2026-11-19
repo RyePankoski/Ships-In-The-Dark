@@ -1,25 +1,23 @@
 import math
 
-from objects.asteroid import Asteroid
-from objects.drone import Drone
-from objects.mining_vessel import MiningVessel
-from objects.ship import Ship
-from utility.constants import *
+from instruments.instrument import Instrument
+from utility.constants import LASER_RANGE, LASER_STEP, GRID_SIZE, WORLD_WIDTH, WORLD_HEIGHT
 
 
-def _set_painted(contact, value):
-    """Set painted flag on a contact (handles different attribute names)."""
-    if hasattr(contact, 'painted'):
-        contact.painted = value
-    if hasattr(contact, 'is_painted'):
-        contact.is_painted = value
+class LaserAssessor(Instrument):
+    """The targeting laser: sweep it onto something, lock it, and that's a missile solution.
+    Whatever it touches is 'painted', which the other player's ship will notice."""
 
+    keys = (
+        ('i', 'toggle_laser'),
+        ('space', 'laser_lock'),
+    )
 
-class LaserAssessor:
-    def __init__(self, player_ship):
+    def __init__(self, ctx):
+        super().__init__(ctx)
+        self.on = False
         self.painted = False
         self.direction = 0
-        self.ship_of_origin = player_ship
 
         self.signature_position = (0, 0)
         self.previous_signature_position = (0, 0)
@@ -29,22 +27,85 @@ class LaserAssessor:
         self.laser_locked = False
         self.tracking_lost = False
 
-        self.moving_laser = False
+        self.endpoint = (0, 0)           # where the beam ended last frame
+        self.target_type = "Nothing"     # what it ended on
+        self.hit_id = None               # net_id of what it is touching: sent to the world as the command's laser_target
+        self._unpainted = False
 
-    def shine_laser(self, spatial_contacts, list_contacts):
+    # --- Instrument ---------------------------------------------------------
+    def actions(self):
+        return {'toggle_laser': self.toggle, 'laser_lock': self.lock}
+
+    def toggle(self):
+        self.on = not self.on
+        self.laser_locked = False
+        self.set_direction(self.ship.heading)
+        self.ctx.sfx('laser')
+        self.ctx.start_cooldown()
+
+    def lock(self):
+        if not self.on:
+            return
+        self.ctx.start_cooldown()
+        if self.laser_locked:
+            self.ctx.sfx('laser_turn_off')
+            self.laser_locked = False
+        elif self.current_target is not None:
+            self.ctx.sfx('laser_locked')
+            self.laser_locked = True
+
+    def update(self, dt, inputs):
+        cockpit = self.ctx.cockpit
+        if self.laser_locked:
+            cockpit.target = self.current_target
+        cockpit.has_missile_solution = self.laser_locked and cockpit.target is not None
+
+        if self.on:
+            if inputs['arrow_key_left'] or inputs['arrow_key_right']:
+                self.ctx.sfx('laser_dir_change')
+            else:
+                self.ctx.stop_sfx('laser_dir_change')
+
+            self.endpoint, self.target_type = self.shine_laser()
+            self.change_direction(inputs, dt)
+            self._unpainted = False
+        elif not self._unpainted:
+            # Our own ship's `painted` comes from the world (someone else's laser), so leave it alone
+            self.contacts.clear_painted(exclude=self.ship)
+            self._unpainted = True
+
+        # Tell the world what our laser is touching, so the other player gets painted
+        touching = self.on and self.target_type != "NOTHING"
+        self.hit_id = getattr(self.current_target, 'net_id', None) if touching else None
+
+        if self.tracking_lost:
+            self.ctx.sfx('laser_lock_lost')
+            self.tracking_lost = False
+
+    def status_line(self):
+        return f"BEAM LASER  [{'ACT' if self.on else 'OFF'}]", self.on
+
+    def draw_panel(self, ui):
+        ui.draw_laser_targeting_info(self.target_type, self, self.on)
+
+    def draw_overlay(self, ui, camera_x, camera_y):
+        ui.draw_laser(self, self.endpoint, camera_x, camera_y, self.on)
+
+    # --- The beam -----------------------------------------------------------
+    def shine_laser(self):
         if self.laser_locked:
             self.lock_laser()
 
         target_type = "NOTHING"
-
-        # Clear all painted flags
-        self._clear_all_painted(spatial_contacts, list_contacts)
+        self.contacts.clear_painted(exclude=self.ship)
 
         rad = math.radians(self.direction)
         dx, dy = math.cos(rad), math.sin(rad)
 
-        ray_x, ray_y = self.ship_of_origin.rect.center[0], self.ship_of_origin.rect.center[1]
+        ray_x, ray_y = self.ship.center
         travelled = 0.0
+        # Neighbour cells to look in, based on the laser's step size
+        reach = math.ceil(LASER_STEP / GRID_SIZE)
 
         while (0 < ray_x < WORLD_WIDTH and 0 < ray_y < WORLD_HEIGHT
                and travelled < LASER_RANGE):
@@ -52,21 +113,13 @@ class LaserAssessor:
             ray_x += dx * LASER_STEP
             ray_y += dy * LASER_STEP
 
-            # Check list contacts (ships, decoys, missiles, etc.)
-            hit = self._check_list_contacts_laser(ray_x, ray_y, list_contacts)
-            if hit:
-                contact, x, y, target_type = hit
-                _set_painted(contact, True)
-                self.current_target = contact
-                return (ray_x, ray_y), target_type
-
-            ray_sector = (int(ray_x // GRID_SIZE), int(ray_y // GRID_SIZE))
-            hit = self._check_spatial_contacts_laser(ray_x, ray_y, ray_sector, spatial_contacts)
-            if hit:
-                contact, x, y, target_type = hit
-                _set_painted(contact, True)
-                self.current_target = contact
-                return (ray_x, ray_y), target_type
+            for contact in self.contacts.near(ray_x, ray_y, reach, exclude=self.ship):
+                c_x, c_y = contact.center
+                if (c_x - ray_x) ** 2 + (c_y - ray_y) ** 2 < contact.radar_cross_section ** 2:
+                    target_type = self.assess_target(c_x, c_y, contact)
+                    contact.painted = True
+                    self.current_target = contact
+                    return (ray_x, ray_y), target_type
 
         return (ray_x, ray_y), target_type
 
@@ -74,15 +127,8 @@ class LaserAssessor:
         if self.current_target is None or not self.laser_locked:
             return
 
-        # All contacts use pos_x/pos_y
-
-        if isinstance(self.current_target, Ship):
-            target_x, target_y = self.current_target.rect.center
-        else:
-            target_x = self.current_target.pos_x
-            target_y = self.current_target.pos_y
-
-        origin_x, origin_y = self.ship_of_origin.rect.center[0], self.ship_of_origin.rect.center[1]
+        target_x, target_y = self.current_target.center
+        origin_x, origin_y = self.ship.center
 
         angle = math.atan2(target_y - origin_y, target_x - origin_x)
         self.direction = (math.degrees(angle) + 360) % 360
@@ -103,76 +149,6 @@ class LaserAssessor:
         else:
             return "VESSEL / MOVING"
 
-    def _clear_all_painted(self, spatial_contacts, list_contacts):
-        """Clear painted flag on all contacts."""
-        # Spatial contacts
-        if spatial_contacts:
-            for contact_dict in spatial_contacts.values():
-                for cell_list in contact_dict.values():
-                    for contact in cell_list:
-                        _set_painted(contact, False)
-
-        # List contacts
-        if list_contacts:
-            for contact_list in list_contacts.values():
-                for contact in contact_list:
-                    if contact is not self.ship_of_origin:
-                        _set_painted(contact, False)
-
-    def _check_list_contacts_laser(self, ray_x, ray_y, list_contacts):
-        """Check list contacts against ray. Returns (contact, x, y, type) or None."""
-        if not list_contacts:
-            return None
-
-        for contact_type, contacts in list_contacts.items():
-            for contact in contacts:
-                if contact is self.ship_of_origin:
-                    continue
-
-                if isinstance(contact, Ship):
-                    c_x = contact.rect.center[0]
-                    c_y = contact.rect.center[1]
-                else:
-                    c_x = contact.pos_x
-                    c_y = contact.pos_y
-
-                dist_sq = (c_x - ray_x) ** 2 + (c_y - ray_y) ** 2
-                hit_radius = getattr(contact, 'radar_cross_section', 50)
-
-                if dist_sq < hit_radius ** 2:
-                    target_type = self.assess_target(c_x, c_y, contact)
-                    return contact, c_x, c_y, target_type
-
-        return None
-
-    def _check_spatial_contacts_laser(self, ray_x, ray_y, ray_sector, spatial_contacts):
-        if not spatial_contacts:
-            return None
-
-        # Calculate neighbor cell reach based on laser step size
-        reach = math.ceil(LASER_STEP / GRID_SIZE)
-        ray_grid_x, ray_grid_y = ray_sector
-
-        for contact_type, contact_dict in spatial_contacts.items():
-            # Check ray sector and neighbor cells
-            for grid_dx in range(-reach, reach + 1):
-                for grid_dy in range(-reach, reach + 1):
-                    neighbor_cell = (ray_grid_x + grid_dx, ray_grid_y + grid_dy)
-
-                    if neighbor_cell not in contact_dict:
-                        continue
-
-                    for contact in contact_dict[neighbor_cell]:
-                        dist_sq = (contact.pos_x - ray_x) ** 2 + (contact.pos_y - ray_y) ** 2
-                        hit_radius = getattr(contact, 'radar_cross_section',
-                                             getattr(contact, 'size', 50))
-
-                        if dist_sq < hit_radius ** 2:
-                            target_type = self.assess_target(contact.pos_x, contact.pos_y, contact)
-                            return contact, contact.pos_x, contact.pos_y, target_type
-
-        return None
-
     def change_direction(self, inputs, dt):
         if inputs['arrow_key_left']:
             self.direction -= 40 * dt
@@ -180,7 +156,6 @@ class LaserAssessor:
         if inputs['arrow_key_right']:
             self.direction += 40 * dt
             self.laser_locked = False
-        # self.direction %= 360
 
     def set_direction(self, direction):
         self.direction = direction

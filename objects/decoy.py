@@ -1,12 +1,17 @@
 from utility.constants import *
 
-class Decoy:
-    def __init__(self, x, y, dx, dy, v):
+from objects.base import DirectionSteered
+
+
+class Decoy(DirectionSteered):
+    kind = 'decoy'
+
+    def __init__(self, x, y, dir_x, dir_y, speed):
         self.pos_x = x
         self.pos_y = y
-        self.dx = dx
-        self.dy = dy
-        self.v = v
+        self.dir_x = dir_x
+        self.dir_y = dir_y
+        self.speed = speed
 
         self.alive = True
         self.painted = False
@@ -14,7 +19,6 @@ class Decoy:
 
         self.lifetime = DECOY_LIFETIME
 
-        self.player_id = -1
 
 
 
@@ -24,8 +28,8 @@ class Decoy:
 
     def move(self, dt):
 
-        self.pos_x += (self.dx * self.v) * dt
-        self.pos_y += (self.dy * self.v) * dt
+        self.pos_x += self.vel_x * dt
+        self.pos_y += self.vel_y * dt
 
     def life(self, dt):
         self.lifetime -= dt

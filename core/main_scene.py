@@ -6,6 +6,7 @@ from asset_handlers.draw_ui import DrawUI
 from core.cockpit import Cockpit
 from instruments.close_range_scan import CloseRangeScan
 from instruments.deep_field_scan import DeepFieldScan
+from instruments.instrument import InstrumentContext
 from instruments.laser_assessor import LaserAssessor
 from instruments.radar_system import RadarSystem
 from simulation.world import MOVE_KEYS, empty_command
@@ -40,7 +41,6 @@ class MainScene:
         # What we asked the world to do this frame (the client sends it in multiplayer)
         self.command = empty_command()
         self.pending_actions = []
-        self.laser_hit_id = None
 
         # Purely visual
         self.explosions = []
@@ -48,18 +48,25 @@ class MainScene:
         self.p_field = {}
         self.init_p_field()
 
-        self.dict_objects = {}
-        self.list_objects = {}
+        # Instruments: add a new sensor or system by adding it to this list
+        # (see instruments/instrument.py). The order is the order they draw in.
+        self.instrument_context = InstrumentContext(
+            self.player_ship, world.contacts, self.cockpit, audio_manager,
+            make_noise=lambda strength: update_p_field(self.player_ship, self.p_field, strength, 'movement'),
+            start_cooldown=self.start_input_cooldown,
+        )
+        self.radar_system = RadarSystem(self.instrument_context)
+        self.deep_field_scan = DeepFieldScan(self.instrument_context)
+        self.laser_assessor = LaserAssessor(self.instrument_context)
+        self.close_range_scan = CloseRangeScan(self.instrument_context)
+        self.instruments = [self.radar_system, self.deep_field_scan, self.laser_assessor, self.close_range_scan]
 
-        # Subsystems
-        self.close_range_scan = CloseRangeScan(self.player_ship)
-        self.deep_field_scan = DeepFieldScan(self.player_ship)
-        self.laser_assessor = LaserAssessor(self.player_ship)
-        self.radar_system = RadarSystem()
-
-        self.laser_endpoint = (0, 0)
-        self.unpainted_all = False
-        self.laser_target_type = "Nothing"
+        self.key_actions = self.KEY_ACTIONS + tuple(k for i in self.instruments for k in i.keys)
+        self.instrument_actions = {}
+        for instrument in self.instruments:
+            for name, handler in instrument.actions().items():
+                assert name not in self.instrument_actions, f"two instruments answer to {name!r}"
+                self.instrument_actions[name] = handler
 
         # UI stuff
         self.is_map_open = False
@@ -138,8 +145,6 @@ class MainScene:
             self.end_screen("TARGET DESTROYED", "HOSTILE SIGNAL TERMINATED", 'retro_beep', clicks)
             return
 
-        self.build_object_dicts()
-
         self.command = self.handle_inputs(inputs, dt, clicks)
         if self.local:
             self.world.step({self.my_id: self.command}, dt)
@@ -151,19 +156,19 @@ class MainScene:
         self.update_threats()
         self.track_explosions()
 
-        if self.cockpit.close_range_scanning:
-            self.close_range_scan.update(self.dict_objects, self.list_objects)
-
         self.timers(dt)
-
-        self.handle_radar()
         self.handle_p_field(dt)
-        self.handle_laser_assessor(inputs, dt)
+
+        for instrument in self.instruments:
+            instrument.update(dt, inputs)
 
         self.handle_general_sound_effects()
         self.draw_scene()
 
         self.explosions = []
+
+    def start_input_cooldown(self):
+        self.input_cooling_down = True
 
     def handle_p_field(self, dt):
         for cell in self.p_field.values():
@@ -184,32 +189,25 @@ class MainScene:
     # Key -> action, in the order they're checked. Console buttons produce the
     # same action names (see asset_handlers/buttons.py), so a click and a key
     # press both go through perform().
+    # The instruments add their own keys to this (see Instrument.keys).
     KEY_ACTIONS = (
         ('right_alt', 'decoy'),
-        ('q', 'toggle_prox_scan'),
         ('p', 'fire_missile'),
         ('l', 'toggle_autopilot'),
         ('x', 'debug_enemy_fire'),
-        ('r', 'radar_sweep'),
-        ('i', 'toggle_laser'),
-        ('k', 'toggle_dfs'),
         ('m', 'toggle_map'),
         ('t', 'blink'),
         ('esc', 'escape'),
         ('n', 'toggle_p_field'),
-        ('o', 'dfs_scan'),
-        ('arrow_key_up', 'dfs_bearing_cw'),
-        ('arrow_key_down', 'dfs_bearing_ccw'),
-        ('space', 'laser_lock'),
     )
     # While the operator console is up, these keys mean something else
-    CONSOLE_KEY_ACTIONS = {'q': 'quit_to_menu', 'c': 'open_controls'}
+    CONSOLE_Y_ACTIONS = {'q': 'quit_to_menu', 'c': 'open_controls'}
 
     def handle_inputs(self, inputs, dt, clicks=()):
         """Turn this frame's keys and clicks into cockpit changes + a command for the world."""
         command = empty_command()
         command['actions'] = self.pending_actions
-        command['laser_target'] = self.laser_hit_id
+        command['laser_target'] = self.laser_assessor.hit_id
         self.pending_actions = []
         self._command_actions = command['actions']
 
@@ -217,12 +215,6 @@ class MainScene:
             return command
 
         cockpit = self.cockpit
-
-        if cockpit.laser_on:
-            if inputs['arrow_key_left'] or inputs['arrow_key_right']:
-                self.audio_manager.play_sfx('laser_dir_change')
-            else:
-                self.audio_manager.stop_sfx('laser_dir_change')
 
         if cockpit.manual_control:
             if inputs['up'] or inputs['left'] or inputs['down'] or inputs['right']:
@@ -240,20 +232,17 @@ class MainScene:
         # is a single press and always goes through.
         actions = []
         keys_live = not self.input_cooling_down
+        self.instrument_context.keys_live = keys_live
         if keys_live:
             if self.esc_screen:
                 actions += [action for key, action in self.CONSOLE_KEY_ACTIONS.items() if inputs[key]]
-            for key, action in self.KEY_ACTIONS:
+            for key, action in self.key_actions:
                 if inputs[key] and not (self.esc_screen and key in self.CONSOLE_KEY_ACTIONS):
                     actions.append(action)
         actions += clicks
 
         for action in actions:
             self.perform(action)
-
-        # The bearing-change sound is cut once the bearing stops changing
-        if keys_live and cockpit.dfs_on and not any(a.startswith('dfs_bearing') for a in actions):
-            self.audio_manager.stop_sfx('dfs_dir_change')
 
         return command
 
@@ -262,18 +251,17 @@ class MainScene:
         cockpit = self.cockpit
         sfx = self.audio_manager.play_sfx
 
-        if action == 'decoy':
+        instrument_action = self.instrument_actions.get(action)
+        if instrument_action is not None:
+            instrument_action()
+        elif action == 'decoy':
             self._command_actions.append({'type': 'decoy'})
             self.input_cooling_down = True
             sfx('deploy_decoy')
-        elif action == 'toggle_prox_scan':
-            cockpit.close_range_scanning = not cockpit.close_range_scanning
-            sfx('close_range_toggle')
-            self.input_cooling_down = True
         elif action == 'fire_missile':
             target_id = getattr(cockpit.target, 'net_id', None)
             if self.player_ship.can_fire() and target_id is not None:
-                cockpit.laser_on = False
+                self.laser_assessor.on = False
                 self._command_actions.append({'type': 'fire', 'target': target_id})
                 self.input_cooling_down = True
                 sfx('fire_missile')
@@ -290,23 +278,6 @@ class MainScene:
                 enemy.fire()
                 self.world.fire_missile(enemy, self.player_ship)
                 self.input_cooling_down = True
-        elif action == 'radar_sweep':
-            sfx('radar')
-            cockpit.unconfirmed_signatures = []
-            self.radar_system.begin_scan(self.player_ship, self.dict_objects, self.list_objects)
-            self.input_cooling_down = True
-            update_p_field(self.player_ship, self.p_field, 5, 'movement')
-        elif action == 'toggle_laser':
-            cockpit.laser_on = not cockpit.laser_on
-            self.laser_assessor.laser_locked = False
-            self.laser_assessor.set_direction(self.player_ship.heading)
-            sfx('laser')
-            self.input_cooling_down = True
-        elif action == 'toggle_dfs':
-            cockpit.dfs_on = not cockpit.dfs_on
-            sfx('dfs_toggle')
-            self.input_cooling_down = True
-            cockpit.deep_field_contacts = []
         elif action == 'toggle_map':
             self.is_map_open = not self.is_map_open
             self.marker_mode = None
@@ -362,28 +333,6 @@ class MainScene:
             if self.is_map_open:
                 self.is_map_open = False
                 self.marker_mode = None
-        elif action == 'dfs_scan':
-            if cockpit.dfs_on:
-                cockpit.deep_field_contacts = self.deep_field_scan.run_scan(self.dict_objects, self.list_objects)
-                sfx('dfs_scan')
-                self.input_cooling_down = True
-                update_p_field(self.player_ship, self.p_field, 8, 'movement')
-        elif action in ('dfs_bearing_cw', 'dfs_bearing_ccw'):
-            if cockpit.dfs_on:
-                step = 1 if action == 'dfs_bearing_cw' else -1
-                self.deep_field_scan.direction_index = (self.deep_field_scan.direction_index + step) % 8
-                sfx('dfs_dir_change')
-                cockpit.deep_field_contacts = []
-                self.input_cooling_down = True
-        elif action == 'laser_lock':
-            if cockpit.laser_on:
-                self.input_cooling_down = True
-                if self.laser_assessor.laser_locked:
-                    sfx('laser_turn_off')
-                    self.laser_assessor.laser_locked = False
-                elif self.laser_assessor.current_target is not None:
-                    sfx('laser_locked')
-                    self.laser_assessor.laser_locked = True
         # Operator console
         elif action == 'open_console':
             self.esc_screen = True
@@ -404,7 +353,7 @@ class MainScene:
         cockpit.catastrophic_warning = False
 
         for missile in self.world.missiles:
-            if missile.owner == self.my_id or missile.contact is not self.player_ship:
+            if missile.owner == self.my_id or missile.target is not self.player_ship:
                 continue
             cockpit.enemy_has_missile_solution = True
             distance, in_range = squared_distance(self.player_ship.rect.center, (missile.pos_x, missile.pos_y), 800)
@@ -422,27 +371,6 @@ class MainScene:
                 self.explosions.append(position)
         self.previous_missiles = current
 
-    def handle_radar(self):
-        if self.radar_system.scanning:
-            self.cockpit.unconfirmed_signatures.extend(self.radar_system.continue_scan())
-
-    def handle_laser_assessor(self, inputs, dt):
-        cockpit = self.cockpit
-        if self.laser_assessor.laser_locked:
-            cockpit.target = self.laser_assessor.current_target
-        cockpit.has_missile_solution = self.laser_assessor.laser_locked and cockpit.target is not None
-
-        if cockpit.laser_on:
-            self.laser_endpoint, self.laser_target_type = self.laser_assessor.shine_laser(self.dict_objects, self.list_objects)
-            self.laser_assessor.change_direction(inputs, dt)
-            self.unpainted_all = False
-        elif not self.unpainted_all:
-            self.unpaint_all()
-
-        # Tell the world what our laser is touching, so the other player gets painted
-        touching = cockpit.laser_on and self.laser_target_type != "NOTHING"
-        self.laser_hit_id = getattr(self.laser_assessor.current_target, 'net_id', None) if touching else None
-
     def handle_general_sound_effects(self):
         if self.cockpit.enemy_has_missile_solution:
             self.audio_manager.play_sfx('enemy_missile_lock')
@@ -456,9 +384,6 @@ class MainScene:
             self.audio_manager.play_sfx('dfs_scan_warning')
         else:
             self.audio_manager.stop_sfx('dfs_scan_warning')
-        if self.laser_assessor.tracking_lost:
-            self.audio_manager.play_sfx('laser_lock_lost')
-            self.laser_assessor.tracking_lost = False
         if self.player_ship.mining_vessel_sees_you:
             self.audio_manager.play_sfx('pirate_warning')
         else:
@@ -482,19 +407,6 @@ class MainScene:
             self.audio_manager.play_sfx('blink_arrival')
         else:
             self.audio_manager.stop_sfx('blink_arrival')
-
-    def build_object_dicts(self):
-        self.dict_objects = {
-            'asteroids': self.world.asteroids,
-            'drones': self.world.drones,
-            'pirates': self.world.pirates,
-        }
-
-        self.list_objects = {
-            'ships': self.world.ships,
-            'missiles': self.world.missiles,
-            'decoys': self.world.decoys,
-        }
 
     def handle_world_events(self, events):
         """React (sound/UI) to things the world reported.
@@ -619,21 +531,23 @@ class MainScene:
         self.draw_ui.draw_callsign_plate(world.callsigns.get(self.my_id), self.my_id,
                                          len(world.callsigns), self.local)
         self.draw_ui.draw_laser_painted_warning(self.player_ship.painted)
-        self.draw_ui.draw_ship_info(self.player_ship, cockpit)
+        self.draw_ui.draw_ship_info(self.player_ship, cockpit,
+                                    [line for line in (i.status_line() for i in self.instruments) if line])
         self.draw_ui.draw_control_banks(self.player_ship, cockpit, local=self.local,
                                         map_open=self.is_map_open, p_field_open=self.p_field_open,
-                                        blink_busy=self.blinking or self.blink_arriving)
+                                        blink_busy=self.blinking or self.blink_arriving,
+                                        sensor_buttons=[b for i in self.instruments for b in i.console_buttons()])
         self.draw_ui.draw_missile_lock_warning(cockpit.enemy_has_missile_solution)
         self.draw_ui.draw_missile_vectors(self.my_id, world.missiles, camera_x, camera_y)
-        self.draw_ui.draw_radar(self.player_ship, cockpit.unconfirmed_signatures, self.radar_system.scanning)
-        self.draw_ui.draw_laser_targeting_info(self.laser_target_type, self.laser_assessor, cockpit.laser_on)
-        self.draw_ui.draw_deep_field_panel(cockpit.deep_field_contacts, self.deep_field_scan.direction_index, cockpit.dfs_on)
+        for instrument in self.instruments:
+            instrument.draw_panel(self.draw_ui)
         self.draw_ui.draw_catastrophe_warning(cockpit.catastrophic_warning)
         self.draw_ui.draw_dfs_warning(cockpit.dfs_scanned, self.dfs_warning_timer)
         self.draw_ui.draw_missile_contact(self.missile_contact_timer, self.missile_contact_duration)
-        self.draw_ui.draw_dfs_corridor(self.player_ship, self.deep_field_scan.direction_index, camera_x, camera_y, cockpit.dfs_on)
-        self.draw_ui.draw_laser(self.laser_assessor, self.laser_endpoint, camera_x, camera_y, cockpit.laser_on)
-        self.draw_ui.draw_radar_controls(self.radar_system.scanning)
+        for instrument in self.instruments:
+            instrument.draw_overlay(self.draw_ui, camera_x, camera_y)
+        for instrument in self.instruments:
+            instrument.draw_controls(self.draw_ui)
         self.draw_ui.draw_tactical_map(self.is_map_open, self.player_ship, self.close_range_scan.get_contacts(),
                                        markers=self.map_markers, marker_mode=self.marker_mode)
         self.draw_ui.draw_corpo_miner_fire_warning(self.player_ship.mining_vessel_sees_you)
@@ -647,21 +561,6 @@ class MainScene:
 
         self.draw_ui.buttons.end_frame()
         end_blit()
-
-    def unpaint_all(self):
-        # Visual "my laser is on it" flags only. Our own ship's `painted` comes
-        # from the world (someone else's laser), so leave it alone.
-        for cell in self.world.asteroids.values():
-            for asteroid in cell:
-                asteroid.painted = False
-        for cell in self.world.drones.values():
-            for drone in cell:
-                drone.is_painted = False
-        for ship in self.world.ships:
-            if ship is not self.player_ship:
-                ship.painted = False
-
-        self.unpainted_all = True
 
     def find_camera(self):
         camera_x = self.player_ship.rect.center[0] - self.draw_game.screen.get_width() / 2

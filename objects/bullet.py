@@ -1,14 +1,19 @@
 from utility.constants import *
 
 
-class Bullet:
-    def __init__(self, x, y, dx, dy, v):
+from objects.base import DirectionSteered
+
+
+class Bullet(DirectionSteered):
+    kind = 'bullet'
+
+    def __init__(self, x, y, dir_x, dir_y, speed):
         self.color = None
         self.pos_x = x
         self.pos_y = y
-        self.dx = dx
-        self.dy = dy
-        self.v = v
+        self.dir_x = dir_x
+        self.dir_y = dir_y
+        self.speed = speed
 
         self.lifetime = BULLET_LIFETIME
         self.max_lifetime = BULLET_LIFETIME
@@ -30,5 +35,5 @@ class Bullet:
         self.color = (r, g, b)
 
     def move(self, dt):
-        self.pos_x += (self.dx * self.v) * dt
-        self.pos_y += (self.dy * self.v) * dt
+        self.pos_x += self.vel_x * dt
+        self.pos_y += self.vel_y * dt

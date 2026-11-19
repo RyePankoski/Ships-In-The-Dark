@@ -20,16 +20,16 @@ INT = 'int'
 BOOL = 'bool'
 
 SHIP_FIELDS = (
-    ('pos_x', 1), ('pos_y', 1), ('dx', 3), ('dy', 3), ('velocity', 1), ('heading', 1),
+    ('pos_x', 1), ('pos_y', 1), ('dir_x', 3), ('dir_y', 3), ('speed', 1), ('heading', 1),
     ('thrusting', BOOL), ('health', 1), ('health_low', BOOL), ('total_missiles', INT),
     ('missile_cooling_down', BOOL), ('missile_cooldown_timer', 2), ('alive', BOOL),
     ('painted', BOOL), ('took_damage', BOOL), ('mining_vessel_sees_you', BOOL),
 )
 MISSILE_FIELDS = (
-    ('pos_x', 1), ('pos_y', 1), ('dx', 3), ('dy', 3), ('heading', 1), ('velocity', 1),
+    ('pos_x', 1), ('pos_y', 1), ('vel_x', 3), ('vel_y', 3), ('heading', 1), ('speed', 1),
     ('fuel', 1), ('owner', INT), ('alive', BOOL),
 )
-DECOY_FIELDS = (('pos_x', 1), ('pos_y', 1), ('dx', 3), ('dy', 3), ('v', 1))
+DECOY_FIELDS = (('pos_x', 1), ('pos_y', 1), ('dir_x', 3), ('dir_y', 3), ('speed', 1))
 
 
 def make_snapshot(world):
@@ -37,7 +37,7 @@ def make_snapshot(world):
         'ships': [_pack(ship, SHIP_FIELDS, ship.player_id) for ship in world.ships],
         # The missile's target id goes on the end
         'missiles': [
-            _pack(m, MISSILE_FIELDS, m.net_id) + [getattr(m.contact, 'net_id', None)]
+            _pack(m, MISSILE_FIELDS, m.net_id) + [getattr(m.target, 'net_id', None)]
             for m in world.missiles
         ],
         'decoys': [_pack(d, DECOY_FIELDS, d.net_id) for d in world.decoys],
@@ -54,21 +54,18 @@ def apply_snapshot(world, snapshot):
     _sync_list(world.ships, ships, SHIP_FIELDS,
                lambda d: Ship(d['pos_x'], d['pos_y'], player_id=d['id']), key='player_id')
     for ship in world.ships:
-        # Not sent: it's always the length of (dx, dy), see Ship.move
-        ship.total_velocity = (ship.dx ** 2 + ship.dy ** 2) ** 0.5
         ship.update_rect()
 
     decoys = [_unpack(row, DECOY_FIELDS) for row in snapshot['decoys']]
     _sync_list(world.decoys, decoys, DECOY_FIELDS,
-               lambda d: Decoy(d['pos_x'], d['pos_y'], d['dx'], d['dy'], d['v']))
+               lambda d: Decoy(d['pos_x'], d['pos_y'], d['dir_x'], d['dir_y'], d['speed']))
 
     missiles = [_unpack(row, MISSILE_FIELDS) for row in snapshot['missiles']]
     targets = {d['id']: d['extra'][0] for d in missiles}
     _sync_list(world.missiles, missiles, MISSILE_FIELDS,
                lambda d: Missile(d['pos_x'], d['pos_y'], 0, 0, None, d['owner']))
     for missile in world.missiles:
-        missile.player_id = missile.owner
-        missile.contact = world.find(targets[missile.net_id])
+        missile.target = world.find(targets[missile.net_id])
 
 
 def _pack(obj, fields, object_id):

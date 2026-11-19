@@ -8,13 +8,18 @@ from utility.constants import *
 from utility.util import squared_distance, sqrt_distance
 
 
-class MiningVessel:
-    def __init__(self, x, y, dx=0, dy=0, v=0):
+from objects.base import WorldObject
+
+
+class MiningVessel(WorldObject):
+    kind = 'pirate'
+
+    def __init__(self, x, y, vel_x=0, vel_y=0, speed=0):
         self.pos_x = x
         self.pos_y = y
-        self.dx = dx
-        self.dy = dy
-        self.v = v
+        self.vel_x = vel_x
+        self.vel_y = vel_y
+        self.speed = speed
         self.heading = 0
         self.radar_cross_section = 200
 
@@ -31,7 +36,6 @@ class MiningVessel:
         self.shoot_timer = 0
         self.shoot_cooldown = 0.07
 
-        self.player_id = -3
         self.alive = True
 
         self.asteroids_destroyed = 0
@@ -142,17 +146,21 @@ class MiningVessel:
         dy = self.target[1] - self.pos_y
 
         # Normalize and apply velocity
-        self.dx = (dx / distance) * self.v
-        self.dy = (dy / distance) * self.v
+        self.vel_x = (dx / distance) * self.speed
+        self.vel_y = (dy / distance) * self.speed
 
         # Actually move
-        self.pos_x += self.dx * dt
-        self.pos_y += self.dy * dt
+        self.pos_x += self.vel_x * dt
+        self.pos_y += self.vel_y * dt
 
-        angle = math.atan2(self.dy, -self.dx)
+        angle = math.atan2(self.vel_y, -self.vel_x)
         angle = math.degrees(angle) + 90
 
         self.heading = angle
+
+    @property
+    def center(self):
+        return self.rect.center
 
     def update_rect(self):
         self.rect.x = self.pos_x

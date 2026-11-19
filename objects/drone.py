@@ -2,17 +2,19 @@ import math
 import random
 from utility.constants import *
 from utility.util import sqrt_distance
+from objects.base import WorldObject
 
 
-class Drone:
-    def __init__(self, x, y, dx=0, dy=0, v=0):
+class Drone(WorldObject):
+    kind = 'drone'
+
+    def __init__(self, x, y, vel_x=0, vel_y=0, speed=0):
         self.pos_x = x
         self.pos_y = y
-        self.dx = dx
-        self.dy = dy
-        self.velocity = v
+        self.vel_x = vel_x
+        self.vel_y = vel_y
 
-        self.velocity = 50
+        self.speed = 50
         self.radar_cross_section = 60
 
         grid_x = int(x // GRID_SIZE)
@@ -26,7 +28,6 @@ class Drone:
         self.target = None
         self.painted = False
 
-        self.player_id = -2
         self.alive = True
 
     def run_drone(self, asteroids, dt):
@@ -60,9 +61,9 @@ class Drone:
             return
 
         # Normalize and apply velocity
-        self.dx = (dx / distance) * self.velocity
-        self.dy = (dy / distance) * self.velocity
+        self.vel_x = (dx / distance) * self.speed
+        self.vel_y = (dy / distance) * self.speed
 
         # Actually move
-        self.pos_x += self.dx * dt
-        self.pos_y += self.dy * dt
+        self.pos_x += self.vel_x * dt
+        self.pos_y += self.vel_y * dt

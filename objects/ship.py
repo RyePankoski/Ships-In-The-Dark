@@ -3,16 +3,19 @@ import math
 import pygame
 from utility.constants import *
 from ai.ai import AI
+from objects.base import DirectionSteered
 
 
-class Ship:
+class Ship(DirectionSteered):
+    kind = 'ship'
+
     def __init__(self, x=None, y=None, is_player=False, player_id=None, is_ai=False):
         self.player = is_player
         self.pos_x = x
         self.pos_y = y
-        self.dx = 0
-        self.dy = 0
-        self.velocity = 0
+        self.dir_x = 0
+        self.dir_y = 0
+        self.speed = 0
 
         self.player_id = player_id
 
@@ -29,7 +32,6 @@ class Ship:
         # Everything on a Ship is a *fact about the world*: the server owns it in
         # multiplayer and sends it to every client. What a player has switched on
         # or detected lives in core/cockpit.py instead and never leaves the client.
-        self.total_velocity = 0
         self.radar_cross_section = 100
         self.health = 100
 
@@ -57,6 +59,13 @@ class Ship:
     @property
     def net_id(self):
         return self.player_id
+
+    @property
+    def center(self):
+        return self.rect.center
+
+    def on_radar_ping(self, angle):
+        self.enemy_radar_ping_coordinates.append(angle)
 
     def run(self, dt):
 
@@ -103,7 +112,7 @@ class Ship:
             return False
         if self.total_missiles == 0:
             return False
-        if self.velocity > 10:
+        if self.speed > 10:
             return False
         return True
 
@@ -115,67 +124,66 @@ class Ship:
                 self.missile_cooldown_timer = 0
 
     def move(self, dt):
-        self.pos_x += (self.dx * self.velocity) * dt
-        self.pos_y += (self.dy * self.velocity) * dt
+        self.pos_x += self.vel_x * dt
+        self.pos_y += self.vel_y * dt
 
-        angle = math.atan2(self.dy, -self.dx)
+        angle = math.atan2(self.dir_y, -self.dir_x)
         angle = math.degrees(angle) + 90
 
         self.heading = angle
-        self.total_velocity = math.sqrt(self.dx ** 2 + self.dy ** 2)
 
     def apply_inputs(self, inputs, dt):
         boost_amount = 50 if inputs['left_shift'] else 1
 
         if inputs["tab"]:
-            self.velocity *= SHIP_BRAKE_FORCE
+            self.speed *= SHIP_BRAKE_FORCE
 
         if inputs["left"]:
-            self.dx -= ANGLE_CHANGE_SPEED * dt
-            if self.dx < -1:
-                self.dx = -1
+            self.dir_x -= ANGLE_CHANGE_SPEED * dt
+            if self.dir_x < -1:
+                self.dir_x = -1
         if inputs["right"]:
-            self.dx += ANGLE_CHANGE_SPEED * dt
-            if self.dx > 1:
-                self.dx = 1
+            self.dir_x += ANGLE_CHANGE_SPEED * dt
+            if self.dir_x > 1:
+                self.dir_x = 1
         if inputs["up"]:
-            self.dy -= ANGLE_CHANGE_SPEED * dt
-            if self.dy < -1:
-                self.dy = -1
+            self.dir_y -= ANGLE_CHANGE_SPEED * dt
+            if self.dir_y < -1:
+                self.dir_y = -1
         if inputs["down"]:
-            self.dy += ANGLE_CHANGE_SPEED * dt
-            if self.dy > 1:
-                self.dy = 1
+            self.dir_y += ANGLE_CHANGE_SPEED * dt
+            if self.dir_y > 1:
+                self.dir_y = 1
 
-        length = math.sqrt(self.dx ** 2 + self.dy ** 2)
+        length = math.sqrt(self.dir_x ** 2 + self.dir_y ** 2)
 
         if length != 0:
-            self.dx /= length
-            self.dy /= length
+            self.dir_x /= length
+            self.dir_y /= length
 
-        self.dx *= 0.95
-        self.dy *= 0.95
+        self.dir_x *= 0.95
+        self.dir_y *= 0.95
 
         if inputs['up'] or inputs['left'] or inputs['down'] or inputs['right']:
             self.thrusting = True
-            self.velocity += (SHIP_THRUST * boost_amount) * dt
+            self.speed += (SHIP_THRUST * boost_amount) * dt
         else:
             self.thrusting = False
 
-        if self.velocity > SHIP_MAX_SPEED:
+        if self.speed > SHIP_MAX_SPEED:
             if boost_amount >= 50:
                 return
 
-            self.velocity = SHIP_MAX_SPEED
+            self.speed = SHIP_MAX_SPEED
 
     def dampen(self, dt):
-        self.velocity *= (1 - DAMPENING_FORCE * dt)
+        self.speed *= (1 - DAMPENING_FORCE * dt)
 
     def bounce(self):
         if self.pos_x > WORLD_WIDTH or self.pos_x < 0:
-            self.dx *= -1
+            self.dir_x *= -1
         if self.pos_y > WORLD_HEIGHT or self.pos_y < 0:
-            self.dy *= -1
+            self.dir_y *= -1
 
     def update_rect(self):
         self.rect.x = self.pos_x

@@ -177,7 +177,8 @@ class DrawUI:
             r, c = divmod(i, cols)
             self._button((inner.left + c * (bw + gap), top + r * (bh + gap), bw, bh), label, action, **kwargs)
 
-    def draw_control_banks(self, ship, cockpit, local=True, map_open=False, p_field_open=False, blink_busy=False):
+    def draw_control_banks(self, ship, cockpit, local=True, map_open=False, p_field_open=False, blink_busy=False,
+                           sensor_buttons=()):
         """Two banks of switches in the bottom panel, either side of ship telemetry.
 
         Only the controls that don't belong to an instrument live here; the laser,
@@ -204,7 +205,7 @@ class DrawUI:
              dict(key="L", lit=not cockpit.manual_control, enabled=local)),
         ]
         displays = [
-            ("PROX SCAN", 'toggle_prox_scan', dict(key="Q", lit=cockpit.close_range_scanning)),
+            *sensor_buttons,
             ("TAC MAP", 'toggle_map', dict(key="M", lit=map_open)),
             ("P-FIELD", 'toggle_p_field', dict(key="N", lit=p_field_open)),
             ("CONSOLE", 'open_console', dict(key="ESC")),
@@ -238,7 +239,7 @@ class DrawUI:
 
         return radar_x, radar_y, radar_size
 
-    def draw_ship_info(self, ship, cockpit):
+    def draw_ship_info(self, ship, cockpit, instrument_lines=()):
         """Ship telemetry: three columns of readouts in the bottom panel, under the viewport.
 
         Column widths come from the text they hold, so nothing overlaps whatever
@@ -260,23 +261,19 @@ class DrawUI:
             ("NAV-COM", LABEL),
             (f"POS  X {int(ship.pos_x):+06d}  Y {int(ship.pos_y):+06d}", LIVE),
             (f"GRID {self.grid_ref(ship.pos_x, ship.pos_y)}", LIVE),
-            (f"VEL  X {ship.dx:+05.1f}  Y {ship.dy:+05.1f}", LIVE),
-            (f"SPD  {ship.total_velocity:03.0f} u", LIVE),
+            (f"VEL  X {ship.dir_x:+05.1f}  Y {ship.dir_y:+05.1f}", LIVE),
+            (f"SPD  {ship.speed:03.0f} u", LIVE),
             (f"HDG  {int(ship.heading) % 360:03d} DEG", LIVE),
         ]
 
         # --- Column 2: subsystems (value in brackets drives the colour) ---
         manual = getattr(cockpit, "manual_control", False)
         damp = getattr(ship, "dampening", True)
-        laser = getattr(cockpit, "laser_on", False)
-        crs = getattr(cockpit, "close_range_scanning", False)
-        n_sig = len(getattr(cockpit, "confirmed_signatures", []))
         subsystems = [
             ("SUBSYSTEMS", LABEL),
             (f"FLT MODE    [{'MANUAL' if manual else 'AUTO'}]", on(manual)),
             (f"INERT DAMP  [{'ON' if damp else 'OFF'}]", on(damp)),
-            (f"BEAM LASER  [{'ACT' if laser else 'OFF'}]", on(laser)),
-            (f"PROX SCAN   [{'ON' if crs else 'OFF'}] {n_sig} SIG", on(crs)),
+            *[(text, on(is_on)) for text, is_on in instrument_lines],
         ]
 
         # --- Column 3: tactical ---
@@ -729,7 +726,7 @@ class DrawUI:
         world_left, world_right, world_top, world_bottom = self._get_world_bounds()
         radar_x, radar_y, radar_size = self._get_radar_bounds()
 
-        origin_x, origin_y = laser.ship_of_origin.rect.center
+        origin_x, origin_y = laser.ship.rect.center
         end_x, end_y = laser_endpoint
 
         beam_color = self.COLOR_LASER_PAINTED if laser.painted else self.COLOR_LASER_ACTIVE
@@ -870,7 +867,7 @@ class DrawUI:
 
         enemy_missiles = [
             m for m in missiles
-            if getattr(m, "contact", None) and m.contact.player_id == player_id
+            if getattr(m.target, "net_id", None) == player_id
         ]
 
         for missile in enemy_missiles:
@@ -901,10 +898,10 @@ class DrawUI:
                 edge_y = center_y + rel_y * scale
 
                 # Missile Velocity Vector Alignment
-                vel_mag = math.hypot(missile.dx, missile.dy)
+                vel_mag = math.hypot(missile.vel_x, missile.vel_y)
                 if vel_mag > 0:
-                    dir_x = missile.dx / vel_mag
-                    dir_y = missile.dy / vel_mag
+                    dir_x = missile.vel_x / vel_mag
+                    dir_y = missile.vel_y / vel_mag
                 else:
                     dir_x = -rel_x / math.hypot(rel_x, rel_y)
                     dir_y = -rel_y / math.hypot(rel_x, rel_y)

@@ -26,5 +26,5 @@ class AI:
         dy = self.destination[1] - self.ship.pos_y
 
         speed = min(SHIP_MAX_SPEED, distance)  # noqa
-        self.ship.dx = (dx / distance) * speed
-        self.ship.dy = (dy / distance) * speed
+        self.ship.dir_x = (dx / distance) * speed
+        self.ship.dir_y = (dy / distance) * speed

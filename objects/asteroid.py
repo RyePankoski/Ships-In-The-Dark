@@ -20,7 +20,12 @@ def make_outline(x, y, size):
     return outline
 
 
-class Asteroid:
+from objects.base import WorldObject
+
+
+class Asteroid(WorldObject):
+    kind = 'asteroid'
+
     def __init__(self, x, y, size):
         self.pos_x = x
         self.pos_y = y
@@ -30,7 +35,6 @@ class Asteroid:
         self.radar_cross_section = self.size
         self.id_for_ui = None
 
-        self.player_id = 0
         self.alive = True
 
         grid_x = int(x // GRID_SIZE)
