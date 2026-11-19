@@ -1,69 +1,55 @@
-import json
-import random
+import pygame
 
 from ai.player_ship_ai import PlayerShipAI
 from asset_handlers.draw_game import DrawGame
 from asset_handlers.draw_ui import DrawUI
+from core.cockpit import Cockpit
 from instruments.close_range_scan import CloseRangeScan
 from instruments.deep_field_scan import DeepFieldScan
 from instruments.laser_assessor import LaserAssessor
 from instruments.radar_system import RadarSystem
-from objects.asteroid import Asteroid
-from objects.decoy import Decoy
-from objects.drone import Drone
-from objects.mining_vessel import MiningVessel
-from objects.missile import Missile
-from objects.ship import Ship
+from simulation.world import MOVE_KEYS, empty_command
 from utility.util import *
 
 
 class MainScene:
-    def __init__(self, connected, screen, audio_manager):
+    """One player's view of a World: instruments, UI, camera and sound.
+
+    local=True:  single-player. This scene owns the World and steps it.
+    local=False: multiplayer. The World is a copy kept up to date by the client
+                 from server snapshots; this scene only reads it and produces
+                 `self.command` for the client to send to the server.
+    The scene never moves world objects itself; it asks via a command.
+    """
+
+    def __init__(self, screen, audio_manager, world, my_id, local=True):
         # Classes
         self.player_ship_ai = PlayerShipAI()
         self.audio_manager = audio_manager
         self.draw_game = DrawGame(screen)
         self.draw_ui = DrawUI(screen)
 
-        # Netcode stuff
-        self.connected = connected
-        self.my_player_id = None
+        # World + who we are in it
+        self.world = world
+        self.my_id = my_id
+        self.local = local
+        self.player_ship = world.get_ship(my_id)
+        self.player_ship.player = True
+        self.cockpit = Cockpit()
 
-        # Lists
+        # What we asked the world to do this frame (the client sends it in multiplayer)
+        self.command = empty_command()
+        self.pending_actions = []
+        self.laser_hit_id = None
+
+        # Purely visual
         self.explosions = []
-        self.missiles = []
-
-        self.bullets = []
-        self.decoys = []
-        self.ships = []
-
-        self.asteroids = {}
-        self.pirates = {}
+        self.previous_missiles = {}
         self.p_field = {}
-        self.drones = {}
+        self.init_p_field()
 
         self.dict_objects = {}
         self.list_objects = {}
-
-        # Create player ship and enemy ship
-        if not self.connected:
-
-            self.init_asteroids_and_drones()
-
-            while True:
-                x = random.randint(0, WORLD_WIDTH)
-                y = random.randint(0, WORLD_HEIGHT)
-
-                if self.is_empty_space(x, y):
-                    self.player_ship = Ship(x, y, is_player=True, player_id=1)
-                    break
-                else:
-                    continue
-
-            self.enemy_ship = Ship(random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT), is_player=False, is_ai=True)
-            self.ships.append(self.player_ship)
-            self.ships.append(self.enemy_ship)
-            self.init_p_field()
 
         # Subsystems
         self.close_range_scan = CloseRangeScan(self.player_ship)
@@ -80,6 +66,8 @@ class MainScene:
         self.end_tripped = False
         self.grid_on = True
         self.p_field_open = False
+        self.esc_screen = False
+        self.control_screen = False
 
         # input timer
         self.input_timer_cooldown = 0.2
@@ -90,9 +78,11 @@ class MainScene:
 
         # Control
         self.lock_inputs = False
+        self.quit_requested = False  # set by QUIT TO MENU; the client acts on it
+        self._command_actions = []   # this frame's command['actions'], for perform()
 
         # Fun cinematic type stuff
-        self.ftl_traveling = False
+        self.ftl_traveling = True
         self.ftl_travel_timer = 0
         self.ftl_travel_cooldown = 5
 
@@ -116,26 +106,47 @@ class MainScene:
         self.asteroid_laser_on = True
         self.asteroid_laser_timer = 0
         self.asteroid_laser_cooldown = 4
-        self.lasers = []
 
-        # self.lasers.append([self.player_ship, (self.player_ship.rect.center[0] + 50, self.player_ship.rect.center[1]), 2, None])
+        # Counts down from missile_contact_duration after any missile hit
+        self.missile_contact_timer = 0
+        self.missile_contact_duration = 1.5
 
-    def run(self, inputs, dt):
+    @property
+    def enemy_ships(self):
+        return [ship for ship in self.world.ships if ship is not self.player_ship]
+
+    def run(self, inputs, dt, events=()):
+        # Buttons drawn last frame are what this frame's clicks land on
+        buttons = self.draw_ui.buttons
+        clicks = buttons.clicked_actions(events)
+        held = buttons.held_action()
+        if held:
+            inputs = dict(inputs)
+            inputs[held] = True
 
         if not self.player_ship.alive:
-            self.death_screen()
-            if not self.end_tripped:
-                self.audio_manager.stop_all()
-                self.audio_manager.play_sfx('death_screen')
-                self.end_tripped = True
+            self.end_screen("SIGNAL LOST", "SYNCHRONIZATION LOST. DEBUG:42*1a2", 'death_screen', clicks)
             return
 
-        # Let the server handle inputs and simulation
-        if not self.connected:
-            self.handle_inputs(inputs, dt)
-            self.handle_alive_things(dt)
+        # In single-player the AI enemy dying is not the end of the game (yet).
+        if not self.local and self.enemy_ships and not any(ship.alive for ship in self.enemy_ships):
+            self.end_screen("TARGET DESTROYED", "HOSTILE SIGNAL TERMINATED", 'retro_beep', clicks)
+            return
 
-        if self.player_ship.close_range_scanning:
+        self.build_object_dicts()
+
+        self.command = self.handle_inputs(inputs, dt, clicks)
+        if self.local:
+            self.world.step({self.my_id: self.command}, dt)
+            self.handle_world_events(self.world.events)
+
+        for ship in self.world.ships:
+            ship.player = ship is self.player_ship
+
+        self.update_threats()
+        self.track_explosions()
+
+        if self.cockpit.close_range_scanning:
             self.close_range_scan.update(self.dict_objects, self.list_objects)
 
         self.timers(dt)
@@ -143,10 +154,8 @@ class MainScene:
         self.handle_radar()
         self.handle_p_field(dt)
         self.handle_laser_assessor(inputs, dt)
-        self.handle_asteroid_lasers(dt)
 
         self.handle_general_sound_effects()
-        self.build_object_dicts()
         self.draw_scene()
 
         self.explosions = []
@@ -167,152 +176,245 @@ class MainScene:
             for entry in entries_to_remove:
                 cell.remove(entry)
 
-    def handle_inputs(self, inputs, dt):
-        if self.lock_inputs:
-            return
+    # Key -> action, in the order they're checked. Console buttons produce the
+    # same action names (see asset_handlers/buttons.py), so a click and a key
+    # press both go through perform().
+    KEY_ACTIONS = (
+        ('right_alt', 'decoy'),
+        ('q', 'toggle_prox_scan'),
+        ('p', 'fire_missile'),
+        ('l', 'toggle_autopilot'),
+        ('x', 'debug_enemy_fire'),
+        ('r', 'radar_sweep'),
+        ('i', 'toggle_laser'),
+        ('k', 'toggle_dfs'),
+        ('m', 'toggle_map'),
+        ('t', 'blink'),
+        ('esc', 'escape'),
+        ('n', 'toggle_p_field'),
+        ('o', 'dfs_scan'),
+        ('arrow_key_up', 'dfs_bearing_cw'),
+        ('arrow_key_down', 'dfs_bearing_ccw'),
+        ('space', 'laser_lock'),
+    )
+    # While the operator console is up, these keys mean something else
+    CONSOLE_KEY_ACTIONS = {'q': 'quit_to_menu', 'c': 'open_controls'}
 
-        if self.player_ship.laser_on:
+    def handle_inputs(self, inputs, dt, clicks=()):
+        """Turn this frame's keys and clicks into cockpit changes + a command for the world."""
+        command = empty_command()
+        command['actions'] = self.pending_actions
+        command['laser_target'] = self.laser_hit_id
+        self.pending_actions = []
+        self._command_actions = command['actions']
+
+        if self.lock_inputs:
+            return command
+
+        cockpit = self.cockpit
+
+        if cockpit.laser_on:
             if inputs['arrow_key_left'] or inputs['arrow_key_right']:
                 self.audio_manager.play_sfx('laser_dir_change')
             else:
                 self.audio_manager.stop_sfx('laser_dir_change')
 
-        if self.player_ship.manual_control:
+        if cockpit.manual_control:
             if inputs['up'] or inputs['left'] or inputs['down'] or inputs['right']:
                 self.audio_manager.play_sfx('thrust')
                 update_p_field(self.player_ship, self.p_field, 1, 'movement')
             else:
                 self.audio_manager.stop_sfx('thrust')
 
-        if self.player_ship.manual_control:
-            self.player_ship.apply_inputs(inputs, dt)
-        else:
+        if cockpit.manual_control:
+            command['move'] = {key: bool(inputs[key]) for key in MOVE_KEYS}
+        elif self.local:
             self.player_ship_ai.run(self.player_ship)
 
-        if not self.input_cooling_down:
+        # Held keys repeat every frame, so they wait out the cooldown. A click
+        # is a single press and always goes through.
+        actions = []
+        keys_live = not self.input_cooling_down
+        if keys_live:
+            if self.esc_screen:
+                actions += [action for key, action in self.CONSOLE_KEY_ACTIONS.items() if inputs[key]]
+            for key, action in self.KEY_ACTIONS:
+                if inputs[key] and not (self.esc_screen and key in self.CONSOLE_KEY_ACTIONS):
+                    actions.append(action)
+        actions += clicks
 
-            # Flat inputs
+        for action in actions:
+            self.perform(action)
 
-            if inputs['right_alt']:
-                self.build_decoy()
+        # The bearing-change sound is cut once the bearing stops changing
+        if keys_live and cockpit.dfs_on and not any(a.startswith('dfs_bearing') for a in actions):
+            self.audio_manager.stop_sfx('dfs_dir_change')
+
+        return command
+
+    def perform(self, action):
+        """Do one cockpit action, whether it came from a key or a button."""
+        cockpit = self.cockpit
+        sfx = self.audio_manager.play_sfx
+
+        if action == 'decoy':
+            self._command_actions.append({'type': 'decoy'})
+            self.input_cooling_down = True
+            sfx('deploy_decoy')
+        elif action == 'toggle_prox_scan':
+            cockpit.close_range_scanning = not cockpit.close_range_scanning
+            sfx('close_range_toggle')
+            self.input_cooling_down = True
+        elif action == 'fire_missile':
+            target_id = getattr(cockpit.target, 'net_id', None)
+            if self.player_ship.can_fire() and target_id is not None:
+                cockpit.laser_on = False
+                self._command_actions.append({'type': 'fire', 'target': target_id})
                 self.input_cooling_down = True
-                self.audio_manager.play_sfx('deploy_decoy')
-            if inputs['q']:
-                self.player_ship.close_range_scanning = not self.player_ship.close_range_scanning
-                self.audio_manager.play_sfx('close_range_toggle')
-                self.input_cooling_down = True
-            if inputs["p"] and self.player_ship.can_fire() and self.player_ship.target:
-                self.player_ship.laser_on = False
-                self.fire_missile()
-                self.player_ship.fire()
-                self.input_cooling_down = True
-                self.audio_manager.play_sfx('fire_missile')
+                sfx('fire_missile')
                 update_p_field(self.player_ship, self.p_field, 20, 'movement')
-            if inputs["l"]:
-                self.player_ship.manual_control = not self.player_ship.manual_control
-                self.audio_manager.play_sfx('retro_beep')
+        # Autopilot and the debug "enemy fires at me" key only exist in single-player
+        elif action == 'toggle_autopilot':
+            if self.local:
+                cockpit.manual_control = not cockpit.manual_control
+                sfx('retro_beep')
                 self.input_cooling_down = True
-            if inputs["x"]:
-                self.enemy_ship.fire()
-                self.missiles.append(Missile(self.enemy_ship.pos_x, self.enemy_ship.pos_y, 0, 0, self.player_ship, self.enemy_ship.player_id))
+        elif action == 'debug_enemy_fire':
+            if self.local and self.enemy_ships:
+                enemy = self.enemy_ships[0]
+                enemy.fire()
+                self.world.fire_missile(enemy, self.player_ship)
                 self.input_cooling_down = True
-            if inputs['r']:
-                self.audio_manager.play_sfx('radar')
-                self.player_ship.unconfirmed_signatures = []
-                self.radar_system.begin_scan(self.player_ship, self.dict_objects, self.list_objects)
-                self.input_cooling_down = True
-                update_p_field(self.player_ship, self.p_field, 5, 'movement')
-            if inputs['i']:
-                self.player_ship.laser_on = not self.player_ship.laser_on
-                self.laser_assessor.laser_locked = False
-                self.laser_assessor.set_direction(self.player_ship.heading)
-                self.audio_manager.play_sfx('laser')
-                self.input_cooling_down = True
-            if inputs['k']:
-                self.player_ship.dfs_on = not self.player_ship.dfs_on
-                self.audio_manager.play_sfx('dfs_toggle')
-                self.input_cooling_down = True
-                self.player_ship.deep_field_contacts = []
-            if inputs['m']:
-                self.is_map_open = not self.is_map_open
-                self.input_cooling_down = True
-                if self.is_map_open:
-                    self.audio_manager.play_sfx('map_open')
-                else:
-                    self.audio_manager.play_sfx('map_close')
-            if inputs['t']:
+        elif action == 'radar_sweep':
+            sfx('radar')
+            cockpit.unconfirmed_signatures = []
+            self.radar_system.begin_scan(self.player_ship, self.dict_objects, self.list_objects)
+            self.input_cooling_down = True
+            update_p_field(self.player_ship, self.p_field, 5, 'movement')
+        elif action == 'toggle_laser':
+            cockpit.laser_on = not cockpit.laser_on
+            self.laser_assessor.laser_locked = False
+            self.laser_assessor.set_direction(self.player_ship.heading)
+            sfx('laser')
+            self.input_cooling_down = True
+        elif action == 'toggle_dfs':
+            cockpit.dfs_on = not cockpit.dfs_on
+            sfx('dfs_toggle')
+            self.input_cooling_down = True
+            cockpit.deep_field_contacts = []
+        elif action == 'toggle_map':
+            self.is_map_open = not self.is_map_open
+            self.input_cooling_down = True
+            sfx('map_open' if self.is_map_open else 'map_close')
+        elif action == 'blink':
+            if not self.blinking:
                 self.blinking = True
-                self.audio_manager.play_sfx('blink')
+                sfx('blink')
                 update_p_field(self.player_ship, self.p_field, 40, 'movement')
+        elif action == 'escape':
+            if self.control_screen:
+                self.control_screen = False
 
-            # Complex inputs
-            if inputs['esc']:
-                if self.is_map_open:
-                    self.is_map_open = False
-                if self.p_field_open:
-                    self.p_field_open = False
+            if self.esc_screen:
+                self.esc_screen = False
+            elif self.is_map_open is False and self.p_field_open is False:
+                self.esc_screen = True
 
-            if inputs['n']:
-                if self.p_field_open:
-                    self.audio_manager.play_sfx('p_field_close')
-                else:
-                    self.audio_manager.play_sfx('p_field_open')
+            if self.is_map_open:
+                self.is_map_open = False
+            if self.p_field_open:
+                self.p_field_open = False
 
+            self.input_cooling_down = True
+        elif action == 'toggle_p_field':
+            sfx('p_field_close' if self.p_field_open else 'p_field_open')
+            self.input_cooling_down = True
+            self.p_field_open = not self.p_field_open
+            if self.is_map_open:
+                self.is_map_open = False
+        elif action == 'dfs_scan':
+            if cockpit.dfs_on:
+                cockpit.deep_field_contacts = self.deep_field_scan.run_scan(self.dict_objects, self.list_objects)
+                sfx('dfs_scan')
                 self.input_cooling_down = True
-                self.p_field_open = not self.p_field_open
-                if self.is_map_open:
-                    self.is_map_open = False
-            if self.player_ship.dfs_on:
-                if inputs['o']:
-                    self.player_ship.deep_field_contacts = self.deep_field_scan.run_scan(self.dict_objects, self.list_objects)
-                    self.audio_manager.play_sfx('dfs_scan')
-                    self.input_cooling_down = True
-                    update_p_field(self.player_ship, self.p_field, 8, 'movement')
-                if inputs['arrow_key_up'] or inputs['arrow_key_down']:
-                    self.deep_field_scan.change_direction(inputs)
-                    self.audio_manager.play_sfx('dfs_dir_change')
-                    self.player_ship.deep_field_contacts = []
-                    self.input_cooling_down = True
-                else:
-                    self.audio_manager.stop_sfx('dfs_dir_change')
-
-            if inputs['space'] and self.player_ship.laser_on:
+                update_p_field(self.player_ship, self.p_field, 8, 'movement')
+        elif action in ('dfs_bearing_cw', 'dfs_bearing_ccw'):
+            if cockpit.dfs_on:
+                step = 1 if action == 'dfs_bearing_cw' else -1
+                self.deep_field_scan.direction_index = (self.deep_field_scan.direction_index + step) % 8
+                sfx('dfs_dir_change')
+                cockpit.deep_field_contacts = []
+                self.input_cooling_down = True
+        elif action == 'laser_lock':
+            if cockpit.laser_on:
                 self.input_cooling_down = True
                 if self.laser_assessor.laser_locked:
-                    self.audio_manager.play_sfx('laser_turn_off')
+                    sfx('laser_turn_off')
                     self.laser_assessor.laser_locked = False
                 elif self.laser_assessor.current_target is not None:
-                    self.audio_manager.play_sfx('laser_locked')
+                    sfx('laser_locked')
                     self.laser_assessor.laser_locked = True
+        # Operator console
+        elif action == 'open_console':
+            self.esc_screen = True
+            self.input_cooling_down = True
+        elif action == 'open_controls':
+            self.control_screen = True
+            self.input_cooling_down = True
+        elif action == 'close_controls':
+            self.control_screen = False
+            self.input_cooling_down = True
+        elif action in ('quit_to_menu', 'return_to_menu'):
+            self.quit_requested = True
 
-    def handle_asteroid_lasers(self, dt):
-        lasers_to_remove = []
-        for laser in self.lasers:
-            laser[2] -= dt
-            if laser[2] < 0:
-                lasers_to_remove.append(laser)
-                if laser[3] is not None:
-                    laser[3].alive = False
+    def update_threats(self):
+        """Work out the missile warnings from the missiles in the world."""
+        cockpit = self.cockpit
+        cockpit.enemy_has_missile_solution = False
+        cockpit.catastrophic_warning = False
+
+        for missile in self.world.missiles:
+            if missile.owner == self.my_id or missile.contact is not self.player_ship:
                 continue
-        for laser in lasers_to_remove:
-            self.lasers.remove(laser)
+            cockpit.enemy_has_missile_solution = True
+            distance, in_range = squared_distance(self.player_ship.rect.center, (missile.pos_x, missile.pos_y), 800)
+            if in_range:
+                cockpit.catastrophic_warning = True
+
+        if cockpit.catastrophic_warning:
+            self.audio_manager.play_sfx('catastrophic_warning')
+
+    def track_explosions(self):
+        """A missile that was there last frame and isn't now has exploded."""
+        current = {missile.net_id: (missile.pos_x, missile.pos_y) for missile in self.world.missiles}
+        for missile_id, position in self.previous_missiles.items():
+            if missile_id not in current:
+                self.explosions.append(position)
+        self.previous_missiles = current
 
     def handle_radar(self):
         if self.radar_system.scanning:
-            self.player_ship.unconfirmed_signatures.extend(self.radar_system.continue_scan())
+            self.cockpit.unconfirmed_signatures.extend(self.radar_system.continue_scan())
 
     def handle_laser_assessor(self, inputs, dt):
+        cockpit = self.cockpit
         if self.laser_assessor.laser_locked:
-            self.player_ship.target = self.laser_assessor.current_target
-        if self.player_ship.laser_on:
+            cockpit.target = self.laser_assessor.current_target
+        cockpit.has_missile_solution = self.laser_assessor.laser_locked and cockpit.target is not None
+
+        if cockpit.laser_on:
             self.laser_endpoint, self.laser_target_type = self.laser_assessor.shine_laser(self.dict_objects, self.list_objects)
             self.laser_assessor.change_direction(inputs, dt)
             self.unpainted_all = False
         elif not self.unpainted_all:
             self.unpaint_all()
 
+        # Tell the world what our laser is touching, so the other player gets painted
+        touching = cockpit.laser_on and self.laser_target_type != "NOTHING"
+        self.laser_hit_id = getattr(self.laser_assessor.current_target, 'net_id', None) if touching else None
+
     def handle_general_sound_effects(self):
-        if self.player_ship.enemy_has_missile_solution:
+        if self.cockpit.enemy_has_missile_solution:
             self.audio_manager.play_sfx('enemy_missile_lock')
         else:
             self.audio_manager.stop_sfx('enemy_missile_lock')
@@ -320,7 +422,7 @@ class MainScene:
             self.audio_manager.play_sfx('laser_warning')
         else:
             self.audio_manager.stop_sfx('laser_warning')
-        if self.player_ship.dfs_scanned:
+        if self.cockpit.dfs_scanned:
             self.audio_manager.play_sfx('dfs_scan_warning')
         else:
             self.audio_manager.stop_sfx('dfs_scan_warning')
@@ -353,175 +455,45 @@ class MainScene:
 
     def build_object_dicts(self):
         self.dict_objects = {
-            'asteroids': self.asteroids,
-            'drones': self.drones,
-            'pirates': self.pirates,
+            'asteroids': self.world.asteroids,
+            'drones': self.world.drones,
+            'pirates': self.world.pirates,
         }
 
         self.list_objects = {
-            'ships': self.ships,
-            'missiles': self.missiles,
-            'decoys': self.decoys,
+            'ships': self.world.ships,
+            'missiles': self.world.missiles,
+            'decoys': self.world.decoys,
         }
 
-    def handle_alive_things(self, dt):
+    def handle_world_events(self, events):
+        """React (sound/UI) to things the world reported.
 
-        def _handle_ships():
-            for ship in self.ships:
-                ship.run(dt)
-
-                ship_grid_x = int(ship.rect.center[0] // GRID_SIZE)
-                ship_grid_y = int(ship.rect.center[1] // GRID_SIZE)
-
-                if (ship_grid_x, ship_grid_y) in self.asteroids:
-                    for asteroid in self.asteroids[(ship_grid_x, ship_grid_y)]:
-                        distance, in_range = squared_distance(self.player_ship.rect.center, (asteroid.pos_x, asteroid.pos_y), asteroid.size)
-                        if in_range:
-                            ship.dx *= -1.5
-                            ship.dy *= -1.5
-
-        def _handle_missiles():
-            if not self.missiles:
-                self.player_ship.enemy_has_missile_solution = False
-
-            for missile in self.missiles:
-                if missile.owner == self.player_ship.player_id:
-                    continue
-                if missile.contact == self.player_ship:
-                    self.player_ship.enemy_has_missile_solution = True
-
-                    distance, in_range = squared_distance(self.player_ship.rect.center, (missile.pos_x, missile.pos_y), 800)
-                    if in_range:
-                        self.player_ship.catastrophic_warning = True
-                        self.audio_manager.play_sfx('catastrophic_warning')
-                    else:
-                        self.player_ship.catastrophic_warning = False
-
-            missiles_to_remove = []
-            for missile in self.missiles:
-                missile.run(dt, self.asteroids)
-                if missile.alive is False:
-                    missiles_to_remove.append(missile)
-
-            for missile in missiles_to_remove:
-                self.explosions.append((missile.pos_x, missile.pos_y))
-                self.missiles.remove(missile)
-
-        def _handle_decoys():
-            decoys_to_remove = []
-            for decoy in self.decoys:
-                decoy.run(dt)
-                if decoy.alive is False:
-                    decoys_to_remove.append(decoy)
-
-            for decoy in decoys_to_remove:
-                self.decoys.remove(decoy)
-
-        def _handle_asteroids():
-            asteroids_to_remove = []
-            for cell in self.asteroids.values():
-                for asteroid in cell:
-                    if not asteroid.alive:
-                        asteroids_to_remove.append(asteroid)
-                        continue
-            for asteroid in asteroids_to_remove:
-                self.asteroids[asteroid.cell].remove(asteroid)
-                if not self.asteroids[asteroid.cell]:
-                    del self.asteroids[asteroid.cell]
-
-        def _handle_drones():
-            drones_to_remove = []
-            for cell in list(self.drones.keys()):
-                for drone in list(self.drones[cell]):
-                    drone.run_drone(self.asteroids, dt)
-
-                    if drone.alive is False:
-                        drones_to_remove.append(drone)
-
-                    # Only update the grid if the cell changed
-                    new_cell = (int(drone.pos_x // GRID_SIZE), int(drone.pos_y // GRID_SIZE))
-                    if new_cell != drone.cell:
-                        self.drones[drone.cell].remove(drone)
-                        if not self.drones[drone.cell]:
-                            del self.drones[drone.cell]
-
-                        if new_cell not in self.drones:
-                            self.drones[new_cell] = []
-                        self.drones[new_cell].append(drone)
-                        drone.cell = new_cell
-
-            for drone in drones_to_remove:
-                self.drones[drone.cell].remove(drone)
-                if not self.drones[drone.cell]:
-                    del self.drones[drone.cell]
-
-        def _handle_pirates():
-            for cell in list(self.pirates.keys()):
-                for pirate in list(self.pirates[cell]):
-                    pirate.run(self.ships, self.bullets, self.lasers, self.asteroids, dt)
-
-                    new_cell = (int(pirate.pos_x // GRID_SIZE), int(pirate.pos_y // GRID_SIZE))
-                    if new_cell != cell:
-                        # Remove from old cell
-                        self.pirates[cell].remove(pirate)
-                        if not self.pirates[cell]:
-                            del self.pirates[cell]
-
-                        if new_cell not in self.pirates:
-                            self.pirates[new_cell] = []
-                        self.pirates[new_cell].append(pirate)
-
-        def _handle_bullets():
-            bullets_to_remove = []
-            for bullet in self.bullets:
-                bullet.run(dt)
-
-                for ship in self.ships:
-                    distance, in_range = squared_distance(ship.rect.center, (bullet.pos_x, bullet.pos_y), 25)
-                    if in_range:
-                        ship.health -= 2
-                        ship.took_damage = True
-                        self.audio_manager.play_sfx('damage_taken')
-                        bullets_to_remove.append(bullet)
-                    if bullet.alive is False:
-                        bullets_to_remove.append(bullet)
-
-                for cell in self.asteroids.values():
-                    for asteroid in cell:
-                        distance, in_range = squared_distance((bullet.pos_x, bullet.pos_y), (asteroid.pos_x, asteroid.pos_y), asteroid.size)
-                        if in_range:
-                            bullets_to_remove.append(bullet)
-
-            for bullet in bullets_to_remove:
-                if bullet in self.bullets:
-                    self.bullets.remove(bullet)
-
-        _handle_ships()
-        _handle_missiles()
-        _handle_decoys()
-        _handle_asteroids()
-        _handle_drones()
-        _handle_pirates()
-        _handle_bullets()
-
-    def build_decoy(self):
-        dx = random.randint(-1, 1)
-        dy = random.randint(-1, 1)
-        v = random.randint(20, 25)
-        decoy = Decoy(self.player_ship.rect.center[0], self.player_ship.rect.center[1], dx, dy, v)
-        self.decoys.append(decoy)
+        Single-player: straight from world.events after each step.
+        Multiplayer: relayed from the server by the client (see NetClient.take_events).
+        """
+        for kind, *data in events:
+            if kind == 'damage':
+                if data[0] == self.my_id:
+                    self.audio_manager.play_sfx('damage_taken')
+            elif kind == 'missile_contact':
+                self.audio_manager.play_sfx('missile_contact', force=True)
+                self.missile_contact_timer = self.missile_contact_duration
 
     def timers(self, dt):
+        if self.missile_contact_timer > 0:
+            self.missile_contact_timer = max(0, self.missile_contact_timer - dt)
+
         if self.input_cooling_down:
             self.input_timer += dt
             if self.input_timer > self.input_timer_cooldown:
                 self.input_timer = 0
                 self.input_cooling_down = False
 
-        if self.player_ship.dfs_scanned:
+        if self.cockpit.dfs_scanned:
             self.dfs_warning_timer += dt
             if self.dfs_warning_timer > self.dfs_warning_cooldown:
-                self.player_ship.dfs_scanned = False
+                self.cockpit.dfs_scanned = False
                 self.dfs_warning_timer = 0
 
         if self.ftl_traveling:
@@ -544,15 +516,8 @@ class MainScene:
                 self.blinking = False
                 self.blink_arriving = True
                 self.blinking_timer = 0
-
-                while True:
-                    self.player_ship.pos_x = random.randint(0, WORLD_WIDTH)
-                    self.player_ship.pos_y = random.randint(0, WORLD_HEIGHT)
-
-                    if self.is_empty_space(self.player_ship.rect.center[0], self.player_ship.rect.center[1]):
-                        break
-                    else:
-                        continue
+                # The world does the actual jump (on the server, in multiplayer)
+                self.pending_actions.append({'type': 'blink'})
 
         if self.blink_arriving:
             self.blink_arrival_timer += dt
@@ -572,35 +537,43 @@ class MainScene:
                 self.asteroid_laser_on = False
                 self.asteroid_laser_timer = 0
 
-    def fire_missile(self):
-        missile = Missile(self.player_ship.rect.center[0], self.player_ship.rect.center[1], 0, 0, self.player_ship.target, self.player_ship.player_id)
-        self.missiles.append(missile)
-
-    def death_screen(self):
-        # Need this function otherwise the animation doesn't play
+    def end_screen(self, message, subtitle, sound, clicks=()):
+        if 'return_to_menu' in clicks:
+            self.quit_requested = True
         self.draw_game.start_blit()
-        self.draw_game.draw_end_game()
+        self.draw_game.draw_end_game(message, subtitle)
+        self.draw_ui.buttons.begin_frame()
+        self.draw_ui.draw_end_screen_button()
+        self.draw_ui.buttons.end_frame()
         end_blit()
+        if not self.end_tripped:
+            self.audio_manager.stop_all()
+            self.audio_manager.play_sfx(sound)
+            self.end_tripped = True
 
     def draw_scene(self):
+        world = self.world
+        cockpit = self.cockpit
 
         self.draw_game.start_blit()
+        self.draw_ui.buttons.begin_frame()
+
         camera_x, camera_y = self.find_camera()
 
         if self.ftl_traveling:
             self.draw_game.draw_ftl_jump_tunnel(self.ftl_traveling)
         else:
             self.draw_game.draw_stars(camera_x, camera_y)
-            self.draw_game.draw_asteroids(self.asteroids, camera_x, camera_y)
-            self.draw_game.draw_ships(self.ships, camera_x, camera_y)
-            self.draw_game.draw_drones(self.drones, camera_x, camera_y)
-            self.draw_game.draw_pirates(self.pirates, camera_x, camera_y)
-            self.draw_game.draw_decoys(self.decoys, camera_x, camera_y)
-            self.draw_game.draw_bullets(self.bullets, camera_x, camera_y)
-            self.draw_game.draw_missiles(self.missiles, camera_x, camera_y)
+            self.draw_game.draw_asteroids(world.asteroids, camera_x, camera_y)
+            self.draw_game.draw_ships(world.ships, camera_x, camera_y)
+            self.draw_game.draw_drones(world.drones, camera_x, camera_y)
+            self.draw_game.draw_pirates(world.pirates, camera_x, camera_y)
+            self.draw_game.draw_decoys(world.decoys, camera_x, camera_y)
+            self.draw_game.draw_bullets(world.bullets, camera_x, camera_y)
+            self.draw_game.draw_missiles(world.missiles, camera_x, camera_y)
             self.draw_game.draw_explosions(self.explosions, camera_x, camera_y)
 
-        self.draw_game.draw_laser(self.lasers, (camera_x, camera_y))
+        self.draw_game.draw_laser(world.lasers, (camera_x, camera_y))
 
         if self.ftl_arriving:
             self.draw_game.draw_ftl_arrival(self.player_ship.rect.center, self.ftl_arrival_timer, camera_x, camera_y, self.ftl_arrival_cooldown)
@@ -614,112 +587,53 @@ class MainScene:
         self.draw_ui.draw_world_grid(camera_x, camera_y, self.grid_on)
         self.draw_ui.draw_ui_layout()
         self.draw_ui.draw_laser_painted_warning(self.player_ship.painted)
-        self.draw_ui.draw_ship_info(self.player_ship)
-        self.draw_ui.draw_missile_lock_warning(self.player_ship.enemy_has_missile_solution)
-        self.draw_ui.draw_missile_vectors(self.player_ship.player_id, self.missiles, camera_x, camera_y)
-        self.draw_ui.draw_radar(self.player_ship, self.player_ship.unconfirmed_signatures, self.radar_system.scanning)
-        self.draw_ui.draw_laser_targeting_info(self.laser_target_type, self.laser_assessor, self.player_ship.laser_on)
-        self.draw_ui.draw_deep_field_panel(self.player_ship.deep_field_contacts, self.deep_field_scan.direction_index, self.player_ship.dfs_on)
-        self.draw_ui.draw_catastrophe_warning(self.player_ship.catastrophic_warning)
-        self.draw_ui.draw_dfs_warning(self.player_ship.dfs_scanned, self.dfs_warning_timer)
-        self.draw_ui.draw_dfs_corridor(self.player_ship, self.deep_field_scan.direction_index, camera_x, camera_y, self.player_ship.dfs_on)
-        self.draw_ui.draw_laser(self.laser_assessor, self.laser_endpoint, camera_x, camera_y, self.player_ship.laser_on)
+        self.draw_ui.draw_ship_info(self.player_ship, cockpit)
+        self.draw_ui.draw_control_banks(self.player_ship, cockpit, local=self.local,
+                                        map_open=self.is_map_open, p_field_open=self.p_field_open,
+                                        blink_busy=self.blinking or self.blink_arriving)
+        self.draw_ui.draw_missile_lock_warning(cockpit.enemy_has_missile_solution)
+        self.draw_ui.draw_missile_vectors(self.my_id, world.missiles, camera_x, camera_y)
+        self.draw_ui.draw_radar(self.player_ship, cockpit.unconfirmed_signatures, self.radar_system.scanning)
+        self.draw_ui.draw_laser_targeting_info(self.laser_target_type, self.laser_assessor, cockpit.laser_on)
+        self.draw_ui.draw_deep_field_panel(cockpit.deep_field_contacts, self.deep_field_scan.direction_index, cockpit.dfs_on)
+        self.draw_ui.draw_catastrophe_warning(cockpit.catastrophic_warning)
+        self.draw_ui.draw_dfs_warning(cockpit.dfs_scanned, self.dfs_warning_timer)
+        self.draw_ui.draw_missile_contact(self.missile_contact_timer, self.missile_contact_duration)
+        self.draw_ui.draw_dfs_corridor(self.player_ship, self.deep_field_scan.direction_index, camera_x, camera_y, cockpit.dfs_on)
+        self.draw_ui.draw_laser(self.laser_assessor, self.laser_endpoint, camera_x, camera_y, cockpit.laser_on)
+        self.draw_ui.draw_radar_controls(self.radar_system.scanning)
         self.draw_ui.draw_tactical_map(self.is_map_open, self.player_ship, self.close_range_scan.get_contacts())
         self.draw_ui.draw_corpo_miner_fire_warning(self.player_ship.mining_vessel_sees_you)
         self.draw_ui.draw_bullet_damage_glitch(self.player_ship.took_damage)
         self.draw_ui.draw_low_health_warning(self.player_ship.health_low)
         self.draw_ui.draw_p_field_scanner(self.p_field, self.player_ship.rect.center[0], self.player_ship.rect.center[1], self.p_field_open)
-        self.draw_ui.draw_scanlines()
 
+        # Last, so the console sits on top of everything else
+        self.draw_ui.draw_pause_screen(self.esc_screen)
+        self.draw_ui.draw_controls_screen(self.control_screen)
+
+        self.draw_ui.buttons.end_frame()
         end_blit()
 
     def unpaint_all(self):
-        for cell in self.asteroids.values():
+        # Visual "my laser is on it" flags only. Our own ship's `painted` comes
+        # from the world (someone else's laser), so leave it alone.
+        for cell in self.world.asteroids.values():
             for asteroid in cell:
                 asteroid.painted = False
-        for cell in self.drones.values():
+        for cell in self.world.drones.values():
             for drone in cell:
                 drone.is_painted = False
-        for ship in self.ships:
-            ship.painted = False
+        for ship in self.world.ships:
+            if ship is not self.player_ship:
+                ship.painted = False
 
         self.unpainted_all = True
 
     def find_camera(self):
-        player_ship = next((ship for ship in self.ships if ship.player), None)
-
-        if player_ship:
-            camera_x = player_ship.rect.center[0] - self.draw_game.screen.get_width() / 2
-            camera_y = player_ship.rect.center[1] - self.draw_game.screen.get_height() / 2
-        else:
-            camera_x = 0
-            camera_y = 0
-
+        camera_x = self.player_ship.rect.center[0] - self.draw_game.screen.get_width() / 2
+        camera_y = self.player_ship.rect.center[1] - self.draw_game.screen.get_height() / 2
         return camera_x, camera_y
-
-    def is_empty_space(self, x, y):
-        cell = (int(x // GRID_SIZE), int(y // GRID_SIZE))
-        if cell in self.asteroids:
-            for asteroid in self.asteroids[cell]:
-                distance, in_range = squared_distance((x, y), (asteroid.pos_x, asteroid.pos_y), asteroid.size + 50)
-
-                if in_range:
-                    # We collide with an asteroid, return false
-                    return False
-                else:
-                    # Keep searching for asteroids
-                    continue
-
-            # No asteroids in the cell collide, so return True
-            return True
-        else:
-            # If there isn't even a cell here, there are no asteroids, return True.
-            return True
-
-    def init_asteroids_and_drones(self):
-        for i in range(100):
-            pos_x = random.randint(0, WORLD_WIDTH)
-            pos_y = random.randint(0, WORLD_HEIGHT)
-
-            grid_x = int(pos_x // GRID_SIZE)
-            grid_y = int(pos_y // GRID_SIZE)
-            cell = (grid_x, grid_y)
-
-            if cell not in self.asteroids:
-                self.asteroids[cell] = []
-
-            asteroid = Asteroid(pos_x, pos_y, random.randint(50, 100))
-            self.asteroids[cell].append(asteroid)
-
-        for i in range(8):
-            pos_x = random.randint(0, WORLD_WIDTH)
-            pos_y = random.randint(0, WORLD_HEIGHT)
-
-            grid_x = int(pos_x // GRID_SIZE)
-            grid_y = int(pos_y // GRID_SIZE)
-            cell = (grid_x, grid_y)
-
-            if cell not in self.drones:
-                self.drones[cell] = []
-
-            drone = Drone(pos_x, pos_y)
-            self.drones[cell].append(drone)
-
-        for i in range(1):
-            # pos_x = random.randint(0, WORLD_WIDTH)
-            # pos_y = random.randint(0, WORLD_HEIGHT)
-            pos_x = 100
-            pos_y = 100
-
-            grid_x = int(pos_x // GRID_SIZE)
-            grid_y = int(pos_y // GRID_SIZE)
-            cell = (grid_x, grid_y)
-
-            if cell not in self.pirates:
-                self.pirates[cell] = []
-
-            pirate = MiningVessel(pos_x, pos_y, v=40)
-            self.pirates[cell].append(pirate)
 
     def init_p_field(self):
         i = WORLD_WIDTH // GRID_SIZE
@@ -728,44 +642,3 @@ class MainScene:
             for z in range(j):
                 cell = (x, z)
                 self.p_field[cell] = []
-
-    def inject_server_data(self, message):
-        message_dict = json.loads(message)
-
-        # Store our player_id so we know which ship is ours
-        self.my_player_id = message_dict.get('your_player_id')
-        ship_dicts = message_dict['player_ships']
-
-        # Reconstruct ships from server data
-        self.ships = []
-        for ship_dict in ship_dicts:
-            # Determine if this is our ship
-            is_player = (ship_dict['player_id'] == self.my_player_id)
-
-            ship = Ship(
-                x=ship_dict['pos_x'],
-                y=ship_dict['pos_y'],
-                is_player=is_player,
-                player_id=ship_dict['player_id']
-            )
-            ship.heading = ship_dict['heading']
-            ship.dx = ship_dict['vel_x']
-            ship.dy = ship_dict['vel_y']
-            self.ships.append(ship)
-
-        # Reconstruct missiles from server data
-        missile_dicts = message_dict.get('missiles', [])
-        self.missiles = []
-        for missile_dict in missile_dicts:
-            missile = Missile(
-                x=missile_dict['pos_x'],
-                y=missile_dict['pos_y'],
-                vx=0,
-                vy=0,
-                contact=None  # Server handles targeting
-                , owner=1)
-            missile.heading = missile_dict['heading']
-            missile.velocity = missile_dict['velocity']
-            missile.fuel = missile_dict['fuel']
-            missile.alive = missile_dict['alive']
-            self.missiles.append(missile)

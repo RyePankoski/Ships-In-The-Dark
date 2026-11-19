@@ -1,6 +1,8 @@
 import pygame
 import random
 
+from utility import theme
+
 
 class DrawMenusEtc:
     def __init__(self, screen):
@@ -18,16 +20,16 @@ class DrawMenusEtc:
         # ------------------------------------------------------------------
         # Colors
         # ------------------------------------------------------------------
-        BRIGHT = (90, 255, 120)
-        GREEN = (55, 200, 90)
-        DIM = (25, 90, 35)
+        BRIGHT = theme.GREEN_BRIGHT
+        GREEN = theme.GREEN
+        DIM = theme.GREEN_DIM
 
         # ------------------------------------------------------------------
         # Fonts
         # ------------------------------------------------------------------
-        title_font = pygame.font.SysFont("couriernew", 96, bold=True)
-        sub_font = pygame.font.SysFont("couriernew", 24)
-        boot_font = pygame.font.SysFont("couriernew", 22)
+        title_font = theme.font(84)
+        sub_font = theme.font(26)
+        boot_font = theme.font(24)
 
         # ------------------------------------------------------------------
         # Background
@@ -217,32 +219,4 @@ class DrawMenusEtc:
                     msg.get_rect(center=(w // 2, h - 90)),
                 )
 
-        # ------------------------------------------------------------------
-        # Scanlines
-        # ------------------------------------------------------------------
-        scan = pygame.Surface((w, h), pygame.SRCALPHA)
-
-        for yy in range(0, h, 3):
-            pygame.draw.line(
-                scan,
-                (0, 0, 0, 40),
-                (0, yy),
-                (w, yy),
-            )
-
-        self.screen.blit(scan, (0, 0))
-
-        # ------------------------------------------------------------------
-        # CRT Vignette
-        # ------------------------------------------------------------------
-        vignette = pygame.Surface((w, h), pygame.SRCALPHA)
-
-        pygame.draw.rect(
-            vignette,
-            (0, 0, 0, 80),
-            vignette.get_rect(),
-            width=28,
-            border_radius=16,
-        )
-
-        self.screen.blit(vignette, (0, 0))
+        # (Scanlines and vignette come from the CRT filter applied to every frame)

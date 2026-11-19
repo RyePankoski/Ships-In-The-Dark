@@ -66,41 +66,6 @@ def collect_inputs():
 
     return inputs
 
-# Multiplayer functions
-
-def serialize_state(state):
-    serialized_ships = []
-    for ship in state.get('player_ships', []):
-        ship_dict = {
-            'pos_x': ship.pos_x,
-            'pos_y': ship.pos_y,
-            'heading': ship.heading,
-            'vel_x': ship.dx,
-            'vel_y': ship.dy,
-            'player_id': str(ship.player_id) if ship.player_id else None,
-        }
-        serialized_ships.append(ship_dict)
-
-    # Serialize missiles
-    serialized_missiles = []
-    for missile in state.get('missiles', []):
-        missile_dict = {
-            'pos_x': missile.pos_x,
-            'pos_y': missile.pos_y,
-            'heading': missile.heading,
-            'velocity': missile.velocity,
-            'fuel': missile.fuel,
-            'alive': missile.alive,
-        }
-        serialized_missiles.append(missile_dict)
-
-    return {
-        'player_ships': serialized_ships,
-        'missiles': serialized_missiles,
-    }
-
-
-
 # Main scene functions
 def update_p_field(ship, p_field, strength, p_type):
     x, y = ship.rect.center[0], ship.rect.center[1]
@@ -168,4 +133,6 @@ def in_quadrant(origin_x, origin_y, direction_deg, target_pos):
 
 
 def end_blit():
+    from asset_handlers.crt import crt
+    crt.apply(pygame.display.get_surface())
     pygame.display.flip()

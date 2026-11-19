@@ -6,6 +6,7 @@ import pygame
 import sys
 import os
 from utility.constants import *
+from utility import theme
 from pathlib import Path
 
 
@@ -97,7 +98,7 @@ class DrawGame:
                 screen_y = asteroid.pos_y - camera_y
                 pygame.draw.circle(
                     self.screen,
-                    (150, 105, 40),
+                    theme.ASTEROID,
                     (screen_x, screen_y),
                     asteroid.size
                 )
@@ -106,7 +107,7 @@ class DrawGame:
         for explosion in explosions:
             screen_x = explosion[0] - camera_x
             screen_y = explosion[1] - camera_y
-            pygame.draw.circle(self.screen, (255, 255, 255), (screen_x, screen_y), 50)
+            pygame.draw.circle(self.screen, theme.WHITE, (screen_x, screen_y), 50)
 
     def draw_missiles(self, missiles, camera_x, camera_y):
         for missile in missiles:
@@ -180,14 +181,13 @@ class DrawGame:
         t = time.time()
 
         # Base phosphor colors
-        PHOSPHOR = (0, 200, 50)
-        PHOSPHOR_DIM = (0, 90, 60)
-        PHOSPHOR_DARK = (0, 50, 25)
+        PHOSPHOR = theme.GREEN
+        PHOSPHOR_DIM = theme.GREEN_DIM
+        PHOSPHOR_DARK = theme.GREEN_FAINT
 
-        if not hasattr(self, "_sig_font"):
-            self._sig_font = pygame.font.Font(None, 130)
-            self._sig_font_sub = pygame.font.Font(None, 40)
-            self._diag_font = pygame.font.Font(None, 24)  # New font for diagnostics
+        self._sig_font = theme.legacy_font(130)
+        self._sig_font_sub = theme.legacy_font(40)
+        self._diag_font = theme.legacy_font(24)
 
         # 1. Dead feed: wash to the UI's own black-green.
         wash = pygame.Surface((w, h), pygame.SRCALPHA)
@@ -277,14 +277,10 @@ class DrawGame:
         # 9. One bright monochrome tear line sweeping slowly down the tube
         tear_y = int((t * 90) % h)
         tear = pygame.Surface((w, 3), pygame.SRCALPHA)
-        tear.fill((0, 255, 160, 45))
+        tear.fill((*theme.GREEN, 45))
         self.screen.blit(tear, (0, tear_y))
 
-        # 10. Scanlines to seat it in the glass
-        scan = pygame.Surface((w, h), pygame.SRCALPHA)
-        for y in range(0, h, 4):
-            pygame.draw.line(scan, (0, 0, 0, 110), (0, y), (w, y), 2)
-        self.screen.blit(scan, (0, 0))
+        # (Scanlines come from the CRT filter applied to every frame)
 
     def draw_ftl_jump_tunnel(self, ftl_jumping):
         """Draw a hyperspace warp effect implying FTL speed, with a retro UI."""
@@ -308,9 +304,9 @@ class DrawGame:
                 radius = random.uniform(10, max_radius)
                 speed = random.uniform(2, 10)
                 color = random.choice([
-                    (200, 255, 255),
-                    (100, 150, 255),
-                    (255, 255, 255)
+                    theme.WHITE,
+                    theme.GREEN_BRIGHT,
+                    theme.GREEN_DIM,
                 ])
                 self.ftl_particles.append([angle, radius, speed, color])
 
@@ -338,18 +334,16 @@ class DrawGame:
                 p[2] = random.uniform(1, 4)
 
         # 3. Dashboard Text - Low-fidelity terminal styling
-        if not hasattr(self, 'font_ftl'):
-            # Force a chunky monospace font rather than the smooth default
-            self.font_ftl = pygame.font.SysFont('courier', 42, bold=True)
+        self.font_ftl = theme.font(44)
 
         # Hard on/off blink every 500ms instead of a smooth sine wave
         is_blink_on = (pygame.time.get_ticks() // 500) % 2 == 0
 
         if is_blink_on:
-            ui_color = (50, 255, 50)  # High-contrast terminal green
+            ui_color = theme.GREEN
 
             # Anti-aliasing set to False (the middle argument) for pixelated edges
-            ftl_text = self.font_ftl.render("JUMP SOLUTION: FIXED", False, ui_color)
+            ftl_text = self.font_ftl.render("JUMP SOLUTION: FIXED", True, ui_color)
 
             text_x = center_x - ftl_text.get_width() // 2
             text_y = screen_height - (screen_height // 4)
@@ -364,7 +358,7 @@ class DrawGame:
             )
 
             # Draw solid black background to block out warp streaks, then draw border
-            pygame.draw.rect(self.screen, (0, 0, 0), box_rect)
+            pygame.draw.rect(self.screen, theme.BLACK, box_rect)
             pygame.draw.rect(self.screen, ui_color, box_rect, width=3)
 
             # Blit the text on top
@@ -393,7 +387,7 @@ class DrawGame:
             flash_p = 1.0 - (progress / 0.15)
             flash_alpha = int(220 * flash_p)
             flash = pygame.Surface((screen_w, screen_h), pygame.SRCALPHA)
-            flash.fill((200, 240, 255, flash_alpha))
+            flash.fill((*theme.WHITE, flash_alpha))
             self.screen.blit(flash, (0, 0))
 
         # Canvas for the radial elements
@@ -407,9 +401,9 @@ class DrawGame:
             core_p = progress / 0.4
             core_radius = int(40 * math.sin(core_p * math.pi))
             if core_radius > 0:
-                pygame.draw.circle(surf, (255, 255, 255, alpha), center, core_radius)
-                pygame.draw.circle(surf, (0, 220, 255, int(alpha * 0.7)), center, core_radius + 12, width=3)
-                pygame.draw.circle(surf, (120, 200, 255, int(alpha * 0.35)), center, core_radius + 24, width=2)
+                pygame.draw.circle(surf, (*theme.WHITE, alpha), center, core_radius)
+                pygame.draw.circle(surf, (*theme.GREEN, int(alpha * 0.7)), center, core_radius + 12, width=3)
+                pygame.draw.circle(surf, (*theme.GREEN_DIM, int(alpha * 0.35)), center, core_radius + 24, width=2)
 
         # --- 2. Exploding spike lines with bright leading heads ---
         num_spikes = 26
@@ -418,7 +412,7 @@ class DrawGame:
             angle = rng.uniform(0, math.tau)
             max_length = rng.uniform(120, max_reach)
             speed = rng.uniform(0.85, 1.15)
-            color_choice = rng.choice([(255, 255, 255), (0, 220, 255), (100, 180, 255), (200, 255, 255)])
+            color_choice = rng.choice([theme.WHITE, theme.GREEN, theme.GREEN_BRIGHT, theme.WHITE])
 
             eased_p = math.sin((progress * speed) * (math.pi / 2))
             dist_head = eased_p * max_length
@@ -434,7 +428,7 @@ class DrawGame:
             if line_alpha > 0 and dist_head > dist_tail:
                 pygame.draw.line(surf, (*color_choice, line_alpha), (x1, y1), (x2, y2), width=2)
                 # Bright head dot at the leading tip
-                pygame.draw.circle(surf, (255, 255, 255, line_alpha), (x2, y2), 2)
+                pygame.draw.circle(surf, (*theme.WHITE, line_alpha), (x2, y2), 2)
 
         # --- 3. Stacked shockwaves: three rings released in sequence ---
         for wave in range(3):
@@ -444,7 +438,7 @@ class DrawGame:
                 shock_r = int(wave_p * max_reach)
                 shock_alpha = int(alpha * (1.0 - wave_p) * 0.6)
                 if shock_r > 0 and shock_alpha > 0:
-                    pygame.draw.circle(surf, (180, 240, 255, shock_alpha), center, shock_r, width=2)
+                    pygame.draw.circle(surf, (*theme.GREEN_BRIGHT, shock_alpha), center, shock_r, width=2)
 
         self.screen.blit(surf, (sx - center[0], sy - center[1]))
 
@@ -474,8 +468,8 @@ class DrawGame:
             core_p = progress / 0.25
             core_radius = int(25 * math.sin(core_p * math.pi))
             if core_radius > 0:
-                pygame.draw.circle(surf, (255, 255, 255, alpha), center, core_radius)
-                pygame.draw.circle(surf, (0, 220, 255, int(alpha * 0.6)), center, core_radius + 8, width=2)
+                pygame.draw.circle(surf, (*theme.WHITE, alpha), center, core_radius)
+                pygame.draw.circle(surf, (*theme.GREEN, int(alpha * 0.6)), center, core_radius + 8, width=2)
 
         # 2. Exploding Spike Lines
         num_spikes = 16
@@ -485,7 +479,7 @@ class DrawGame:
             angle = rng.uniform(0, math.tau)
             max_length = rng.uniform(80, max_reach)
             speed = rng.uniform(0.85, 1.15)
-            color_choice = rng.choice([(255, 255, 255), (0, 220, 255), (100, 180, 255)])
+            color_choice = rng.choice([theme.WHITE, theme.GREEN, theme.GREEN_BRIGHT])
 
             # Fast outward movement with ease-out deceleration
             eased_p = math.sin((progress * speed) * (math.pi / 2))
@@ -506,7 +500,7 @@ class DrawGame:
         # 3. Outer Shockwave Edge (Thin, fast high-contrast shock ring)
         shock_r = int(progress * (max_reach * 0.8))
         if shock_r > 0:
-            pygame.draw.circle(surf, (180, 240, 255, int(alpha * 0.4)), center, shock_r, width=1)
+            pygame.draw.circle(surf, (*theme.GREEN_BRIGHT, int(alpha * 0.4)), center, shock_r, width=1)
 
         # Blit centered on screen coordinates
         self.screen.blit(surf, (sx - center[0], sy - center[1]))
@@ -531,9 +525,9 @@ class DrawGame:
         surf = pygame.Surface((surf_size, surf_size), pygame.SRCALPHA)
         center = (surf_size // 2, surf_size // 2)
 
-        ui_green = (50, 255, 50)
-        ui_bright = (180, 255, 180)
-        ui_faint = (20, 100, 20)
+        ui_green = theme.GREEN
+        ui_bright = theme.GREEN_BRIGHT
+        ui_faint = theme.GREEN_DIM
 
         # 1. Target Acquisition Box
         box_p = min(1.0, progress * 5.0)
@@ -600,12 +594,11 @@ class DrawGame:
             box_rect = pygame.Rect(call_end[0], call_end[1] - 10, box_width, box_height)
 
             # Black fill prevents background stars/grid from muddying the text
-            pygame.draw.rect(surf, (0, 0, 0, alpha), box_rect)
+            pygame.draw.rect(surf, (*theme.BLACK, alpha), box_rect)
             pygame.draw.rect(surf, (*ui_green, alpha), box_rect, 1)
 
             # Load monospace font once
-            if not hasattr(self, '_diag_font'):
-                self._diag_font = pygame.font.SysFont('courier', 12)
+            analysis_font = theme.font(13)
 
             # Generate rapidly scrambling hex values tied to the timer
             # Updating the seed every ~0.08 seconds creates a harsh terminal flicker
@@ -613,14 +606,14 @@ class DrawGame:
             hex_chars = "0123456789ABCDEF"
 
             # Draw header
-            header = self._diag_font.render("SIG_ANOMALY", False, ui_green)
+            header = analysis_font.render("SIG_ANOMALY", True, ui_green)
             header.set_alpha(alpha)
             surf.blit(header, (box_rect.x + 4, box_rect.y + 4))
 
             # Draw 3 rows of junk hex data
             for row in range(3):
                 hex_str = "0x" + "".join(rng.choice(hex_chars) for _ in range(8))
-                text_surf = self._diag_font.render(hex_str, False, ui_bright)
+                text_surf = analysis_font.render(hex_str, True, ui_bright)
                 text_surf.set_alpha(alpha)
                 surf.blit(text_surf, (box_rect.x + 4, box_rect.y + 20 + (row * 14)))
 
@@ -636,9 +629,9 @@ class DrawGame:
         screen_height = self.screen.get_height()
 
         # Phosphor palette (Classic terminal green & dim retention artifacts)
-        PHOSPHOR_GREEN = (0, 255, 70)
-        PHOSPHOR_DIM = (0, 90, 25)
-        BLACK = (0, 0, 0)
+        PHOSPHOR_GREEN = theme.GREEN
+        PHOSPHOR_DIM = theme.GREEN_DIM
+        BLACK = theme.BLACK
 
         # Severe 80s CRT hardware jitter / tracking error during deep transit
         jitter_x = random.randint(-2, 2)
@@ -699,8 +692,7 @@ class DrawGame:
                              (ship_screen_x + grid_size, ship_screen_y), 1)
 
         # 3. Retro Terminal Text & Telemetry UI
-        if not hasattr(self, 'font_blink'):
-            self.font_blink = pygame.font.SysFont("Courier", 18, bold=True)
+        self.font_blink = theme.font(19)
 
         # Display countdown frames and status
         time_left_sec = max(0.0, blink_timer / 60.0)
@@ -746,10 +738,10 @@ class DrawGame:
         screen_y = self.screen.get_height() // 2
         progress = min(1.0, charge_timer / max_charge_time)
 
-        PHOSPHOR_DIM = (0, 90, 25)
-        BLACK = (0, 0, 0)
+        PHOSPHOR_DIM = theme.GREEN_DIM
+        BLACK = theme.BLACK
         ready = progress >= 1.0
-        accent = (255, 200, 40) if ready else (0, 255, 70)
+        accent = theme.AMBER_BRIGHT if ready else theme.GREEN
         radius = 55
 
         # Dim base ring, then the charge arc filling clockwise from the top
@@ -763,8 +755,7 @@ class DrawGame:
             pygame.draw.circle(self.screen, accent, (int(px), int(py)), 2)
 
         # Status text in an opaque box below
-        if not hasattr(self, 'font_charge'):
-            self.font_charge = pygame.font.SysFont("Courier", 15, bold=True)
+        self.font_charge = theme.font(16)
 
         label = "BLINK READY" if ready else f"CHARGING {int(progress * 100)}%"
         text_surf = self.font_charge.render(label, True, accent)
@@ -782,9 +773,9 @@ class DrawGame:
         camera_x, camera_y = camera
 
         # Hotter color profile: white core, vibrant inner red, deep outer red glow
-        LASER_CORE = (255, 255, 255)
-        LASER_GLOW_INNER = (255, 80, 80)
-        LASER_GLOW_OUTER = (150, 10, 10)
+        LASER_CORE = theme.WHITE
+        LASER_GLOW_INNER = theme.RED_BRIGHT
+        LASER_GLOW_OUTER = theme.RED_DIM
 
         for start, end, t, target in lasers:
 

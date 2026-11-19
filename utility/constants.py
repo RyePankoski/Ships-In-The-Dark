@@ -47,3 +47,4 @@ BULLET_SPEED = 600
 BULLET_LIFETIME = 2
 
 PORT = 27015
+TICK_RATE = 25  # server simulation steps per second

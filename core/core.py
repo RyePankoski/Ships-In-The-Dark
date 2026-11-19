@@ -4,9 +4,9 @@ from asset_handlers.draw_menus_etc import DrawMenusEtc
 
 
 class Core:
-    def __init__(self, screen):
+    def __init__(self, screen, launch=None):
         self.draw_menus_etc = DrawMenusEtc(screen)
-        self.client = Client(screen)
+        self.client = Client(screen, launch)
         self.screen = screen
 
         self.splash_screen_timer = 0
@@ -14,7 +14,7 @@ class Core:
         self.splashing = False
 
 
-    def run(self, dt):
+    def run(self, dt, events=()):
 
         inputs = collect_inputs()
         self.timer(inputs, dt)
@@ -22,7 +22,7 @@ class Core:
         if self.splashing:
             self.draw_stuff()
         else:
-            self.client.run(dt)
+            self.client.run(dt, events)
 
     def draw_stuff(self):
         self.screen.fill((0, 0, 0))

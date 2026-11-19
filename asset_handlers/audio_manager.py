@@ -63,6 +63,7 @@ class AudioManager:
             'blink': 'sounds/blink.wav',
             'p_field_open': 'sounds/p_field_open.wav',
             'p_field_close': 'sounds/p_field_close.wav',
+            'missile_contact': 'sounds/missile_contact.wav',
         }
 
         for name, filename in sound_files.items():

@@ -12,8 +12,9 @@ class Missile:
         self.pos_x = x
         self.pos_y = y
         self.velocity = 0
-        self.vel_x = vx
-        self.vel_y = vy
+        self.dx = vx
+        self.dy = vy
+        self.player_id = owner
 
         self.contact = contact
         self.owner = owner
@@ -80,8 +81,8 @@ class Missile:
         desired_y = ty + self.avoid_y
         d = math.hypot(desired_x, desired_y) or 1.0
 
-        self.vel_x = (desired_x / d) * self.velocity
-        self.vel_y = (desired_y / d) * self.velocity
+        self.dx = (desired_x / d) * self.velocity
+        self.dy = (desired_y / d) * self.velocity
 
     def _avoidance(self, tx, ty, asteroids):
 
@@ -114,10 +115,10 @@ class Missile:
         return 0.0, 0.0
 
     def move(self, dt):
-        self.pos_x += self.vel_x * dt
-        self.pos_y += self.vel_y * dt
+        self.pos_x += self.dx * dt
+        self.pos_y += self.dy * dt
 
-        angle = math.atan2(self.vel_y, -self.vel_x)
+        angle = math.atan2(self.dy, -self.dx)
         angle = math.degrees(angle) + 90
         self.heading = angle
 

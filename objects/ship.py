@@ -26,6 +26,9 @@ class Ship:
         self.screen_width, self.screen_height = pygame.display.get_desktop_sizes()[0]
         self.rect = pygame.Rect(self.pos_x, self.pos_y, 200, 200)
 
+        # Everything on a Ship is a *fact about the world*: the server owns it in
+        # multiplayer and sends it to every client. What a player has switched on
+        # or detected lives in core/cockpit.py instead and never leaves the client.
         self.total_velocity = 0
         self.radar_cross_section = 100
         self.health = 100
@@ -35,43 +38,25 @@ class Ship:
         self.missile_cooldown_timer = 0
         self.missile_cooldown = 1
 
-        self.enemy_has_missile_solution = False
-        self.catastrophic_warning = False
-        self.has_missile_solution = True
-        self.close_range_scanning = True
         self.mining_vessel_sees_you = False
-        self.manual_control = True
-        self.dfs_scanned = False
         self.health_low = False
         self.thrusting = False
-
-        self.scan_used = False
         self.dampening = True
 
-        self.laser_on = False
-        self.painted = True
-        self.dfs_on = False
+        self.painted = False  # someone else's laser is on this ship
         self.alive = True
-
-        self.scan_type = None
-        self.target = None
         self.repair_rate = 1
 
-        self.ships = []
-        self.missiles = []
-        self.explosions = []
-        self.deep_field_contacts = []
-        self.close_range_contacts = []
-        self.confirmed_signatures = []
-        self.unconfirmed_signatures = []
+        # Radar hits write here (see RadarSystem); purely informational.
         self.enemy_radar_ping_coordinates = []
-
-        self.drones = {}
-        self.asteroids = {}
 
         self.took_damage = False
         self.damage_timer = 0
         self.damage_cooldown = 0.2
+
+    @property
+    def net_id(self):
+        return self.player_id
 
     def run(self, dt):
 

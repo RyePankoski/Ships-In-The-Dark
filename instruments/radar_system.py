@@ -5,8 +5,10 @@ from utility.constants import (
 )
 from utility.precomputed_angles import RADAR_DIRECTIONS
 
-RED = (255, 0, 0)
-WHITE = (255, 255, 255)
+from utility import theme
+
+RED = theme.AMBER_BRIGHT   # a return off something you've painted with your laser
+WHITE = theme.GREEN        # an ordinary radar return
 
 
 class RadarSystem:
