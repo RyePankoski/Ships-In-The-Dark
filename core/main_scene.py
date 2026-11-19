@@ -63,6 +63,11 @@ class MainScene:
 
         # UI stuff
         self.is_map_open = False
+        # Tactical-map markers: (shape, world_x, world_y). Local to this client,
+        # never sent to the server. marker_mode: None, 'PICK' (choosing a shape)
+        # or a shape name (next map click places it).
+        self.map_markers = []
+        self.marker_mode = None
         self.end_tripped = False
         self.grid_on = True
         self.p_field_open = False
@@ -82,7 +87,7 @@ class MainScene:
         self._command_actions = []   # this frame's command['actions'], for perform()
 
         # Fun cinematic type stuff
-        self.ftl_traveling = True
+        self.ftl_traveling = False
         self.ftl_travel_timer = 0
         self.ftl_travel_cooldown = 5
 
@@ -304,13 +309,37 @@ class MainScene:
             cockpit.deep_field_contacts = []
         elif action == 'toggle_map':
             self.is_map_open = not self.is_map_open
+            self.marker_mode = None
             self.input_cooling_down = True
             sfx('map_open' if self.is_map_open else 'map_close')
+        elif action == 'marker_add':
+            self.marker_mode = 'PICK'
+            sfx('map_marker')
+        elif action.startswith('marker_shape_'):
+            self.marker_mode = action[len('marker_shape_'):].upper()
+            sfx('map_marker')
+        elif action == 'marker_place':
+            click = self.draw_ui.buttons.last_click_pos
+            if self.marker_mode in self.draw_ui.MARKER_SHAPES and click is not None:
+                wx, wy = self.draw_ui.map_screen_to_world(click)
+                self.map_markers.append((self.marker_mode, wx, wy))
+                self.marker_mode = None
+                sfx('map_marker_place')
+        elif action == 'marker_cancel':
+            self.marker_mode = None
+            sfx('cancel')
+        elif action == 'marker_clear':
+            self.map_markers.clear()
+            sfx('map_marker_delete')
         elif action == 'blink':
             if not self.blinking:
                 self.blinking = True
                 sfx('blink')
                 update_p_field(self.player_ship, self.p_field, 40, 'movement')
+        elif action == 'escape' and self.marker_mode is not None:
+            # Esc backs out of marker placement before it closes anything
+            self.marker_mode = None
+            self.input_cooling_down = True
         elif action == 'escape':
             if self.control_screen:
                 self.control_screen = False
@@ -332,6 +361,7 @@ class MainScene:
             self.p_field_open = not self.p_field_open
             if self.is_map_open:
                 self.is_map_open = False
+                self.marker_mode = None
         elif action == 'dfs_scan':
             if cockpit.dfs_on:
                 cockpit.deep_field_contacts = self.deep_field_scan.run_scan(self.dict_objects, self.list_objects)
@@ -586,6 +616,8 @@ class MainScene:
 
         self.draw_ui.draw_world_grid(camera_x, camera_y, self.grid_on)
         self.draw_ui.draw_ui_layout()
+        self.draw_ui.draw_callsign_plate(world.callsigns.get(self.my_id), self.my_id,
+                                         len(world.callsigns), self.local)
         self.draw_ui.draw_laser_painted_warning(self.player_ship.painted)
         self.draw_ui.draw_ship_info(self.player_ship, cockpit)
         self.draw_ui.draw_control_banks(self.player_ship, cockpit, local=self.local,
@@ -602,7 +634,8 @@ class MainScene:
         self.draw_ui.draw_dfs_corridor(self.player_ship, self.deep_field_scan.direction_index, camera_x, camera_y, cockpit.dfs_on)
         self.draw_ui.draw_laser(self.laser_assessor, self.laser_endpoint, camera_x, camera_y, cockpit.laser_on)
         self.draw_ui.draw_radar_controls(self.radar_system.scanning)
-        self.draw_ui.draw_tactical_map(self.is_map_open, self.player_ship, self.close_range_scan.get_contacts())
+        self.draw_ui.draw_tactical_map(self.is_map_open, self.player_ship, self.close_range_scan.get_contacts(),
+                                       markers=self.map_markers, marker_mode=self.marker_mode)
         self.draw_ui.draw_corpo_miner_fire_warning(self.player_ship.mining_vessel_sees_you)
         self.draw_ui.draw_bullet_damage_glitch(self.player_ship.took_damage)
         self.draw_ui.draw_low_health_warning(self.player_ship.health_low)

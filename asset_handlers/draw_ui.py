@@ -1,10 +1,11 @@
 import math
+import zlib
 import random
 
 import pygame
 from utility.constants import *
 from utility import theme
-from asset_handlers.buttons import ButtonLayer, draw_button
+from asset_handlers.buttons import ButtonLayer, draw_button, draw_frame
 from asset_handlers.grime import build_panel
 from asset_handlers.readouts import TopPanelReadouts
 
@@ -134,29 +135,8 @@ class DrawUI:
         )
 
     def _frame(self, rect, color=theme.AMBER, fill=theme.BG, inset=True, tick=10, width=1):
-        """The one instrument-box style: border, recessed inset line, bright corner ticks.
-
-        Args:
-            rect: Box to draw.
-            color: Border colour. The inset and ticks are derived from it.
-            fill: Background colour, or None to leave what's underneath.
-            inset: Draw the recessed second line just inside the border.
-            tick: Length of the corner accents (0 for none).
-            width: Outer border thickness.
-        """
-        rect = pygame.Rect(rect)
-        if fill is not None:
-            pygame.draw.rect(self.screen, fill, rect)
-        pygame.draw.rect(self.screen, color, rect, width)
-        if inset:
-            dim = tuple(c * 2 // 5 for c in color)
-            pygame.draw.rect(self.screen, dim, rect.inflate(-8, -8), 1)
-        if tick:
-            bright = tuple(min(255, c + 45) for c in color)
-            for cx, cy, dx, dy in ((rect.left, rect.top, 1, 1), (rect.right - 1, rect.top, -1, 1),
-                                   (rect.left, rect.bottom - 1, 1, -1), (rect.right - 1, rect.bottom - 1, -1, -1)):
-                pygame.draw.line(self.screen, bright, (cx, cy), (cx + tick * dx, cy), 3)
-                pygame.draw.line(self.screen, bright, (cx, cy), (cx, cy + tick * dy), 3)
+        """The one instrument-box style (see draw_frame in asset_handlers/buttons.py)."""
+        draw_frame(self.screen, rect, color, fill, inset, tick, width)
 
     def _button(self, rect, label, action, key=None, lit=None, enabled=True, hold=False, **style):
         """Draw a console button and make it clickable (see asset_handlers/buttons.py)."""
@@ -279,6 +259,7 @@ class DrawUI:
         nav = [
             ("NAV-COM", LABEL),
             (f"POS  X {int(ship.pos_x):+06d}  Y {int(ship.pos_y):+06d}", LIVE),
+            (f"GRID {self.grid_ref(ship.pos_x, ship.pos_y)}", LIVE),
             (f"VEL  X {ship.dx:+05.1f}  Y {ship.dy:+05.1f}", LIVE),
             (f"SPD  {ship.total_velocity:03.0f} u", LIVE),
             (f"HDG  {int(ship.heading) % 360:03d} DEG", LIVE),
@@ -380,8 +361,8 @@ class DrawUI:
         for panel, surf in zip(panels, self._panel_cache):
             self.screen.blit(surf, panel)
 
-        # Background machine chatter in the otherwise empty top panel
-        self.readouts.draw(self.screen, panels[0])
+        # Background machine chatter in the top panel, either side of the callsign plate
+        self.readouts.draw(self.screen, panels[0], exclude=self._callsign_rect())
 
         # 4. Viewport Corner Notch Ticks
         v_left = self.PANEL_WIDTH
@@ -428,6 +409,67 @@ class DrawUI:
             self.screen, self.COLOR_CORNER_ACCENT, (v_right, v_bottom),
             (v_right, v_bottom - self.NOTCH_LENGTH), self.NOTCH_WIDTH
         )
+
+    def _callsign_rect(self):
+        """The pilot ID box: top-left of the top panel."""
+        return pygame.Rect(24, 22, 380, self.THIN_HEIGHT - 44)
+
+    def draw_callsign_plate(self, callsign, player_id, pilots_on_net, local):
+        """Pilot ID readout: callsign, IFF code and link status, in the same
+        framed-box style as ship telemetry."""
+        rect = self._callsign_rect()
+        LABEL = theme.AMBER_DIM
+        LIVE = theme.GREEN
+
+        self._frame(rect)
+        font = theme.font(19)
+        title = font.render(" PILOT ID ", True, theme.AMBER)
+        tab = title.get_rect(midleft=(rect.left + 18, rect.top))
+        pygame.draw.rect(self.screen, theme.BG, tab)
+        self.screen.blit(title, tab)
+
+        pad = 22
+        x = rect.left + pad
+
+        # Callsign: the one big thing in the box
+        name = callsign or "UNREGISTERED"
+        big = theme.font(34)
+        name_surf = big.render(name, True, theme.AMBER_BRIGHT)
+        if name_surf.get_width() > rect.width - 2 * pad:
+            name_surf = theme.font(26).render(name, True, theme.AMBER_BRIGHT)
+        name_y = rect.top + 20
+        self.screen.blit(name_surf, (x, name_y))
+
+        rule_y = name_y + big.get_height() + 6
+        pygame.draw.line(self.screen, theme.AMBER_FAINT, (x, rule_y), (rect.right - pad, rule_y))
+
+        # Two rows of label / value underneath
+        iff = zlib.crc32(name.encode()) & 0xFFFFFF  # same callsign, same code
+        if local:
+            net_value, net_color = "LOCAL SIM", LABEL
+        else:
+            net_value = f"{pilots_on_net} {'PILOT' if pilots_on_net == 1 else 'PILOTS'} ON NET"
+            net_color = LIVE
+        rows = [
+            ("IFF", f"{iff >> 12:03X}-{iff & 0xFFF:03X}", LIVE),
+            ("NET", net_value, net_color),
+        ]
+        small = theme.font(17)
+        line_h = small.get_height() + 4
+        value_x = x + small.size("IFF ")[0] + 14
+        y = rule_y + 10
+        for label, value, color in rows:
+            self.screen.blit(small.render(label, True, LABEL), (x, y))
+            self.screen.blit(small.render(value, True, color), (value_x, y))
+            y += line_h
+
+        # Slot number at the end of the IFF row, and a carrier lamp at the end of the NET row
+        slot = small.render(f"SLOT {player_id:02d}", True, LABEL)
+        self.screen.blit(slot, slot.get_rect(topright=(rect.right - pad, rule_y + 10)))
+        if not local:
+            lamp_on = (pygame.time.get_ticks() // 700) % 2 == 0
+            lamp = (rect.right - pad - 4, rule_y + 10 + line_h + small.get_height() // 2)
+            pygame.draw.circle(self.screen, LIVE if lamp_on else theme.GREEN_FAINT, lamp, 4)
 
     def draw_ui_ftl_override(self, ftl_jumping):
         """Draw simple FTL JUMPING text boxes that fade out.
@@ -937,7 +979,38 @@ class DrawUI:
                     (hx + self.MISSILE_LOCK_BOX_SIZE, hy + self.MISSILE_LOCK_BOX_SIZE - 5), 2
                 )
 
-    def draw_tactical_map(self, active, player_ship, confirmed_contacts, scan_active=False, scan_range=1000, laser_active=False, laser_direction=0, laser_locked=False, locked_object=None):
+    @staticmethod
+    def grid_ref(x, y):
+        """Grid cell containing a world position, as '<col>X <row>Y' (clamped to the world)."""
+        col = min(max(int(x // GRID_SIZE), 0), WORLD_WIDTH // GRID_SIZE - 1)
+        row = min(max(int(y // GRID_SIZE), 0), WORLD_HEIGHT // GRID_SIZE - 1)
+        return f"{col}X {row}Y"
+
+    MARKER_SHAPES = ("CIRCLE", "SQUARE", "TRIANGLE", "DIAMOND", "CROSS")
+
+    @staticmethod
+    def _draw_marker_shape(surface, shape, center, size, color):
+        cx, cy = int(center[0]), int(center[1])
+        if shape == "CIRCLE":
+            pygame.draw.circle(surface, color, (cx, cy), size, 2)
+        elif shape == "SQUARE":
+            pygame.draw.rect(surface, color, (cx - size, cy - size, size * 2, size * 2), 2)
+        elif shape == "TRIANGLE":
+            pygame.draw.polygon(surface, color, [(cx, cy - size), (cx - size, cy + size), (cx + size, cy + size)], 2)
+        elif shape == "DIAMOND":
+            pygame.draw.polygon(surface, color, [(cx, cy - size), (cx + size, cy), (cx, cy + size), (cx - size, cy)], 2)
+        else:  # CROSS
+            pygame.draw.line(surface, color, (cx - size, cy), (cx + size, cy), 2)
+            pygame.draw.line(surface, color, (cx, cy - size), (cx, cy + size), 2)
+
+    def map_screen_to_world(self, pos):
+        """World position under a screen point on the tactical map (from the last drawn frame)."""
+        center, scale, player_x, player_y = self._map_view
+        return (player_x + (pos[0] - center[0]) / scale,
+                player_y + (pos[1] - center[1]) / scale)
+
+    def draw_tactical_map(self, active, player_ship, confirmed_contacts, scan_active=False, scan_range=1000, laser_active=False, laser_direction=0, laser_locked=False, locked_object=None, markers=(), marker_mode=None):
+        """marker_mode: None, 'PICK' (choosing a shape) or a shape name (waiting for a click on the map)."""
         if not active:
             return
 
@@ -959,12 +1032,21 @@ class DrawUI:
         map_center = map_rect.center
         max_display_range = 5000
 
-        player_x, player_y = player_ship.rect.center
+        # Centre on the same position the cockpit POS readout shows, so the
+        # player dot sits exactly on its labelled coordinate.
+        player_x, player_y = player_ship.pos_x, player_ship.pos_y
         scale = min(map_rect.width, map_rect.height) / (max_display_range * 2)
 
         def world_to_screen(wx, wy):
             """World coords (relative to player) to map panel pixels."""
             return map_center[0] + wx * scale, map_center[1] + wy * scale
+
+        self._map_view = (map_center, scale, player_x, player_y)
+
+        # Placing a marker: the whole map is the click target. Registered before
+        # the other map buttons so they stay on top of it.
+        if marker_mode in self.MARKER_SHAPES:
+            self.buttons.register(map_rect, 'marker_place')
 
         # --- WORLD GRID (DIMMED) ---
         grid_color = theme.GREEN_FAINT
@@ -1072,15 +1154,38 @@ class DrawUI:
                     # Draw vector with alpha
                     pygame.draw.line(self.screen, (*color, alpha), pos, (head_x, head_y), 1)
 
+        # --- PLAYER MARKERS (local only) ---
+        for i, (shape, mx, my) in enumerate(markers, 1):
+            mpos = world_to_screen(mx - player_x, my - player_y)
+            self._draw_marker_shape(self.screen, shape, mpos, 9, theme.AMBER_BRIGHT)
+            tag = self.font_tiny.render(str(i), True, theme.AMBER_BRIGHT)
+            self.screen.blit(tag, (mpos[0] + 12, mpos[1] - tag.get_height() // 2))
+
         # --- PLAYER CENTER ---
         pygame.draw.circle(self.screen, theme.WHITE, map_center, 5)
+
+        # --- GRID COORDINATES ---
+        # Cell indices (0X..nX across, 0Y..nY down), pinned to the panel edges so
+        # they stay readable as the map scrolls. Kept clear of header/close button.
+        label_top = map_rect.top + 56
+        label_left = map_rect.left + 8
+        for col in range(min_x // GRID_SIZE, max_x // GRID_SIZE):
+            sx, _ = world_to_screen(col * GRID_SIZE + GRID_SIZE / 2 - player_x, 0)
+            if map_rect.left + 40 < sx < map_rect.right - 10:
+                txt = self.font_tiny.render(f"{col}X", True, self.COLOR_GRID_TEXT)
+                self.screen.blit(txt, txt.get_rect(midtop=(int(sx), label_top)))
+        for row in range(min_y // GRID_SIZE, max_y // GRID_SIZE):
+            _, sy = world_to_screen(0, row * GRID_SIZE + GRID_SIZE / 2 - player_y)
+            if label_top + 20 < sy < map_rect.bottom - 40:
+                txt = self.font_tiny.render(f"{row}Y", True, self.COLOR_GRID_TEXT)
+                self.screen.blit(txt, txt.get_rect(midleft=(label_left, int(sy))))
 
         self.screen.set_clip(previous_clip)
         # Frame last so contacts near the edge never draw over it
         self._frame(map_rect, self.COLOR_DFS_BORDER, fill=None, width=2, tick=14)
 
         # --- HEADER & FOOTER ---
-        header = "TACTICAL MAP"
+        header = f"TACTICAL MAP  //  GRID {self.grid_ref(player_x, player_y)}"
         txt_header = self.font_scan_header.render(header, True, self.COLOR_DFS_AMBER)
         self.screen.blit(txt_header, (map_rect.x + 18, map_rect.y + 14))
 
@@ -1095,6 +1200,24 @@ class DrawUI:
         close = pygame.Rect(0, 0, 110, 34)
         close.topright = (map_rect.right - 14, map_rect.top + 14)
         self._button(close, "CLOSE", 'toggle_map', key="M")
+
+        # --- MARKER CONTROLS (bottom right) ---
+        if marker_mode in self.MARKER_SHAPES:
+            prompt = self.font_scan_body.render(f"CLICK THE MAP TO PLACE {marker_mode}", True, self.COLOR_DFS_AMBER)
+            self.screen.blit(prompt, prompt.get_rect(midbottom=(map_rect.centerx, map_rect.bottom - 14)))
+        specs = []
+        if marker_mode == 'PICK':
+            specs = [(1, shape, f'marker_shape_{shape.lower()}', {}) for shape in self.MARKER_SHAPES]
+            specs.append((1, "CANCEL", 'marker_cancel', {}))
+        elif marker_mode in self.MARKER_SHAPES:
+            specs = [(1, "CANCEL", 'marker_cancel', {})]
+        else:
+            specs = [(2, "ADD MARKER", 'marker_add', {}),
+                     (2, "CLEAR MARKERS", 'marker_clear', dict(enabled=bool(markers)))]
+        n = len(specs)
+        row = pygame.Rect(0, 0, 130 * n + 8 * (n - 1) + (40 if marker_mode is None else 0), 34)
+        row.bottomright = (map_rect.right - 14, map_rect.bottom - 14)
+        self._button_row(row, specs)
 
     def draw_catastrophe_warning(self, active):
         """Draw subtle catastrophe alert - pulsing red border and corner X.
@@ -1199,33 +1322,21 @@ class DrawUI:
         world_left, world_right, world_top, world_bottom = self._get_world_bounds()
         center_x = (world_left + world_right) // 2
 
-        # Hold full brightness for the first half, then fade out
-        fade = min(1.0, time_left / (duration * 0.5))
-        alpha = int(255 * fade)
-
-        # Hard flicker for the first few frames of the hit
+        # No fade-in/fade-out (that's a toast notification). The readout is either
+        # lit or not: hard flicker as the hit registers, steady, then it stutters
+        # out over the last third like the line is being cleared.
         elapsed = duration - time_left
         if elapsed < 0.25 and int(elapsed * 30) % 2:
+            return
+        if time_left < duration / 3 and int(time_left * 12) % 2:
             return
 
         text = self.font_scan_header.render("MISSILE CONTACT", True, theme.AMBER_BRIGHT)
         pad_x, pad_y = 18, 8
-        box_w = text.get_width() + pad_x * 2
-        box_h = text.get_height() + pad_y * 2
-
-        banner = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-        banner.fill((*theme.BG, 200))
-        pygame.draw.rect(banner, theme.AMBER, banner.get_rect(), 1)
-        # Corner ticks, matching the console frame style
-        tick = 6
-        for cx, cy, dx, dy in ((0, 0, 1, 1), (box_w - 1, 0, -1, 1),
-                               (0, box_h - 1, 1, -1), (box_w - 1, box_h - 1, -1, -1)):
-            pygame.draw.line(banner, theme.AMBER_BRIGHT, (cx, cy), (cx + tick * dx, cy), 2)
-            pygame.draw.line(banner, theme.AMBER_BRIGHT, (cx, cy), (cx, cy + tick * dy), 2)
-        banner.blit(text, (pad_x, pad_y))
-        banner.set_alpha(alpha)
-
-        self.screen.blit(banner, banner.get_rect(midtop=(center_x, world_top + 40)))
+        box = pygame.Rect(0, 0, text.get_width() + pad_x * 2, text.get_height() + pad_y * 2)
+        box.midtop = (center_x, world_top + 40)
+        self._frame(box, theme.AMBER, fill=theme.BG, inset=False, tick=6)
+        self.screen.blit(text, (box.left + pad_x, box.top + pad_y))
 
     def draw_deep_field_panel(self, contacts, direction_index, system_online=True):
         screen_height = self.screen.get_height()
@@ -1776,6 +1887,22 @@ class DrawUI:
         ("QUIT TO MENU", "Q", 'quit_to_menu'),
     )
 
+    def _blank_underlay(self):
+        """Knock the cockpit back behind a console overlay, and make it unclickable.
+
+        Not a translucent dim (that's a web lightbox): the tube blanks every
+        other scanline and drops what's left to half strength, like the feed
+        has been switched off the main display.
+        """
+        w, h = self.screen.get_size()
+        if getattr(self, '_blank_lines', None) is None or self._blank_lines.get_size() != (w, h):
+            self._blank_lines = pygame.Surface((w, h))
+            self._blank_lines.fill((110, 110, 110))
+            for y in range(0, h, 2):
+                pygame.draw.line(self._blank_lines, theme.BLACK, (0, y), (w, y))
+        self.screen.blit(self._blank_lines, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
+        self.buttons.block_below()
+
     def draw_pause_screen(self, enabled: bool):
         """Dim whatever is on screen and draw the operator console over it.
 
@@ -1796,13 +1923,7 @@ class DrawUI:
         w, h = self.screen.get_size()
         t = pygame.time.get_ticks() / 1000.0
 
-        # Dim the frozen frame underneath so the panel reads clearly.
-        # Built once and reused; rebuilt only if the window size changes.
-        if getattr(self, '_pause_wash', None) is None or self._pause_wash.get_size() != (w, h):
-            self._pause_wash = pygame.Surface((w, h), pygame.SRCALPHA)
-            self._pause_wash.fill((*theme.BLACK, 170))
-        self.screen.blit(self._pause_wash, (0, 0))
-        self.buttons.block_below()
+        self._blank_underlay()
 
         title_font = theme.font(48)
         body_font = theme.font(24)
@@ -1892,14 +2013,8 @@ class DrawUI:
             return
 
         w, h = self.screen.get_size()
-        t = pygame.time.get_ticks() / 1000.0
 
-        # Same dim wash as the pause screen (shared, rebuilt on resize)
-        if getattr(self, '_pause_wash', None) is None or self._pause_wash.get_size() != (w, h):
-            self._pause_wash = pygame.Surface((w, h), pygame.SRCALPHA)
-            self._pause_wash.fill((*theme.BLACK, 170))
-        self.screen.blit(self._pause_wash, (0, 0))
-        self.buttons.block_below()
+        self._blank_underlay()
 
         if not hasattr(self, '_controls_fonts'):
             self._controls_fonts = (theme.font(40), theme.font(20), theme.font(18), theme.font(16))
@@ -1947,9 +2062,8 @@ class DrawUI:
                 y += section_h
 
                 for key, description in rows:
+                    # Plain tabulated key column, no outlined keycaps (that's <kbd> styling)
                     key_surf = row_font.render(key, True, theme.GREEN_BRIGHT)
-                    key_box = key_surf.get_rect(topleft=(x + 8, y)).inflate(12, 4)
-                    pygame.draw.rect(self.screen, theme.AMBER_DIM, key_box, 1)
                     self.screen.blit(key_surf, (x + 8, y))
                     desc_surf = row_font.render(description, True, theme.GREEN)
                     self.screen.blit(desc_surf, (x + key_col_w, y))

@@ -118,7 +118,9 @@ class Terminal:
 
 
 class TopPanelReadouts:
-    """Three terminals spread across the top panel."""
+    """Terminals spread across the top panel, either side of anything in `exclude`."""
+
+    MIN_WIDTH = 150  # narrower than this and a terminal isn't worth drawing
 
     def __init__(self):
         self.terminals = [
@@ -127,11 +129,18 @@ class TopPanelReadouts:
             Terminal("COMMS", comms_line, chars_per_sec=30, pause=(1.5, 6.0)),
         ]
 
-    def draw(self, screen, panel_rect):
+    def draw(self, screen, panel_rect, exclude=None):
+        """exclude: a box at the left of the panel (the pilot ID) to keep clear;
+        the terminals share whatever is to its right."""
         if not theme.GRIME_ENABLED:
             return
         inner = panel_rect.inflate(-60, -44)
         gap = 50
+        if exclude is not None:
+            inner.width -= exclude.right + gap - inner.left
+            inner.left = exclude.right + gap
         w = (inner.width - gap * (len(self.terminals) - 1)) // len(self.terminals)
+        if w < self.MIN_WIDTH:
+            return
         for i, term in enumerate(self.terminals):
             term.draw(screen, pygame.Rect(inner.left + i * (w + gap), inner.top, w, inner.height))

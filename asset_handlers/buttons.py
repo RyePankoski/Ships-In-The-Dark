@@ -30,6 +30,7 @@ class ButtonLayer:
     def __init__(self):
         self._building = []   # registered while this frame draws
         self.active = []      # last finished frame: what clicks are tested against
+        self.last_click_pos = None  # screen position of the latest click that hit a button
 
     # --- Drawing side -----------------------------------------------------
     def begin_frame(self):
@@ -62,6 +63,7 @@ class ButtonLayer:
                 button = self._top_at(event.pos)
                 if button and button.enabled and not button.hold:
                     actions.append(button.action)
+                    self.last_click_pos = event.pos
         return actions
 
     def held_action(self):
@@ -72,6 +74,32 @@ class ButtonLayer:
         if button and button.enabled and button.hold:
             return button.action
         return None
+
+
+def draw_frame(screen, rect, color=theme.AMBER, fill=theme.BG, inset=True, tick=10, width=1):
+    """The one instrument-box style: border, recessed inset line, bright corner ticks.
+
+    Args:
+        rect: Box to draw.
+        color: Border colour. The inset and ticks are derived from it.
+        fill: Background colour, or None to leave what's underneath.
+        inset: Draw the recessed second line just inside the border.
+        tick: Length of the corner accents (0 for none).
+        width: Outer border thickness.
+    """
+    rect = pygame.Rect(rect)
+    if fill is not None:
+        pygame.draw.rect(screen, fill, rect)
+    pygame.draw.rect(screen, color, rect, width)
+    if inset:
+        dim = tuple(c * 2 // 5 for c in color)
+        pygame.draw.rect(screen, dim, rect.inflate(-8, -8), 1)
+    if tick:
+        bright = tuple(min(255, c + 45) for c in color)
+        for cx, cy, dx, dy in ((rect.left, rect.top, 1, 1), (rect.right - 1, rect.top, -1, 1),
+                               (rect.left, rect.bottom - 1, 1, -1), (rect.right - 1, rect.bottom - 1, -1, -1)):
+            pygame.draw.line(screen, bright, (cx, cy), (cx + tick * dx, cy), 3)
+            pygame.draw.line(screen, bright, (cx, cy), (cx, cy + tick * dy), 3)
 
 
 def draw_button(screen, rect, label, key=None, lit=None, enabled=True, font=None, key_font=None,
@@ -91,16 +119,15 @@ def draw_button(screen, rect, label, key=None, lit=None, enabled=True, font=None
     font = font or theme.font(17)
     key_font = key_font or theme.font(12)
 
+    # No hover state: a physical switch doesn't react to a cursor floating over it,
+    # only to being pushed in.
     mouse = pygame.mouse.get_pos() if pygame.mouse.get_focused() else (-1, -1)
-    hovered = enabled and rect.collidepoint(mouse)
-    pressed = hovered and pygame.mouse.get_pressed()[0]
+    pressed = enabled and rect.collidepoint(mouse) and pygame.mouse.get_pressed()[0]
 
     if not enabled:
         border, text_color, fill = theme.AMBER_FAINT, theme.AMBER_DIM, theme.BG
     elif pressed:
         border, text_color, fill = theme.AMBER_BRIGHT, theme.AMBER_BRIGHT, theme.AMBER_FAINT
-    elif hovered:
-        border, text_color, fill = theme.AMBER_BRIGHT, theme.AMBER_BRIGHT, theme.BG
     else:
         border, text_color, fill = theme.AMBER_DIM, theme.AMBER, theme.BG
 

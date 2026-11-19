@@ -41,7 +41,8 @@ WHITE = (235, 240, 230)
 GREY = (120, 120, 105)          # "nothing here" / idle text
 
 # World-view things that aren't UI
-ASTEROID = (120, 90, 45)
+ASTEROID = (185, 140, 70)        # rock outline
+ASTEROID_FILL = (34, 25, 12)     # rock body
 
 # ---------------------------------------------------------------------------
 # Font

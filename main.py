@@ -24,7 +24,7 @@ elif args.join:
 
 pygame.init()
 clock = pygame.time.Clock()
-FPS = 25
+FPS = 20
 
 size = (1280, 720) if args.windowed else pygame.display.get_desktop_sizes()[0]
 screen = pygame.display.set_mode(size)

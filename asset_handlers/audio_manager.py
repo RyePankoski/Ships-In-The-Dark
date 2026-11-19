@@ -1,6 +1,8 @@
 import pygame
 import os
 
+from utility.theme import _asset_dir
+
 
 class AudioManager:
     # Channel 0 is reserved for looping ambience. Each SFX gets its own
@@ -10,7 +12,7 @@ class AudioManager:
     AMBIENCE_CHANNEL = 0
     FIRST_SFX_CHANNEL = 1
 
-    def __init__(self, assets_path='assets'):
+    def __init__(self, assets_path=None):
         """Initialize audio manager and load all sounds"""
         pygame.mixer.init()
 
@@ -19,7 +21,7 @@ class AudioManager:
         self.master_volume = 0.2
         self.current_ambience = None
 
-        self._load_all_sounds(assets_path)
+        self._load_all_sounds(assets_path or _asset_dir())
         self._assign_channels()
 
         self.ambience_channel = pygame.mixer.Channel(self.AMBIENCE_CHANNEL)
@@ -64,6 +66,10 @@ class AudioManager:
             'p_field_open': 'sounds/p_field_open.wav',
             'p_field_close': 'sounds/p_field_close.wav',
             'missile_contact': 'sounds/missile_contact.wav',
+            'map_marker': 'sounds/map_marker.wav',
+            'map_marker_place': 'sounds/map_marker_place.wav',
+            'map_marker_delete': 'sounds/map_marker_delete.wav',
+            'cancel' : 'sounds/cancel.wav',
         }
 
         for name, filename in sound_files.items():

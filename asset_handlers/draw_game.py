@@ -68,6 +68,8 @@ class DrawGame:
         self.pirate_ship_ambushing = pygame.image.load(os.path.join(asset_path, "pngs/pirate_ambushing.png"))
 
 
+        self.font_asteroid_name = theme.font(14)
+
         # Generate starfield
         self.stars = generate_stars(10000, WORLD_WIDTH, WORLD_HEIGHT)
 
@@ -96,12 +98,13 @@ class DrawGame:
 
                 screen_x = asteroid.pos_x - camera_x
                 screen_y = asteroid.pos_y - camera_y
-                pygame.draw.circle(
-                    self.screen,
-                    theme.ASTEROID,
-                    (screen_x, screen_y),
-                    asteroid.size
-                )
+                points = [(screen_x + ox, screen_y + oy) for ox, oy in asteroid.outline]
+                pygame.draw.polygon(self.screen, theme.ASTEROID_FILL, points)
+                pygame.draw.polygon(self.screen, theme.ASTEROID, points, 2)
+
+                if asteroid.id_for_ui is not None:
+                    name_surf = self.font_asteroid_name.render(str(asteroid.id_for_ui), True, theme.ASTEROID)
+                    self.screen.blit(name_surf, name_surf.get_rect(center=(screen_x, screen_y)))
 
     def draw_explosions(self, explosions, camera_x, camera_y):
         for explosion in explosions:

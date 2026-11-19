@@ -1,30 +1,46 @@
-"""Turning the server's World into plain dicts and back.
+"""Turning the server's World into compact lists and back.
 
 Only things that change during play are sent. Asteroids are rebuilt from the
-seed on each client, so the only asteroid data sent is which ones are destroyed.
+seed on each client, and which ones have been destroyed is sent separately and
+only when it changes (see netcode/server.py), so they're not in here at all.
+
+Each object goes over the wire as a flat list, [id, value, value, ...], in the
+order of its FIELDS table, instead of a dict that repeats every field name. Each
+field says how to pack it:
+    an int n  float, rounded to n decimals (positions to 0.1 of a unit is far
+              finer than any sensor or the screen can tell apart)
+    INT       whole number, sent as is
+    BOOL      sent as 0/1, turned back into True/False on arrival
 """
 from objects.decoy import Decoy
 from objects.missile import Missile
 from objects.ship import Ship
 
+INT = 'int'
+BOOL = 'bool'
+
 SHIP_FIELDS = (
-    'pos_x', 'pos_y', 'dx', 'dy', 'velocity', 'heading', 'total_velocity',
-    'thrusting', 'health', 'health_low', 'total_missiles', 'missile_cooling_down',
-    'missile_cooldown_timer', 'alive', 'painted', 'took_damage', 'mining_vessel_sees_you',
+    ('pos_x', 1), ('pos_y', 1), ('dx', 3), ('dy', 3), ('velocity', 1), ('heading', 1),
+    ('thrusting', BOOL), ('health', 1), ('health_low', BOOL), ('total_missiles', INT),
+    ('missile_cooling_down', BOOL), ('missile_cooldown_timer', 2), ('alive', BOOL),
+    ('painted', BOOL), ('took_damage', BOOL), ('mining_vessel_sees_you', BOOL),
 )
-MISSILE_FIELDS = ('pos_x', 'pos_y', 'dx', 'dy', 'heading', 'velocity', 'fuel', 'owner', 'alive')
-DECOY_FIELDS = ('pos_x', 'pos_y', 'dx', 'dy', 'v')
+MISSILE_FIELDS = (
+    ('pos_x', 1), ('pos_y', 1), ('dx', 3), ('dy', 3), ('heading', 1), ('velocity', 1),
+    ('fuel', 1), ('owner', INT), ('alive', BOOL),
+)
+DECOY_FIELDS = (('pos_x', 1), ('pos_y', 1), ('dx', 3), ('dy', 3), ('v', 1))
 
 
 def make_snapshot(world):
     return {
-        'ships': [_fields(ship, SHIP_FIELDS, ship.player_id) for ship in world.ships],
+        'ships': [_pack(ship, SHIP_FIELDS, ship.player_id) for ship in world.ships],
+        # The missile's target id goes on the end
         'missiles': [
-            dict(_fields(m, MISSILE_FIELDS, m.net_id), target=getattr(m.contact, 'net_id', None))
+            _pack(m, MISSILE_FIELDS, m.net_id) + [getattr(m.contact, 'net_id', None)]
             for m in world.missiles
         ],
-        'decoys': [_fields(d, DECOY_FIELDS, d.net_id) for d in world.decoys],
-        'dead_asteroids': sorted(world.dead_asteroid_ids),
+        'decoys': [_pack(d, DECOY_FIELDS, d.net_id) for d in world.decoys],
     }
 
 
@@ -34,34 +50,46 @@ def apply_snapshot(world, snapshot):
     Objects are updated, not replaced, so anything holding a reference to them
     (the instruments hold the player's ship, the radar holds the lists) stays valid.
     """
-    _sync_list(world.ships, snapshot['ships'], SHIP_FIELDS,
+    ships = [_unpack(row, SHIP_FIELDS) for row in snapshot['ships']]
+    _sync_list(world.ships, ships, SHIP_FIELDS,
                lambda d: Ship(d['pos_x'], d['pos_y'], player_id=d['id']), key='player_id')
     for ship in world.ships:
+        # Not sent: it's always the length of (dx, dy), see Ship.move
+        ship.total_velocity = (ship.dx ** 2 + ship.dy ** 2) ** 0.5
         ship.update_rect()
 
-    _sync_list(world.decoys, snapshot['decoys'], DECOY_FIELDS,
+    decoys = [_unpack(row, DECOY_FIELDS) for row in snapshot['decoys']]
+    _sync_list(world.decoys, decoys, DECOY_FIELDS,
                lambda d: Decoy(d['pos_x'], d['pos_y'], d['dx'], d['dy'], d['v']))
 
-    missiles_by_id = {m['id']: m for m in snapshot['missiles']}
-    _sync_list(world.missiles, snapshot['missiles'], MISSILE_FIELDS,
+    missiles = [_unpack(row, MISSILE_FIELDS) for row in snapshot['missiles']]
+    targets = {d['id']: d['extra'][0] for d in missiles}
+    _sync_list(world.missiles, missiles, MISSILE_FIELDS,
                lambda d: Missile(d['pos_x'], d['pos_y'], 0, 0, None, d['owner']))
     for missile in world.missiles:
         missile.player_id = missile.owner
-        missile.contact = world.find(missiles_by_id[missile.net_id]['target'])
-
-    for asteroid_id in snapshot['dead_asteroids']:
-        if asteroid_id in world.dead_asteroid_ids:
-            continue
-        world.dead_asteroid_ids.add(asteroid_id)
-        for cell, rocks in list(world.asteroids.items()):
-            rocks[:] = [rock for rock in rocks if rock.net_id != asteroid_id]
-            if not rocks:
-                del world.asteroids[cell]
+        missile.contact = world.find(targets[missile.net_id])
 
 
-def _fields(obj, fields, object_id):
-    data = {name: getattr(obj, name) for name in fields}
-    data['id'] = object_id
+def _pack(obj, fields, object_id):
+    row = [object_id]
+    for name, kind in fields:
+        value = getattr(obj, name)
+        if kind == BOOL:
+            row.append(1 if value else 0)
+        elif kind == INT:
+            row.append(value)
+        else:
+            row.append(round(value, kind))
+    return row
+
+
+def _unpack(row, fields):
+    """[id, v, v, ...] -> {'id': id, name: value, ..., 'extra': [anything after]}"""
+    data = {'id': row[0]}
+    for (name, kind), value in zip(fields, row[1:]):
+        data[name] = bool(value) if kind == BOOL else value
+    data['extra'] = row[1 + len(fields):]
     return data
 
 
@@ -75,7 +103,7 @@ def _sync_list(objects, dicts, fields, create, key='net_id'):
             if key == 'net_id':
                 obj.net_id = data['id']
             objects.append(obj)
-        for name in fields:
+        for name, _ in fields:
             setattr(obj, name, data[name])
         seen.add(data['id'])
     objects[:] = [obj for obj in objects if getattr(obj, key) in seen]

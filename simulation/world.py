@@ -28,6 +28,13 @@ def empty_command():
     return {'move': None, 'actions': [], 'laser_target': None}
 
 
+def _grid_remove(grid, cell, obj):
+    """Take obj out of a grid-keyed dict, dropping the cell once it's empty."""
+    grid[cell].remove(obj)
+    if not grid[cell]:
+        del grid[cell]
+
+
 class World:
     """The facts of the game: every object, and the rules that move them.
 
@@ -40,6 +47,9 @@ class World:
         self.seed = seed
         self.with_npcs = with_npcs
 
+        self.alphabet = ["a","b", "c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"]
+
+
         self.ships = []
         self.missiles = []
         self.decoys = []
@@ -51,6 +61,12 @@ class World:
         self.pirates = {}
 
         self.dead_asteroid_ids = set()
+        # Same ids in the order they died. The server sends each client only the
+        # part of this it hasn't confirmed yet (see netcode/server.py).
+        self.dead_asteroid_log = []
+
+        # player_id -> callsign, for every pilot in this world
+        self.callsigns = {}
 
         # Things that happened during the last step, for the client to react to
         # (sounds etc). Only meaningful when the world is stepped locally.
@@ -67,6 +83,7 @@ class World:
         self._next_id += 1
         return object_id
 
+
     def _generate(self, rng):
         # Asteroids come only from the seed, in a fixed order, so every machine
         # that builds a World from the same seed gets the same rocks with the
@@ -76,6 +93,8 @@ class World:
             pos_y = rng.randint(0, WORLD_HEIGHT)
             asteroid = Asteroid(pos_x, pos_y, rng.randint(50, 100))
             asteroid.net_id = self.new_id()
+
+            asteroid.id_for_ui = self._generate_name()
             self.asteroids.setdefault(asteroid.cell, []).append(asteroid)
 
         if not self.with_npcs:
@@ -92,11 +111,42 @@ class World:
         pirate.net_id = self.new_id()
         self.pirates.setdefault((int(100 // GRID_SIZE), int(100 // GRID_SIZE)), []).append(pirate)
 
+    def _generate_name(self):
+        length = random.randint(1, 3)
+        name = ""
+        for _ in range(length):
+            name += (random.choice(self.alphabet))
+
+        length = random.randint(1, 3)
+
+        for _ in range(length):
+            name += str(random.randint(0,9))
+        return name
+
+
     def spawn_ship(self, player_id, is_ai=False):
         x, y = self.random_empty_point()
         ship = Ship(x, y, player_id=player_id, is_ai=is_ai)
         self.ships.append(ship)
         return ship
+
+    def remove_ship(self, player_id):
+        """A player left: their ship and callsign go with them."""
+        self.ships = [ship for ship in self.ships if ship.player_id != player_id]
+        self.callsigns.pop(player_id, None)
+
+    def remove_asteroids(self, asteroid_ids):
+        """Destroy asteroids by id (a client catching up with the server's world)."""
+        new = [i for i in asteroid_ids if i not in self.dead_asteroid_ids]
+        if not new:
+            return
+        self.dead_asteroid_ids.update(new)
+        self.dead_asteroid_log.extend(new)
+        gone = set(new)
+        for cell, rocks in list(self.asteroids.items()):
+            rocks[:] = [rock for rock in rocks if rock.net_id not in gone]
+            if not rocks:
+                del self.asteroids[cell]
 
     def random_empty_point(self):
         while True:
@@ -229,6 +279,7 @@ class World:
                 if not asteroid.alive:
                     rocks.remove(asteroid)
                     self.dead_asteroid_ids.add(asteroid.net_id)
+                    self.dead_asteroid_log.append(asteroid.net_id)
             if not rocks:
                 del self.asteroids[cell]
 
@@ -240,40 +291,32 @@ class World:
                 if laser[3] is not None:
                     laser[3].alive = False
 
+    # Drones and pirates are listed out before any of them move. Walking the grid
+    # cell by cell while moving them lets one that crosses into a cell still
+    # ahead in the loop be updated twice in a frame, and a drone that died would
+    # then be removed twice: a KeyError on its already-emptied cell.
     def _step_drones(self, dt):
-        drones_to_remove = []
-        for cell in list(self.drones.keys()):
-            for drone in list(self.drones[cell]):
-                drone.run_drone(self.asteroids, dt)
+        for drone in [d for group in self.drones.values() for d in group]:
+            drone.run_drone(self.asteroids, dt)
 
-                if drone.alive is False:
-                    drones_to_remove.append(drone)
+            if drone.alive is False:
+                _grid_remove(self.drones, drone.cell, drone)
+                continue
 
-                # Only update the grid if the cell changed
-                new_cell = (int(drone.pos_x // GRID_SIZE), int(drone.pos_y // GRID_SIZE))
-                if new_cell != drone.cell:
-                    self.drones[drone.cell].remove(drone)
-                    if not self.drones[drone.cell]:
-                        del self.drones[drone.cell]
-                    self.drones.setdefault(new_cell, []).append(drone)
-                    drone.cell = new_cell
-
-        for drone in drones_to_remove:
-            self.drones[drone.cell].remove(drone)
-            if not self.drones[drone.cell]:
-                del self.drones[drone.cell]
+            new_cell = (int(drone.pos_x // GRID_SIZE), int(drone.pos_y // GRID_SIZE))
+            if new_cell != drone.cell:
+                _grid_remove(self.drones, drone.cell, drone)
+                self.drones.setdefault(new_cell, []).append(drone)
+                drone.cell = new_cell
 
     def _step_pirates(self, dt):
-        for cell in list(self.pirates.keys()):
-            for pirate in list(self.pirates[cell]):
-                pirate.run(self.ships, self.bullets, self.lasers, self.asteroids, dt)
+        for cell, pirate in [(c, p) for c, group in self.pirates.items() for p in group]:
+            pirate.run(self.ships, self.bullets, self.lasers, self.asteroids, dt)
 
-                new_cell = (int(pirate.pos_x // GRID_SIZE), int(pirate.pos_y // GRID_SIZE))
-                if new_cell != cell:
-                    self.pirates[cell].remove(pirate)
-                    if not self.pirates[cell]:
-                        del self.pirates[cell]
-                    self.pirates.setdefault(new_cell, []).append(pirate)
+            new_cell = (int(pirate.pos_x // GRID_SIZE), int(pirate.pos_y // GRID_SIZE))
+            if new_cell != cell:
+                _grid_remove(self.pirates, cell, pirate)
+                self.pirates.setdefault(new_cell, []).append(pirate)
 
     def _step_bullets(self, dt):
         bullets_to_remove = []

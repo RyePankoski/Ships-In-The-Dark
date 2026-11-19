@@ -103,7 +103,7 @@ class Ship:
             return False
         if self.total_missiles == 0:
             return False
-        if self.velocity > 0.1:
+        if self.velocity > 10:
             return False
         return True
 
