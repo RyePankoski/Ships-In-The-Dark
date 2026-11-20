@@ -31,6 +31,7 @@ class LaserAssessor(Instrument):
         self.target_type = "Nothing"     # what it ended on
         self.hit_id = None               # net_id of what it is touching: sent to the world as the command's laser_target
         self._unpainted = False
+        self.target_distance = 0
 
     # --- Instrument ---------------------------------------------------------
     def actions(self):
@@ -116,7 +117,8 @@ class LaserAssessor(Instrument):
             for contact in self.contacts.near(ray_x, ray_y, reach, exclude=self.ship):
                 c_x, c_y = contact.center
                 if (c_x - ray_x) ** 2 + (c_y - ray_y) ** 2 < contact.radar_cross_section ** 2:
-                    target_type = self.assess_target(c_x, c_y, contact)
+                    target_type, distance = self.assess_target(c_x, c_y, contact)
+                    self.target_distance = distance
                     contact.painted = True
                     self.current_target = contact
                     return (ray_x, ray_y), target_type
@@ -137,6 +139,8 @@ class LaserAssessor(Instrument):
         self.previous_signature_position = self.signature_position
         self.signature_position = (x, y)
 
+        signature_distance = math.hypot(x - self.ship.center[0], y - self.ship.center[1])
+
         self.previous_target = self.current_target
         self.current_target = contact
 
@@ -145,9 +149,9 @@ class LaserAssessor(Instrument):
             self.tracking_lost = True
 
         if self.previous_signature_position == self.signature_position:
-            return "ASTEROID / STATIC"
+            return "ASTEROID / STATIC", signature_distance
         else:
-            return "VESSEL / MOVING"
+            return "VESSEL / MOVING", signature_distance
 
     def change_direction(self, inputs, dt):
         if inputs['arrow_key_left']:

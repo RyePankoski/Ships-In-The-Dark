@@ -87,10 +87,6 @@ class DrawUI:
     LOCK_BLINK_FREQUENCY = 10
     LOCK_BORDER_WIDTH = 10
 
-    # P field config
-    P_FIELD_MAX_STRENGTH = 40.0  # the value you append signatures with
-    P_FIELD_STABLE_STATIC = False  # True = frozen snapshot, False = live shimmer
-
     # endregion
 
     def __init__(self, screen):
@@ -177,7 +173,7 @@ class DrawUI:
             r, c = divmod(i, cols)
             self._button((inner.left + c * (bw + gap), top + r * (bh + gap), bw, bh), label, action, **kwargs)
 
-    def draw_control_banks(self, ship, cockpit, local=True, map_open=False, p_field_open=False, blink_busy=False,
+    def draw_control_banks(self, ship, cockpit, local=True, map_open=False, blink_busy=False,
                            sensor_buttons=()):
         """Two banks of switches in the bottom panel, either side of ship telemetry.
 
@@ -207,7 +203,6 @@ class DrawUI:
         displays = [
             *sensor_buttons,
             ("TAC MAP", 'toggle_map', dict(key="M", lit=map_open)),
-            ("P-FIELD", 'toggle_p_field', dict(key="N", lit=p_field_open)),
             ("CONSOLE", 'open_console', dict(key="ESC")),
         ]
         left = pygame.Rect(margin, tele.top, bank_w, tele.height)
@@ -359,7 +354,8 @@ class DrawUI:
             self.screen.blit(surf, panel)
 
         # Background machine chatter in the top panel, either side of the callsign plate
-        self.readouts.draw(self.screen, panels[0], exclude=self._callsign_rect())
+        self.readouts.draw(self.screen, panels[0], exclude=self._callsign_rect(),
+                           exclude_right=self._radio_rect())
 
         # 4. Viewport Corner Notch Ticks
         v_left = self.PANEL_WIDTH
@@ -410,6 +406,78 @@ class DrawUI:
     def _callsign_rect(self):
         """The pilot ID box: top-left of the top panel."""
         return pygame.Rect(24, 22, 380, self.THIN_HEIGHT - 44)
+
+    def _radio_rect(self):
+        """The radio: top-right of the top panel, same height as the pilot ID box."""
+        w = self.screen.get_width()
+        return pygame.Rect(w - 24 - 440, 22, 440, self.THIN_HEIGHT - 44)
+
+    def draw_radio_panel(self, radio, level, saturated):
+        """Dial position, signal needle and gain for the radio (see instruments/radio_receiver.py)."""
+        rect = self._radio_rect()
+        LABEL = theme.AMBER_DIM
+        on = radio.on
+
+        self._frame(rect)
+        font = theme.font(19)
+        title = font.render(" RADIO ", True, theme.AMBER)
+        tab = title.get_rect(midleft=(rect.left + 18, rect.top))
+        pygame.draw.rect(self.screen, theme.BG, tab)
+        self.screen.blit(title, tab)
+
+        pad = 22
+        x0, x1 = rect.left + pad, rect.right - pad
+        small = theme.font(17)
+
+        # Channel readout and dial ticks
+        channel = radio.channel.name if on else "OFF"
+        color = theme.AMBER_BRIGHT if on and not getattr(radio.channel, 'is_static', False) else theme.AMBER
+        big = theme.font(26)
+        label = big.render(f"CH {radio.index + 1}  {channel}", True, color if on else LABEL)
+        row_y = rect.top + 16
+        self.screen.blit(label, (x0, row_y))
+        # Dial ticks, to the right of the channel name on the same row
+        n = len(radio.dial)
+        dial_left = x0 + 270
+        mid_y = row_y + label.get_height() // 2
+        for i in range(n):
+            tx = dial_left + int((x1 - dial_left) * (i + 0.5) / n)
+            sel = on and i == radio.index
+            half = 11 if sel else 6
+            pygame.draw.line(self.screen, theme.AMBER_BRIGHT if sel else theme.AMBER_FAINT,
+                             (tx, mid_y - half), (tx, mid_y + half), 3 if sel else 1)
+
+        # Signal strength bar and gain bar
+        bar_h = 12
+        y = row_y + label.get_height() + 14
+        label_w = small.size("SIG ")[0] + 8
+        for name, fraction, bar_color in (
+                ("SIG", level if on else 0.0, theme.AMBER_BRIGHT if saturated else theme.GREEN),
+                ("GAIN", self._gain_fraction(radio), theme.GREEN)):
+            self.screen.blit(small.render(name, True, LABEL), (x0, y - 3))
+            bar = pygame.Rect(x0 + label_w + 18, y, x1 - x0 - label_w - 18, bar_h)
+            pygame.draw.rect(self.screen, theme.GREEN_FAINT, bar)
+            pygame.draw.rect(self.screen, bar_color, (bar.left, bar.top, int(bar.width * min(1.0, fraction)), bar_h))
+            pygame.draw.rect(self.screen, LABEL, bar, 1)
+            y += bar_h + 10
+
+    @staticmethod
+    def _gain_fraction(radio):
+        """Gain on a log scale, 0 at its minimum and 1 at its maximum."""
+        return math.log(radio.gain / RADIO_GAIN_MIN) / math.log(RADIO_GAIN_MAX / RADIO_GAIN_MIN)
+
+    def draw_radio_controls(self, radio):
+        """Radio buttons, under the readout box's bottom edge (drawn last so they stay clickable)."""
+        rect = self._radio_rect()
+        row = pygame.Rect(rect.left + 22, rect.bottom - 44, rect.width - 44, 30)
+        font = theme.font(15)
+        self._button_row(row, [
+            (1.2, "PWR", 'toggle_radio', dict(key="G", lit=radio.on, font=font)),
+            (1, "< CH", 'radio_tune_down', dict(key="1", font=font, align="center", enabled=radio.on)),
+            (1, "CH >", 'radio_tune_up', dict(key="2", font=font, align="center", enabled=radio.on)),
+            (1, "GAIN-", 'radio_gain_down', dict(key="3", font=font, align="center", enabled=radio.on)),
+            (1, "GAIN+", 'radio_gain_up', dict(key="4", font=font, align="center", enabled=radio.on)),
+        ], gap=6)
 
     def draw_callsign_plate(self, callsign, player_id, pilots_on_net, local):
         """Pilot ID readout: callsign, IFF code and link status, in the same
@@ -748,6 +816,14 @@ class DrawUI:
         # Impact flare at the endpoint
         pygame.draw.circle(self.screen, theme.WHITE, screen_end, 2)
         pygame.draw.circle(self.screen, beam_color, screen_end, 4, 1)
+
+        # Range readout beside the impact point while locked
+        if laser.laser_locked:
+            label = self.font_scan_body.render(f"RNG {laser.target_distance:.0f}", True, theme.AMBER_BRIGHT)
+            label_rect = label.get_rect(midleft=(screen_end[0] + 14, screen_end[1] - 14))
+            label_rect.clamp_ip(viewport)
+            pygame.draw.rect(self.screen, theme.BG, label_rect.inflate(6, 2))
+            self.screen.blit(label, label_rect)
 
         self.screen.set_clip(None)
 
@@ -1715,168 +1791,6 @@ class DrawUI:
             text_y = box_y + box_h - text.get_height() - 6
             self.screen.blit(text, (text_x, text_y))
 
-    def draw_p_field_scanner(self, p_field, player_x, player_y, is_p_field_open, world_size=WORLD_HEIGHT):
-
-        if not is_p_field_open:
-            return
-
-        # --- 1. Viewport geometry -------------------------------------------------
-        world_left, world_right, world_top, world_bottom = self._get_world_bounds()
-        viewport_width = world_right - world_left
-        viewport_height = world_bottom - world_top
-        viewport_rect = pygame.Rect(world_left, world_top, viewport_width, viewport_height)
-
-        # --- 2. Base & borders ----------------------------------------------------
-        pygame.draw.rect(self.screen, self.COLOR_PANEL_BG, viewport_rect)
-        pygame.draw.rect(self.screen, self.COLOR_BORDER_INSET, viewport_rect, 2)
-
-        header_surf = self.font_scan_header.render(
-            "GLOBAL P-FIELD TELEMETRY", True, self.COLOR_HUD_AMBER)
-        self.screen.blit(header_surf, (world_left + 25, world_top + 25))
-
-        sub_surf = self.font_tiny.render(
-            f"SCALE: 1:{world_size} | SENSITIVITY: DIFFUSE", True, self.COLOR_GRID_TEXT)
-        self.screen.blit(sub_surf, (world_left + 25, world_top + 55))
-
-        old_clip = self.screen.get_clip()
-        self.screen.set_clip(viewport_rect)
-
-        # --- 3. Projection --------------------------------------------------------
-        # Uniform scale on both axes so the square world isn't stretched into the
-        # panel's aspect ratio. Blobs stay circular and distances read correctly.
-        # The map is letterboxed and centered in the viewport.
-        # (To revert to the old stretched behaviour: set scale_x/scale_y to
-        #  viewport_width / world_size and viewport_height / world_size, and set
-        #  both origins to world_left / world_top.)
-        scale = min(viewport_width, viewport_height) / float(world_size)
-        map_width = world_size * scale
-        map_height = world_size * scale
-        origin_x = world_left + (viewport_width - map_width) * 0.5
-        origin_y = world_top + (viewport_height - map_height) * 0.5
-
-        def to_screen(wx, wy):
-            return origin_x + wx * scale, origin_y + wy * scale
-
-        # Faint frame showing the actual world bounds inside the letterbox
-        pygame.draw.rect(
-            self.screen, self.COLOR_BORDER_INSET,
-            pygame.Rect(int(origin_x), int(origin_y), int(map_width), int(map_height)), 1)
-
-        # --- 4. Noise setup -------------------------------------------------------
-        color_ghost = (14, 44, 22)  # ambient CMB dash colour
-        color_hot = (60, 180, 95)  # hottest a signature ever gets
-
-        # Dashes per screen pixel². Ambient and signatures share this rate, which
-        # is what makes an injected trace read as "more of the same" rather than
-        # as a different element drawn on top.
-        noise_rate = 1.0 / 1000.0
-
-        if self.P_FIELD_STABLE_STATIC:
-            # Frozen snapshot: dash positions persist frame to frame, only density
-            # changes as signatures decay. Applies to ambient too — a still patch
-            # inside a shimmering field would stand out more than a bright one.
-            rng = random.Random(0x50F1E1D)
-        else:
-            rng = random
-
-        # --- 5. Ambient background noise -----------------------------------------
-        base_noise_density = int(viewport_width * viewport_height * noise_rate)
-
-        for _ in range(base_noise_density):
-            nx = rng.randint(world_left, world_right - 10)
-            ny = rng.randint(world_top, world_bottom - 1)
-            dash_len = rng.randint(2, 6)
-            pygame.draw.line(self.screen, color_ghost, (nx, ny), (nx + dash_len, ny), 1)
-
-        # --- 6. Signature injection ----------------------------------------------
-        grid_size = GRID_SIZE
-
-        if p_field:
-            for (grid_x, grid_y), signatures in p_field.items():
-                if not signatures:
-                    continue
-
-                strengths = [s for s, p_type, _ in signatures if p_type == 'movement']
-                if not strengths:
-                    continue
-
-                # Normalise to 0..1 so the thresholds below actually mean something
-                norm = max(strengths) / float(self.P_FIELD_MAX_STRENGTH)
-                norm = max(0.0, min(1.0, norm))
-                if norm <= 0.0:
-                    continue
-
-                # Deterministic offset so the disturbance never sits exactly on the
-                # cell centre — keeps the grid from being readable as a grid.
-                shift_x = ((grid_x * 73856093) ^ (grid_y * 19349663)) % grid_size - (grid_size // 2)
-                shift_y = ((grid_y * 83492791) ^ (grid_x * 39916801)) % grid_size - (grid_size // 2)
-
-                cx_world = grid_x * grid_size + grid_size * 0.5 + shift_x
-                cy_world = grid_y * grid_size + grid_size * 0.5 + shift_y
-
-                # Radius is near-constant. A ship perturbs roughly a cell and a
-                # half either way regardless of how fresh the trace is; strength
-                # controls density and temperature instead.
-                radius_world = grid_size * 1.2 + norm * grid_size * 0.6
-                radius_px = radius_world * scale
-                if radius_px < 1.0:
-                    continue
-
-                cx, cy = to_screen(cx_world, cy_world)
-
-                # Cheap reject for blobs entirely off-panel
-                if (cx + radius_px * 2 < world_left or cx - radius_px * 2 > world_right or
-                        cy + radius_px * 2 < world_top or cy - radius_px * 2 > world_bottom):
-                    continue
-
-                # Added dashes as a fraction of the ambient already in that area,
-                # scaled by area so big and small blobs look equally dense.
-                boost = 0.30 + 1.20 * norm
-                added = int(math.pi * radius_px * radius_px * noise_rate * boost)
-                added = max(3, min(added, 250))
-
-                # Same hue as the ghost, only warmer — no hue jump, no hard cutoff
-                t = 0.35 + 0.65 * norm
-                color = (
-                    int(color_ghost[0] + (color_hot[0] - color_ghost[0]) * t),
-                    int(color_ghost[1] + (color_hot[1] - color_ghost[1]) * t),
-                    int(color_ghost[2] + (color_hot[2] - color_ghost[2]) * t),
-                )
-
-                # Gaussian scatter — density falls off with distance from centre so
-                # the disturbance has no edge. A uniform box would draw a rectangle
-                # no amount of colour matching can hide.
-                sigma = radius_px / 2.5
-
-                if self.P_FIELD_STABLE_STATIC:
-                    cell_rng = random.Random((grid_x << 16) ^ grid_y)
-                else:
-                    cell_rng = rng
-
-                for _ in range(added):
-                    static_x = cell_rng.gauss(cx, sigma)
-                    static_y = cell_rng.gauss(cy, sigma)
-
-                    if not (world_left <= static_x < world_right and
-                            world_top <= static_y < world_bottom):
-                        continue
-
-                    dash_len = cell_rng.randint(2, 6)  # identical to ambient
-                    pygame.draw.line(self.screen, color,
-                                     (static_x, static_y),
-                                     (static_x + dash_len, static_y), 1)
-
-        # --- 7. Player marker -----------------------------------------------------
-        player_px, player_py = to_screen(player_x, player_y)
-        player_px, player_py = int(player_px), int(player_py)
-
-        pygame.draw.circle(self.screen, theme.WHITE, (player_px, player_py), 2)
-        self.screen.set_clip(old_clip)
-
-        close = pygame.Rect(0, 0, 110, 34)
-        close.topright = (world_right - 14, world_top + 14)
-        self._button(close, "CLOSE", 'toggle_p_field', key="N")
-
     # Operator console options: (label, key hint, action)
     CONSOLE_OPTIONS = (
         ("RETURN TO COCKPIT", "ESC", 'escape'),
@@ -1988,6 +1902,11 @@ class DrawUI:
             ("SENSORS", [
                 ("R", "RADAR SWEEP"),
                 ("Q", "CLOSE RANGE SCAN"),
+            ]),
+            ("RADIO", [
+                ("G", "RADIO ON / OFF"),
+                ("1 2", "TUNE DIAL"),
+                ("3 4", "GAIN DOWN / UP"),
             ]),
             ("DEEP FIELD SCANNER", [
                 ("K", "DFS ON / OFF"),

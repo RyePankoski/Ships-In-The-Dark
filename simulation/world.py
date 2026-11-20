@@ -6,6 +6,7 @@ from objects.drone import Drone
 from objects.mining_vessel import MiningVessel
 from objects.missile import Missile
 from objects.ship import Ship
+from radio.signal import RADAR_SWEEP, EmissionLog
 from simulation.contacts import Contacts
 from utility.constants import *
 from utility.util import squared_distance
@@ -72,6 +73,11 @@ class World:
         # Things that happened during the last step, for the client to react to
         # (sounds etc). Only meaningful when the world is stepped locally.
         self.events = []
+
+        # Everything emitted lately (radar sweeps, ...) and the world clock that stamps it
+        self.emissions = EmissionLog()
+        self.time = 0.0
+        self._last_sweep = {}  # player_id -> world time of their last radar sweep
 
         # How sensors look at everything above (see simulation/contacts.py)
         self.contacts = Contacts(self)
@@ -185,6 +191,8 @@ class World:
     def step(self, commands, dt):
         """Advance the world by dt. commands = {player_id: command dict}."""
         self.events = []
+        self.time += dt
+        self.emissions.prune(self.time)
 
         for ship in self.ships:
             command = commands.get(ship.player_id)
@@ -220,6 +228,14 @@ class World:
                           random.randint(-1, 1), random.randint(-1, 1), random.randint(20, 25))
             decoy.net_id = self.new_id()
             self.decoys.append(decoy)
+
+        elif kind == 'radar_sweep':
+            if self.time - self._last_sweep.get(ship.player_id, -RADAR_SWEEP_MIN_INTERVAL) >= RADAR_SWEEP_MIN_INTERVAL:
+                self._last_sweep[ship.player_id] = self.time
+                x, y = ship.center
+                self.emissions.publish(ship.player_id, x, y, RADAR_SWEEP, RADAR_SWEEP_POWER, self.time)
+                # Tells clients (who don't step the world) so their radios can hear it
+                self.events.append(('radar_sweep', ship.player_id, round(x, 1), round(y, 1), round(self.time, 3)))
 
         elif kind == 'blink':
             ship.pos_x, ship.pos_y = self.random_empty_point()

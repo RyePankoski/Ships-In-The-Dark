@@ -129,9 +129,9 @@ class TopPanelReadouts:
             Terminal("COMMS", comms_line, chars_per_sec=30, pause=(1.5, 6.0)),
         ]
 
-    def draw(self, screen, panel_rect, exclude=None):
+    def draw(self, screen, panel_rect, exclude=None, exclude_right=None):
         """exclude: a box at the left of the panel (the pilot ID) to keep clear;
-        the terminals share whatever is to its right."""
+        exclude_right: the same at the right (the radio). The terminals share what is between."""
         if not theme.GRIME_ENABLED:
             return
         inner = panel_rect.inflate(-60, -44)
@@ -139,6 +139,8 @@ class TopPanelReadouts:
         if exclude is not None:
             inner.width -= exclude.right + gap - inner.left
             inner.left = exclude.right + gap
+        if exclude_right is not None:
+            inner.width -= inner.right - (exclude_right.left - gap)
         w = (inner.width - gap * (len(self.terminals) - 1)) // len(self.terminals)
         if w < self.MIN_WIDTH:
             return

@@ -1543,6 +1543,7 @@ imports:
  &#8226;   <a href="#utility">utility</a>
  &#8226;   <a href="#utility.constants">utility.constants</a>
  &#8226;   <a href="#utility.theme">utility.theme</a>
+ &#8226;   <a href="#zlib">zlib</a>
 
   </div>
   <div class="import">
@@ -3397,10 +3398,14 @@ imports:
  &#8226;   <a href="#core.cockpit">core.cockpit</a>
  &#8226;   <a href="#instruments.close_range_scan">instruments.close_range_scan</a>
  &#8226;   <a href="#instruments.deep_field_scan">instruments.deep_field_scan</a>
+ &#8226;   <a href="#instruments.instrument">instruments.instrument</a>
  &#8226;   <a href="#instruments.laser_assessor">instruments.laser_assessor</a>
  &#8226;   <a href="#instruments.radar_system">instruments.radar_system</a>
+ &#8226;   <a href="#instruments.radio_receiver">instruments.radio_receiver</a>
  &#8226;   <a href="#pygame">pygame</a>
+ &#8226;   <a href="#radio.signal">radio.signal</a>
  &#8226;   <a href="#simulation.world">simulation.world</a>
+ &#8226;   <a href="#utility.constants">utility.constants</a>
  &#8226;   <a href="#utility.util">utility.util</a>
 
   </div>
@@ -3494,6 +3499,9 @@ imports:
   <div class="import">
 imported by:
     <a href="#pprint">pprint</a>
+ &#8226;   <a href="#radio.channel">radio.channel</a>
+ &#8226;   <a href="#radio.radio">radio.radio</a>
+ &#8226;   <a href="#radio.signal">radio.signal</a>
 
   </div>
 
@@ -7839,8 +7847,10 @@ imported by:
 imported by:
     <a href="#instruments.close_range_scan">instruments.close_range_scan</a>
  &#8226;   <a href="#instruments.deep_field_scan">instruments.deep_field_scan</a>
+ &#8226;   <a href="#instruments.instrument">instruments.instrument</a>
  &#8226;   <a href="#instruments.laser_assessor">instruments.laser_assessor</a>
  &#8226;   <a href="#instruments.radar_system">instruments.radar_system</a>
+ &#8226;   <a href="#instruments.radio_receiver">instruments.radio_receiver</a>
 
   </div>
 
@@ -7852,7 +7862,7 @@ imported by:
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#instruments">instruments</a>
- &#8226;   <a href="#math">math</a>
+ &#8226;   <a href="#instruments.instrument">instruments.instrument</a>
  &#8226;   <a href="#utility.constants">utility.constants</a>
 
   </div>
@@ -7870,7 +7880,7 @@ imported by:
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#instruments">instruments</a>
- &#8226;   <a href="#math">math</a>
+ &#8226;   <a href="#instruments.instrument">instruments.instrument</a>
  &#8226;   <a href="#utility.constants">utility.constants</a>
  &#8226;   <a href="#utility.util">utility.util</a>
 
@@ -7884,16 +7894,34 @@ imported by:
 </div>
 
 <div class="node">
+  <a name="instruments.instrument"></a>
+  <a target="code" href="///C:/Users/Rye/PycharmProjects/ShipsInTheDark/instruments/instrument.py" type="text/plain"><tt>instruments.instrument</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#instruments">instruments</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#core.main_scene">core.main_scene</a>
+ &#8226;   <a href="#instruments.close_range_scan">instruments.close_range_scan</a>
+ &#8226;   <a href="#instruments.deep_field_scan">instruments.deep_field_scan</a>
+ &#8226;   <a href="#instruments.laser_assessor">instruments.laser_assessor</a>
+ &#8226;   <a href="#instruments.radar_system">instruments.radar_system</a>
+ &#8226;   <a href="#instruments.radio_receiver">instruments.radio_receiver</a>
+
+  </div>
+
+</div>
+
+<div class="node">
   <a name="instruments.laser_assessor"></a>
   <a target="code" href="///C:/Users/Rye/PycharmProjects/ShipsInTheDark/instruments/laser_assessor.py" type="text/plain"><tt>instruments.laser_assessor</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#instruments">instruments</a>
+ &#8226;   <a href="#instruments.instrument">instruments.instrument</a>
  &#8226;   <a href="#math">math</a>
- &#8226;   <a href="#objects.asteroid">objects.asteroid</a>
- &#8226;   <a href="#objects.drone">objects.drone</a>
- &#8226;   <a href="#objects.mining_vessel">objects.mining_vessel</a>
- &#8226;   <a href="#objects.ship">objects.ship</a>
  &#8226;   <a href="#utility.constants">utility.constants</a>
 
   </div>
@@ -7911,11 +7939,31 @@ imported by:
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#instruments">instruments</a>
+ &#8226;   <a href="#instruments.instrument">instruments.instrument</a>
  &#8226;   <a href="#math">math</a>
  &#8226;   <a href="#utility">utility</a>
  &#8226;   <a href="#utility.constants">utility.constants</a>
  &#8226;   <a href="#utility.precomputed_angles">utility.precomputed_angles</a>
  &#8226;   <a href="#utility.theme">utility.theme</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#core.main_scene">core.main_scene</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="instruments.radio_receiver"></a>
+  <a target="code" href="///C:/Users/Rye/PycharmProjects/ShipsInTheDark/instruments/radio_receiver.py" type="text/plain"><tt>instruments.radio_receiver</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#instruments">instruments</a>
+ &#8226;   <a href="#instruments.instrument">instruments.instrument</a>
+ &#8226;   <a href="#radio.radio">radio.radio</a>
+ &#8226;   <a href="#utility.constants">utility.constants</a>
 
   </div>
   <div class="import">
@@ -8312,8 +8360,6 @@ imported by:
  &#8226;   <a href="#asset_handlers.draw_ui">asset_handlers.draw_ui</a>
  &#8226;   <a href="#asyncio.windows_events">asyncio.windows_events</a>
  &#8226;   <a href="#fractions">fractions</a>
- &#8226;   <a href="#instruments.close_range_scan">instruments.close_range_scan</a>
- &#8226;   <a href="#instruments.deep_field_scan">instruments.deep_field_scan</a>
  &#8226;   <a href="#instruments.laser_assessor">instruments.laser_assessor</a>
  &#8226;   <a href="#instruments.radar_system">instruments.radar_system</a>
  &#8226;   <a href="#numpy._core._internal">numpy._core._internal</a>
@@ -8327,8 +8373,10 @@ imported by:
  &#8226;   <a href="#objects.mining_vessel">objects.mining_vessel</a>
  &#8226;   <a href="#objects.missile">objects.missile</a>
  &#8226;   <a href="#objects.ship">objects.ship</a>
+ &#8226;   <a href="#radio.signal">radio.signal</a>
  &#8226;   <a href="#random">random</a>
  &#8226;   <a href="#selectors">selectors</a>
+ &#8226;   <a href="#simulation.contacts">simulation.contacts</a>
  &#8226;   <a href="#statistics">statistics</a>
  &#8226;   <a href="#urllib.parse">urllib.parse</a>
  &#8226;   <a href="#utility.util">utility.util</a>
@@ -15851,6 +15899,7 @@ imported by:
 <span class="moduletype">NamespacePackage</span>  <div class="import">
 imported by:
     <a href="#objects.asteroid">objects.asteroid</a>
+ &#8226;   <a href="#objects.base">objects.base</a>
  &#8226;   <a href="#objects.bullet">objects.bullet</a>
  &#8226;   <a href="#objects.decoy">objects.decoy</a>
  &#8226;   <a href="#objects.drone">objects.drone</a>
@@ -15869,15 +15918,37 @@ imported by:
 imports:
     <a href="#math">math</a>
  &#8226;   <a href="#objects">objects</a>
+ &#8226;   <a href="#objects.base">objects.base</a>
  &#8226;   <a href="#random">random</a>
  &#8226;   <a href="#utility.constants">utility.constants</a>
 
   </div>
   <div class="import">
 imported by:
-    <a href="#instruments.laser_assessor">instruments.laser_assessor</a>
- &#8226;   <a href="#objects.missile">objects.missile</a>
+    <a href="#objects.missile">objects.missile</a>
  &#8226;   <a href="#simulation.world">simulation.world</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="objects.base"></a>
+  <a target="code" href="///C:/Users/Rye/PycharmProjects/ShipsInTheDark/objects/base.py" type="text/plain"><tt>objects.base</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#objects">objects</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#objects.asteroid">objects.asteroid</a>
+ &#8226;   <a href="#objects.bullet">objects.bullet</a>
+ &#8226;   <a href="#objects.decoy">objects.decoy</a>
+ &#8226;   <a href="#objects.drone">objects.drone</a>
+ &#8226;   <a href="#objects.mining_vessel">objects.mining_vessel</a>
+ &#8226;   <a href="#objects.missile">objects.missile</a>
+ &#8226;   <a href="#objects.ship">objects.ship</a>
 
   </div>
 
@@ -15889,6 +15960,7 @@ imported by:
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#objects">objects</a>
+ &#8226;   <a href="#objects.base">objects.base</a>
  &#8226;   <a href="#utility.constants">utility.constants</a>
 
   </div>
@@ -15906,6 +15978,7 @@ imported by:
 <span class="moduletype">SourceModule</span>  <div class="import">
 imports:
     <a href="#objects">objects</a>
+ &#8226;   <a href="#objects.base">objects.base</a>
  &#8226;   <a href="#utility.constants">utility.constants</a>
 
   </div>
@@ -15925,6 +15998,7 @@ imported by:
 imports:
     <a href="#math">math</a>
  &#8226;   <a href="#objects">objects</a>
+ &#8226;   <a href="#objects.base">objects.base</a>
  &#8226;   <a href="#random">random</a>
  &#8226;   <a href="#utility.constants">utility.constants</a>
  &#8226;   <a href="#utility.util">utility.util</a>
@@ -15932,8 +16006,7 @@ imports:
   </div>
   <div class="import">
 imported by:
-    <a href="#instruments.laser_assessor">instruments.laser_assessor</a>
- &#8226;   <a href="#simulation.world">simulation.world</a>
+    <a href="#simulation.world">simulation.world</a>
 
   </div>
 
@@ -15946,6 +16019,7 @@ imported by:
 imports:
     <a href="#math">math</a>
  &#8226;   <a href="#objects">objects</a>
+ &#8226;   <a href="#objects.base">objects.base</a>
  &#8226;   <a href="#objects.bullet">objects.bullet</a>
  &#8226;   <a href="#pygame">pygame</a>
  &#8226;   <a href="#random">random</a>
@@ -15955,8 +16029,7 @@ imports:
   </div>
   <div class="import">
 imported by:
-    <a href="#instruments.laser_assessor">instruments.laser_assessor</a>
- &#8226;   <a href="#simulation.world">simulation.world</a>
+    <a href="#simulation.world">simulation.world</a>
 
   </div>
 
@@ -15970,6 +16043,7 @@ imports:
     <a href="#math">math</a>
  &#8226;   <a href="#objects">objects</a>
  &#8226;   <a href="#objects.asteroid">objects.asteroid</a>
+ &#8226;   <a href="#objects.base">objects.base</a>
  &#8226;   <a href="#pygame">pygame</a>
  &#8226;   <a href="#utility.constants">utility.constants</a>
 
@@ -15991,14 +16065,14 @@ imports:
     <a href="#ai.ai">ai.ai</a>
  &#8226;   <a href="#math">math</a>
  &#8226;   <a href="#objects">objects</a>
+ &#8226;   <a href="#objects.base">objects.base</a>
  &#8226;   <a href="#pygame">pygame</a>
  &#8226;   <a href="#utility.constants">utility.constants</a>
 
   </div>
   <div class="import">
 imported by:
-    <a href="#instruments.laser_assessor">instruments.laser_assessor</a>
- &#8226;   <a href="#simulation.snapshot">simulation.snapshot</a>
+    <a href="#simulation.snapshot">simulation.snapshot</a>
  &#8226;   <a href="#simulation.world">simulation.world</a>
 
   </div>
@@ -17580,6 +17654,117 @@ imported by:
 </div>
 
 <div class="node">
+  <a name="radio"></a>
+  <a target="code" href="///C:/Users/Rye/PycharmProjects/ShipsInTheDark/radio/__init__.py" type="text/plain"><tt>radio</tt></a>
+<span class="moduletype">Package</span>  <div class="import">
+imported by:
+    <a href="#radio.channel">radio.channel</a>
+ &#8226;   <a href="#radio.radar_channel">radio.radar_channel</a>
+ &#8226;   <a href="#radio.radio">radio.radio</a>
+ &#8226;   <a href="#radio.receiver">radio.receiver</a>
+ &#8226;   <a href="#radio.signal">radio.signal</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="radio.channel"></a>
+  <a target="code" href="///C:/Users/Rye/PycharmProjects/ShipsInTheDark/radio/channel.py" type="text/plain"><tt>radio.channel</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#dataclasses">dataclasses</a>
+ &#8226;   <a href="#radio">radio</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#radio.radar_channel">radio.radar_channel</a>
+ &#8226;   <a href="#radio.radio">radio.radio</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="radio.radar_channel"></a>
+  <a target="code" href="///C:/Users/Rye/PycharmProjects/ShipsInTheDark/radio/radar_channel.py" type="text/plain"><tt>radio.radar_channel</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#radio">radio</a>
+ &#8226;   <a href="#radio.channel">radio.channel</a>
+ &#8226;   <a href="#radio.signal">radio.signal</a>
+ &#8226;   <a href="#utility.constants">utility.constants</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#radio.radio">radio.radio</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="radio.radio"></a>
+  <a target="code" href="///C:/Users/Rye/PycharmProjects/ShipsInTheDark/radio/radio.py" type="text/plain"><tt>radio.radio</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#dataclasses">dataclasses</a>
+ &#8226;   <a href="#radio">radio</a>
+ &#8226;   <a href="#radio.channel">radio.channel</a>
+ &#8226;   <a href="#radio.radar_channel">radio.radar_channel</a>
+ &#8226;   <a href="#radio.receiver">radio.receiver</a>
+ &#8226;   <a href="#utility.constants">utility.constants</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#instruments.radio_receiver">instruments.radio_receiver</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="radio.receiver"></a>
+  <a target="code" href="///C:/Users/Rye/PycharmProjects/ShipsInTheDark/radio/receiver.py" type="text/plain"><tt>radio.receiver</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#radio">radio</a>
+ &#8226;   <a href="#utility.constants">utility.constants</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#radio.radio">radio.radio</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="radio.signal"></a>
+  <a target="code" href="///C:/Users/Rye/PycharmProjects/ShipsInTheDark/radio/signal.py" type="text/plain"><tt>radio.signal</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#dataclasses">dataclasses</a>
+ &#8226;   <a href="#math">math</a>
+ &#8226;   <a href="#radio">radio</a>
+ &#8226;   <a href="#utility.constants">utility.constants</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#core.main_scene">core.main_scene</a>
+ &#8226;   <a href="#radio.radar_channel">radio.radar_channel</a>
+ &#8226;   <a href="#simulation.world">simulation.world</a>
+
+  </div>
+
+</div>
+
+<div class="node">
   <a name="random"></a>
   <a target="code" href="///C:/Users/Rye/AppData/Local/Programs/Python/Python312/Lib/random.py" type="text/plain"><tt>random</tt></a>
 <span class="moduletype">SourceModule</span>  <div class="import">
@@ -18042,8 +18227,27 @@ imported by:
   <a target="code" href="-" type="text/plain"><tt>simulation</tt></a>
 <span class="moduletype">NamespacePackage</span>  <div class="import">
 imported by:
-    <a href="#simulation.snapshot">simulation.snapshot</a>
+    <a href="#simulation.contacts">simulation.contacts</a>
+ &#8226;   <a href="#simulation.snapshot">simulation.snapshot</a>
  &#8226;   <a href="#simulation.world">simulation.world</a>
+
+  </div>
+
+</div>
+
+<div class="node">
+  <a name="simulation.contacts"></a>
+  <a target="code" href="///C:/Users/Rye/PycharmProjects/ShipsInTheDark/simulation/contacts.py" type="text/plain"><tt>simulation.contacts</tt></a>
+<span class="moduletype">SourceModule</span>  <div class="import">
+imports:
+    <a href="#math">math</a>
+ &#8226;   <a href="#simulation">simulation</a>
+ &#8226;   <a href="#utility.constants">utility.constants</a>
+
+  </div>
+  <div class="import">
+imported by:
+    <a href="#simulation.world">simulation.world</a>
 
   </div>
 
@@ -18080,8 +18284,10 @@ imports:
  &#8226;   <a href="#objects.mining_vessel">objects.mining_vessel</a>
  &#8226;   <a href="#objects.missile">objects.missile</a>
  &#8226;   <a href="#objects.ship">objects.ship</a>
+ &#8226;   <a href="#radio.signal">radio.signal</a>
  &#8226;   <a href="#random">random</a>
  &#8226;   <a href="#simulation">simulation</a>
+ &#8226;   <a href="#simulation.contacts">simulation.contacts</a>
  &#8226;   <a href="#utility.constants">utility.constants</a>
  &#8226;   <a href="#utility.util">utility.util</a>
 
@@ -19605,10 +19811,12 @@ imported by:
  &#8226;   <a href="#ai.player_ship_ai">ai.player_ship_ai</a>
  &#8226;   <a href="#asset_handlers.draw_game">asset_handlers.draw_game</a>
  &#8226;   <a href="#asset_handlers.draw_ui">asset_handlers.draw_ui</a>
+ &#8226;   <a href="#core.main_scene">core.main_scene</a>
  &#8226;   <a href="#instruments.close_range_scan">instruments.close_range_scan</a>
  &#8226;   <a href="#instruments.deep_field_scan">instruments.deep_field_scan</a>
  &#8226;   <a href="#instruments.laser_assessor">instruments.laser_assessor</a>
  &#8226;   <a href="#instruments.radar_system">instruments.radar_system</a>
+ &#8226;   <a href="#instruments.radio_receiver">instruments.radio_receiver</a>
  &#8226;   <a href="#netcode.net_client">netcode.net_client</a>
  &#8226;   <a href="#netcode.network_layer">netcode.network_layer</a>
  &#8226;   <a href="#netcode.server">netcode.server</a>
@@ -19619,6 +19827,11 @@ imported by:
  &#8226;   <a href="#objects.mining_vessel">objects.mining_vessel</a>
  &#8226;   <a href="#objects.missile">objects.missile</a>
  &#8226;   <a href="#objects.ship">objects.ship</a>
+ &#8226;   <a href="#radio.radar_channel">radio.radar_channel</a>
+ &#8226;   <a href="#radio.radio">radio.radio</a>
+ &#8226;   <a href="#radio.receiver">radio.receiver</a>
+ &#8226;   <a href="#radio.signal">radio.signal</a>
+ &#8226;   <a href="#simulation.contacts">simulation.contacts</a>
  &#8226;   <a href="#simulation.world">simulation.world</a>
  &#8226;   <a href="#utility.util">utility.util</a>
 
@@ -20284,7 +20497,8 @@ imported by:
   <a name="zlib"></a>
   <tt>zlib</tt> <span class="moduletype"><i>(builtin module)</i></span>  <div class="import">
 imported by:
-    <a href="#encodings.zlib_codec">encodings.zlib_codec</a>
+    <a href="#asset_handlers.draw_ui">asset_handlers.draw_ui</a>
+ &#8226;   <a href="#encodings.zlib_codec">encodings.zlib_codec</a>
  &#8226;   <a href="#gzip">gzip</a>
  &#8226;   <a href="#shutil">shutil</a>
  &#8226;   <a href="#tarfile">tarfile</a>

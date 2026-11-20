@@ -36,10 +36,10 @@ class RadarSystem(Instrument):
 
     def sweep(self):
         self.ctx.sfx('radar')
+        self.ctx.send_action({'type': 'radar_sweep'})
         self.signatures = []
         self.begin_scan()
         self.ctx.start_cooldown()
-        self.ctx.noise(5)
 
     def update(self, dt, inputs):
         if self.scanning:

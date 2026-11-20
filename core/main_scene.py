@@ -9,7 +9,10 @@ from instruments.deep_field_scan import DeepFieldScan
 from instruments.instrument import InstrumentContext
 from instruments.laser_assessor import LaserAssessor
 from instruments.radar_system import RadarSystem
+from instruments.radio_receiver import RadioReceiver
+from radio.signal import RADAR_SWEEP
 from simulation.world import MOVE_KEYS, empty_command
+from utility.constants import RADAR_SWEEP_POWER
 from utility.util import *
 
 
@@ -45,21 +48,21 @@ class MainScene:
         # Purely visual
         self.explosions = []
         self.previous_missiles = {}
-        self.p_field = {}
-        self.init_p_field()
 
         # Instruments: add a new sensor or system by adding it to this list
         # (see instruments/instrument.py). The order is the order they draw in.
         self.instrument_context = InstrumentContext(
             self.player_ship, world.contacts, self.cockpit, audio_manager,
-            make_noise=lambda strength: update_p_field(self.player_ship, self.p_field, strength, 'movement'),
-            start_cooldown=self.start_input_cooldown,
+            start_cooldown=self.start_input_cooldown, world=world,
+            send_action=lambda action: self._command_actions.append(action),
         )
         self.radar_system = RadarSystem(self.instrument_context)
         self.deep_field_scan = DeepFieldScan(self.instrument_context)
         self.laser_assessor = LaserAssessor(self.instrument_context)
         self.close_range_scan = CloseRangeScan(self.instrument_context)
-        self.instruments = [self.radar_system, self.deep_field_scan, self.laser_assessor, self.close_range_scan]
+        self.radio_receiver = RadioReceiver(self.instrument_context, my_id)
+        self.instruments = [self.radar_system, self.deep_field_scan, self.laser_assessor, self.close_range_scan,
+                            self.radio_receiver]
 
         self.key_actions = self.KEY_ACTIONS + tuple(k for i in self.instruments for k in i.keys)
         self.instrument_actions = {}
@@ -77,7 +80,6 @@ class MainScene:
         self.marker_mode = None
         self.end_tripped = False
         self.grid_on = True
-        self.p_field_open = False
         self.esc_screen = False
         self.control_screen = False
 
@@ -157,7 +159,6 @@ class MainScene:
         self.track_explosions()
 
         self.timers(dt)
-        self.handle_p_field(dt)
 
         for instrument in self.instruments:
             instrument.update(dt, inputs)
@@ -169,22 +170,6 @@ class MainScene:
 
     def start_input_cooldown(self):
         self.input_cooling_down = True
-
-    def handle_p_field(self, dt):
-        for cell in self.p_field.values():
-            if len(cell) == 0:
-                continue
-
-            entries_to_remove = []
-            for i, entry in enumerate(cell):
-                strength = entry[0] - dt
-                if strength <= 0:
-                    entries_to_remove.append(entry)
-                    continue
-                cell[i] = [strength, entry[1], entry[2]]
-
-            for entry in entries_to_remove:
-                cell.remove(entry)
 
     # Key -> action, in the order they're checked. Console buttons produce the
     # same action names (see asset_handlers/buttons.py), so a click and a key
@@ -198,10 +183,9 @@ class MainScene:
         ('m', 'toggle_map'),
         ('t', 'blink'),
         ('esc', 'escape'),
-        ('n', 'toggle_p_field'),
     )
     # While the operator console is up, these keys mean something else
-    CONSOLE_Y_ACTIONS = {'q': 'quit_to_menu', 'c': 'open_controls'}
+    CONSOLE_KEY_ACTIONS ={'q': 'quit_to_menu', 'c': 'open_controls'}
 
     def handle_inputs(self, inputs, dt, clicks=()):
         """Turn this frame's keys and clicks into cockpit changes + a command for the world."""
@@ -219,7 +203,6 @@ class MainScene:
         if cockpit.manual_control:
             if inputs['up'] or inputs['left'] or inputs['down'] or inputs['right']:
                 self.audio_manager.play_sfx('thrust')
-                update_p_field(self.player_ship, self.p_field, 1, 'movement')
             else:
                 self.audio_manager.stop_sfx('thrust')
 
@@ -260,12 +243,11 @@ class MainScene:
             sfx('deploy_decoy')
         elif action == 'fire_missile':
             target_id = getattr(cockpit.target, 'net_id', None)
-            if self.player_ship.can_fire() and target_id is not None:
+            if self.player_ship.can_fire() and target_id is not None and self.laser_assessor.on:
                 self.laser_assessor.on = False
                 self._command_actions.append({'type': 'fire', 'target': target_id})
                 self.input_cooling_down = True
                 sfx('fire_missile')
-                update_p_field(self.player_ship, self.p_field, 20, 'movement')
         # Autopilot and the debug "enemy fires at me" key only exist in single-player
         elif action == 'toggle_autopilot':
             if self.local:
@@ -306,7 +288,6 @@ class MainScene:
             if not self.blinking:
                 self.blinking = True
                 sfx('blink')
-                update_p_field(self.player_ship, self.p_field, 40, 'movement')
         elif action == 'escape' and self.marker_mode is not None:
             # Esc backs out of marker placement before it closes anything
             self.marker_mode = None
@@ -317,22 +298,13 @@ class MainScene:
 
             if self.esc_screen:
                 self.esc_screen = False
-            elif self.is_map_open is False and self.p_field_open is False:
+            elif self.is_map_open is False:
                 self.esc_screen = True
 
             if self.is_map_open:
                 self.is_map_open = False
-            if self.p_field_open:
-                self.p_field_open = False
 
             self.input_cooling_down = True
-        elif action == 'toggle_p_field':
-            sfx('p_field_close' if self.p_field_open else 'p_field_open')
-            self.input_cooling_down = True
-            self.p_field_open = not self.p_field_open
-            if self.is_map_open:
-                self.is_map_open = False
-                self.marker_mode = None
         # Operator console
         elif action == 'open_console':
             self.esc_screen = True
@@ -418,6 +390,12 @@ class MainScene:
             if kind == 'damage':
                 if data[0] == self.my_id:
                     self.audio_manager.play_sfx('damage_taken')
+            elif kind == 'radar_sweep':
+                # Single-player's world already logged it; in multiplayer our copy of the
+                # world isn't stepped, so the server's report is how we learn of it
+                if not self.local:
+                    source_id, x, y, timestamp = data
+                    self.world.emissions.publish(source_id, x, y, RADAR_SWEEP, RADAR_SWEEP_POWER, timestamp)
             elif kind == 'missile_contact':
                 self.audio_manager.play_sfx('missile_contact', force=True)
                 self.missile_contact_timer = self.missile_contact_duration
@@ -534,7 +512,7 @@ class MainScene:
         self.draw_ui.draw_ship_info(self.player_ship, cockpit,
                                     [line for line in (i.status_line() for i in self.instruments) if line])
         self.draw_ui.draw_control_banks(self.player_ship, cockpit, local=self.local,
-                                        map_open=self.is_map_open, p_field_open=self.p_field_open,
+                                        map_open=self.is_map_open,
                                         blink_busy=self.blinking or self.blink_arriving,
                                         sensor_buttons=[b for i in self.instruments for b in i.console_buttons()])
         self.draw_ui.draw_missile_lock_warning(cockpit.enemy_has_missile_solution)
@@ -553,7 +531,6 @@ class MainScene:
         self.draw_ui.draw_corpo_miner_fire_warning(self.player_ship.mining_vessel_sees_you)
         self.draw_ui.draw_bullet_damage_glitch(self.player_ship.took_damage)
         self.draw_ui.draw_low_health_warning(self.player_ship.health_low)
-        self.draw_ui.draw_p_field_scanner(self.p_field, self.player_ship.rect.center[0], self.player_ship.rect.center[1], self.p_field_open)
 
         # Last, so the console sits on top of everything else
         self.draw_ui.draw_pause_screen(self.esc_screen)
@@ -566,11 +543,3 @@ class MainScene:
         camera_x = self.player_ship.rect.center[0] - self.draw_game.screen.get_width() / 2
         camera_y = self.player_ship.rect.center[1] - self.draw_game.screen.get_height() / 2
         return camera_x, camera_y
-
-    def init_p_field(self):
-        i = WORLD_WIDTH // GRID_SIZE
-        j = WORLD_HEIGHT // GRID_SIZE
-        for x in range(i):
-            for z in range(j):
-                cell = (x, z)
-                self.p_field[cell] = []

@@ -37,7 +37,7 @@ class AudioManager:
             'retro_beep': 'sounds/retro_beep.wav',
             'thrust': 'sounds/thrust.wav',
             'enemy_missile_lock': 'sounds/enemy_missile_lock.wav',
-            'radar': 'sounds/radar.mp3',
+            'radar': 'sounds/radar.wav',
             'death_screen': 'sounds/death_screen.wav',
             'laser': 'sounds/laser_toggle.wav',
             'laser_dir_change': 'sounds/laser_dir_change.wav',
@@ -63,13 +63,15 @@ class AudioManager:
             'ftl_arrival': 'sounds/ftl_arrival.wav',
             'blink_arrival': 'sounds/blink_arrival.wav',
             'blink': 'sounds/blink.wav',
-            'p_field_open': 'sounds/p_field_open.wav',
-            'p_field_close': 'sounds/p_field_close.wav',
             'missile_contact': 'sounds/missile_contact.wav',
             'map_marker': 'sounds/map_marker.wav',
             'map_marker_place': 'sounds/map_marker_place.wav',
             'map_marker_delete': 'sounds/map_marker_delete.wav',
             'cancel' : 'sounds/cancel.wav',
+            # Placeholders for the radio: swap the files to change the sounds
+            'radio_ping': 'sounds/radar_ping.wav',
+            'radio_static': 'sounds/static.wav',
+            'radio_click': 'sounds/channel_select.wav',
         }
 
         for name, filename in sound_files.items():
@@ -94,7 +96,7 @@ class AudioManager:
         for i, name in enumerate(sfx_names):
             self.sfx_channels[name] = pygame.mixer.Channel(self.FIRST_SFX_CHANNEL + i)
 
-    def play_sfx(self, name, force=False):
+    def play_sfx(self, name, force=False, loops=0, volume=1.0):
         """Play a sound effect on its own dedicated channel.
 
         If this same sound is already playing, it is left running (so calling
@@ -105,6 +107,8 @@ class AudioManager:
         Args:
             name: Sound identifier
             force: If True, restart this sound even if it's already playing
+            loops: Extra repeats (-1 = until stopped)
+            volume: 0..1, on top of the master volume
         """
         channel = self.sfx_channels.get(name)
         if channel is None:
@@ -115,7 +119,14 @@ class AudioManager:
         if not force and channel.get_busy():
             return
 
-        channel.play(self.sounds[name])
+        channel.set_volume(volume)
+        channel.play(self.sounds[name], loops=loops)
+
+    def set_sfx_volume(self, name, volume):
+        """Change the volume of a sound that is already playing."""
+        channel = self.sfx_channels.get(name)
+        if channel is not None:
+            channel.set_volume(volume)
 
     def stop_sfx(self, name):
         """Stop one specific sound effect (only its own channel)."""

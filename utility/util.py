@@ -66,21 +66,6 @@ def collect_inputs():
 
     return inputs
 
-# Main scene functions
-def update_p_field(ship, p_field, strength, p_type):
-    x, y = ship.rect.center[0], ship.rect.center[1]
-
-    if x < 0 or y < 0:
-        return
-    if x > WORLD_WIDTH or y > WORLD_HEIGHT:
-        return
-
-    cx = x // GRID_SIZE
-    cy = y // GRID_SIZE
-
-    p_field[(cx, cy)].append((strength, p_type, (x, y)))
-
-
 def dfs_sqrt_distance(x1, y1, pos):
     dx = pos[0] - x1
     dy = pos[1] - y1

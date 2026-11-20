@@ -6,7 +6,7 @@ import pygame
 from asset_handlers.audio_manager import AudioManager
 from asset_handlers.buttons import ButtonLayer, draw_button, draw_frame
 from netcode.net_client import NetClient
-from netcode.server import CALLSIGN_MAX, Server, clean_callsign
+from netcode.server import CALLSIGN_MAX, TICK_DT, Server, clean_callsign
 from simulation.snapshot import apply_snapshot
 from simulation.world import World
 from utility import theme
@@ -238,6 +238,9 @@ class Client:
     def sync_world(self, state):
         """Bring our copy of the world up to date with what the server sent."""
         apply_snapshot(self.world, state)
+        # The server's clock stamps emissions; ours must tell the same time to judge their age
+        self.world.time = state['tick'] * TICK_DT
+        self.world.emissions.prune(self.world.time)
         self.world.remove_asteroids(self.net.take_dead_asteroids())
         if self.world.callsigns != self.net.roster:
             self.world.callsigns = dict(self.net.roster)

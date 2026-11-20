@@ -17,25 +17,27 @@ keeps what several things share (the locked target, threat warnings).
 class InstrumentContext:
     """What an instrument is allowed to touch. MainScene builds one and hands it out."""
 
-    def __init__(self, ship, contacts, cockpit, audio, make_noise, start_cooldown):
+    def __init__(self, ship, contacts, cockpit, audio, start_cooldown, world=None, send_action=None):
         self.ship = ship
+        self._send_action = send_action
+        self.world = world
         self.contacts = contacts
         self.cockpit = cockpit
         self.audio = audio
-        self._make_noise = make_noise
         self._start_cooldown = start_cooldown
         # True on frames when held keys may repeat an action (not mid-cooldown)
         self.keys_live = True
 
-    def sfx(self, name, **kwargs):
+    def sfx(self, name, **kwargs):  # kwargs: force, loops, volume
         self.audio.play_sfx(name, **kwargs)
 
     def stop_sfx(self, name):
         self.audio.stop_sfx(name)
 
-    def noise(self, strength):
-        """Something just made a racket: it shows on the P-field."""
-        self._make_noise(strength)
+    def send_action(self, action):
+        """Ask the world to do something (a dict like {'type': 'radar_sweep'}). In
+        multiplayer the server does it and tells everyone."""
+        self._send_action(action)
 
     def start_cooldown(self):
         """Hold the pilot's keys off for a moment so one press is one action."""
@@ -50,6 +52,7 @@ class Instrument:
         self.ctx = ctx
         self.ship = ctx.ship
         self.contacts = ctx.contacts
+        self.world = ctx.world
 
     def actions(self):
         """{action name: handler}. A key or a button producing that name calls the handler."""

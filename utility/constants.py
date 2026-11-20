@@ -48,3 +48,18 @@ BULLET_LIFETIME = 2
 
 PORT = 27015
 TICK_RATE = 25  # server simulation steps per second
+
+# Radio / signal model
+SIGNAL_REFERENCE_DISTANCE = 500  # inside this a source is heard at full power; beyond it, inverse-square falloff
+RADAR_SWEEP_POWER = 1.0          # what a radar sweep emits (strength is 0..power)
+EMISSION_LIFETIME = 5.0          # seconds an emission stays on the log before it is forgotten
+RADIO_NOISE_FLOOR = 0.01         # received strength (after gain) below this is not heard
+RADIO_SATURATION = 1.0           # received strength (after gain) is clipped to this
+RADIO_GAIN_MIN = 0.25
+RADIO_GAIN_MAX = 8.0
+RADIO_GAIN_DEFAULT = 1.0
+RADAR_PING_WINDOW = 1.0          # seconds a sweep counts as "just heard" (the radio plays it once); must outlast network delay
+RADAR_SWEEP_MIN_INTERVAL = 2.0   # the world ignores a player's sweeps closer together than this
+RADIO_GAIN_STEP = 1.25           # one gain click multiplies/divides gain by this
+RADIO_STATIC_LEVEL = 0.05        # raw strength of the hiss on an unused dial position
+RADIO_DIAL_SIZE = 5              # dial positions; the radar channel is position 0

@@ -57,7 +57,6 @@ class DeepFieldScan(Instrument):
             self.detections = self.run_scan()
             self.ctx.sfx('dfs_scan')
             self.ctx.start_cooldown()
-            self.ctx.noise(8)
 
     def turn(self, step):
         if self.on:
