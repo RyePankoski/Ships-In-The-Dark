@@ -17,7 +17,7 @@ class Core:
     def run(self, dt, events=()):
 
         inputs = collect_inputs()
-        self.timer(inputs, dt)
+        self.splash(inputs, dt)
 
         if self.splashing:
             self.draw_stuff()
@@ -29,7 +29,7 @@ class Core:
         self.draw_menus_etc.draw_splash_screen(self.splashing, self.splash_screen_timer)
         end_blit()
 
-    def timer(self, inputs, dt):
+    def splash(self, inputs, dt):
         if self.splashing:
             self.splash_screen_timer += dt
             if self.splash_screen_timer > self.splash_screen_duration:

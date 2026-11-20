@@ -66,6 +66,7 @@ def collect_inputs():
 
     return inputs
 
+
 def dfs_sqrt_distance(x1, y1, pos):
     dx = pos[0] - x1
     dy = pos[1] - y1
@@ -121,3 +122,172 @@ def end_blit():
     from asset_handlers.crt import crt
     crt.apply(pygame.display.get_surface())
     pygame.display.flip()
+
+
+# Profanity section
+import re
+import unicodedata
+
+REPLACEMENTS = [
+    "LOSER",
+    "REDDITOR",
+    "BOOT LICKER",
+    "CUCK",
+    "JOBLESS",
+    "REDDIT MOD",
+    "DISCORD MOD",
+]
+
+_LEET = {
+    "a": "[a4@]", "e": "[e3]", "g": "[g9q]", "i": "[i1l!|]", "l": "[l1|i]",
+    "o": "[o0]", "s": "[s5$z]", "t": "[t7+]", "u": "[uv]",
+}
+_SEP = r"[\W_]{0,2}"
+
+_WORDS = [
+    # Racial and ethnic slurs
+    "nigger", "niggers", "nigga", "niggas",
+    "coon", "darkie", "jigaboo", "sambo",
+    "spook", "pickaninny", "porch monkey",
+    "chink", "chinks", "gook", "gooks",
+    "zipperhead", "slope", "slant",
+    "coolie", "ching chong",
+    "jap", "japs", "nip", "nips",
+    "spic", "spics", "spick", "wetback",
+    "beaner", "greaser", "border hopper",
+    "kike", "kikes", "heeb", "yid",
+    "hymie", "sheeny",
+    "raghead", "towelhead", "sandnigger",
+    "camel jockey", "sand monkey",
+    "redskin", "injun", "squaw",
+    "wagon burner", "prairie nigger",
+    "gyppo", "gypo",
+    "cracker", "honky", "white trash",
+    "paki", "pakis",
+    "kaffir", "kafir", "kaffre",
+    "abbo", "abo", "boong",
+    "wog", "golliwog",
+    "mick", "dago", "wop", "guido",
+    "kraut", "hun", "frog",
+    "polack", "polak", "wetback",
+    " dago", "cholo",
+
+    # Antisemitism
+    "jew rat", "jew pig", "jew bastard",
+    "jewish parasite", "jewish vermin",
+    "globalist cabal", "zionist parasite",
+    "zionist scum", "jewish conspiracy",
+    "blood libel", "jewish control",
+    "gas the jews", "kill the jews",
+    "death to jews", "exterminate jews",
+    "heil hitler", "sieg heil",
+    "white power", "white supremacy",
+    "aryan supremacy", "master race",
+    "race traitor", "racial purity",
+    "final solution",
+
+    # Anti-Black hate phrases
+    "black people are inferior",
+    "inferior race",
+    "subhuman race",
+    "go back to africa",
+    "lynch them",
+    "hang all blacks",
+    "kill all blacks",
+    "white is right",
+
+    # Anti-Asian hate phrases
+    "chinese virus",
+    "yellow peril",
+    "go back to china",
+    "go back to japan",
+    "asian invasion",
+
+    # Xenophobia
+    "go back to your country",
+    "foreign invader",
+    "illegal vermin",
+    "immigrant vermin",
+    "deport them all",
+    "invading foreigners",
+    "parasite immigrants",
+    "ethnic cleansing",
+
+    # Homophobia
+    "faggot", "faggots", "fag", "fags",
+    "dyke", "dykes",
+    "homo", "homos",
+    "tranny", "trannies",
+    "sodomite", "sodomites",
+    "fudgepacker", "poof", "poofter",
+    "queer bait",
+
+    # Transphobia
+    "tranny freak",
+    "gender freak",
+    "transvestite freak",
+    "mentally ill transgender",
+    "fake woman",
+    "fake man",
+    "biological freak",
+
+    # Religious hatred
+    "muslim scum",
+    "islamic vermin",
+    "christian scum",
+    "christian vermin",
+    "jewish scum",
+    "heathen filth",
+    "infidel dogs",
+    "kill all muslims",
+    "kill all christians",
+    "kill all jews",
+    "death to islam",
+    "death to christianity",
+    "death to hinduism",
+
+    # Disability-related slurs
+    "retard", "retards", "retarded",
+    "cripple", "cripples",
+    "mongoloid", "spastic",
+    "window licker",
+    "vegetable",
+    "imbecile",
+
+    # General supremacist terminology
+    "white genocide",
+    "race mixing",
+    "racial degeneracy",
+    "racial contamination",
+    "racial inferiority",
+    "ethnic cleansing",
+    "subhuman",
+    "untermensch",
+    "lebensunwertes leben",
+    "blood and soil",
+    "white nationalism",
+    "racial separatism",
+    "race war",
+    "14 words",
+    "88",
+    "1488",
+    "kkk",
+    "ku klux klan",
+    "nazi scum",
+    "nazi bastard",
+    "heil hitler"
+]
+
+def _pattern(word: str) -> str:
+    return "".join(f"(?:{_LEET.get(c, re.escape(c))}{_SEP})+" for c in word)
+
+_BANNED_RE = re.compile("|".join(_pattern(w) for w in _WORDS), re.IGNORECASE)
+
+def _normalize(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    return re.sub(r"[\u200b-\u200f\u2060\ufeff]", "", text)
+
+def check_for_profanity(text: str) -> bool:
+    return bool(_BANNED_RE.search(_normalize(text)))
+# end section

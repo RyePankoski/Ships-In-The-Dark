@@ -12,6 +12,8 @@ from simulation.world import World
 from utility import theme
 from utility.util import collect_inputs, end_blit
 from .main_scene import MainScene  # noqa
+from utility.util import check_for_profanity, REPLACEMENTS
+import re
 
 TITLE = theme.AMBER_BRIGHT
 GREEN = theme.GREEN
@@ -149,6 +151,11 @@ class Client:
         the lobby; in the lobby the server hears the new one with the next hello."""
         self.callsign = edit_text(events, self.callsign, lambda c: c.isalnum() or c == '-', CALLSIGN_MAX).upper()
         if self.net:
+
+            check_for_profanity(self.callsign)
+            if check_for_profanity(self.net.callsign):
+                self.callsign = random.choice(REPLACEMENTS)
+
             self.net.callsign = self.callsign
 
     def run_callsign_entry(self, events):
