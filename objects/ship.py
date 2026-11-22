@@ -7,6 +7,14 @@ from objects.base import DirectionSteered
 
 
 class Ship(DirectionSteered):
+    """Newtonian ship: heading is an angle you turn, thrust pushes along it, and
+    velocity is its own vector that keeps going until drag or brakes slow it.
+
+    Velocity is stored as (dir_x, dir_y, speed) so that the rest of the game
+    (snapshots, AI, sensors) can keep reading it the same way. Heading is kept
+    separately in degrees (0 = up the screen, increasing counter-clockwise).
+    """
+
     kind = 'ship'
 
     def __init__(self, x=None, y=None, is_player=False, player_id=None, is_ai=False):
@@ -20,6 +28,7 @@ class Ship(DirectionSteered):
         self.player_id = player_id
 
         self.heading = 0
+        self.turn_speed = 0.0  # degrees per second, eased toward the turn the keys ask for
 
         if is_ai:
             self.ai = AI(self)
@@ -43,6 +52,7 @@ class Ship(DirectionSteered):
         self.mining_vessel_sees_you = False
         self.health_low = False
         self.thrusting = False
+        self.braking = False  # tab held; drives the BRAKE readout (set from local input)
         self.dampening = True
 
         self.painted = False  # someone else's laser is on this ship
@@ -55,6 +65,10 @@ class Ship(DirectionSteered):
         self.took_damage = False
         self.damage_timer = 0
         self.damage_cooldown = 0.2
+
+        # Bumped on every non-fatal asteroid contact. The scene watches for changes
+        # and times the on-screen failure effect from there.
+        self.impact_count = 0
 
     @property
     def net_id(self):
@@ -95,7 +109,7 @@ class Ship(DirectionSteered):
         self.cooldowns(dt)
         self.update_rect()
 
-        if self.dampening:
+        if not self.thrusting:
             self.dampen(dt)
 
         self.bounce()
@@ -103,8 +117,10 @@ class Ship(DirectionSteered):
     def coast(self, dt):
         self.move(dt)
         self.update_rect()
-        if self.dampening:
+
+        if not self.thrusting:
             self.dampen(dt)
+
         self.bounce()
 
     def fire(self):
@@ -134,60 +150,73 @@ class Ship(DirectionSteered):
         self.pos_x += self.vel_x * dt
         self.pos_y += self.vel_y * dt
 
-        angle = math.atan2(self.dir_y, -self.dir_x)
-        angle = math.degrees(angle) + 90
+        # Player heading is driven by turning in apply_inputs. AI ships have no
+        # turn controls; they steer by setting dir/speed, so they keep facing their motion.
+        if self.ai is not None:
+            angle = math.atan2(self.dir_y, -self.dir_x)
+            self.heading = math.degrees(angle) + 90
 
-        self.heading = angle
+    def facing(self):
+        """Unit vector the ship's nose points along (screen coordinates)."""
+        rad = math.radians(self.heading)
+        return -math.sin(rad), -math.cos(rad)
 
     def apply_inputs(self, inputs, dt):
-        boost_amount = 50 if inputs['left_shift'] else 1
+        boosting = inputs['left_shift']
+        speed_cap = SHIP_MAX_SPEED * (BOOST_SPEED_MULT if boosting else 1)
 
-        # Per-step factors are scaled to dt so the 20 Hz server and a 60 Hz client agree
-        steps = dt * REF_HZ
+        # Turning: left and right set a turn rate that eases toward its target,
+        # so the nose swings up to speed and settles out smoothly.
+        turn_input = (1 if inputs['left'] else 0) - (1 if inputs['right'] else 0)
+        slowdown = 1 - SHIP_TURN_SLOWDOWN * min(1.0, self.speed / SHIP_MAX_SPEED)
+        target = turn_input * SHIP_TURN_RATE * slowdown
+        step = SHIP_TURN_ACCEL * dt
+        self.turn_speed += max(-step, min(step, target - self.turn_speed))
+        self.heading = (self.heading + self.turn_speed * dt) % 360
 
-        if inputs["tab"]:
-            self.speed *= SHIP_BRAKE_FORCE ** steps
+        # Thrust: up pushes along the nose, down is a weaker reverse burn
+        thrust = 0.0
+        if inputs['up']:
+            thrust = 1.0
+        elif inputs['down']:
+            thrust = -RETRO_THRUST_FRACTION
+        self.thrusting = thrust != 0
 
-        if inputs["left"]:
-            self.dir_x -= ANGLE_CHANGE_SPEED * dt
-            if self.dir_x < -1:
-                self.dir_x = -1
-        if inputs["right"]:
-            self.dir_x += ANGLE_CHANGE_SPEED * dt
-            if self.dir_x > 1:
-                self.dir_x = 1
-        if inputs["up"]:
-            self.dir_y -= ANGLE_CHANGE_SPEED * dt
-            if self.dir_y < -1:
-                self.dir_y = -1
-        if inputs["down"]:
-            self.dir_y += ANGLE_CHANGE_SPEED * dt
-            if self.dir_y > 1:
-                self.dir_y = 1
+        if self.thrusting:
+            accel = SHIP_THRUST * (BOOST_THRUST_MULT if boosting else 1) * thrust
+            fx, fy = self.facing()
+            # Never let thrust add speed beyond the cap, but don't cut a ship that is already over it
+            self._set_velocity(self.vel_x + fx * accel * dt,
+                               self.vel_y + fy * accel * dt,
+                               max(speed_cap, self.speed))
 
-        length = math.sqrt(self.dir_x ** 2 + self.dir_y ** 2)
-
-        if length != 0:
-            self.dir_x /= length
-            self.dir_y /= length
-
-        self.dir_x *= 0.95 ** steps
-        self.dir_y *= 0.95 ** steps
-
-        if inputs['up'] or inputs['left'] or inputs['down'] or inputs['right']:
-            self.thrusting = True
-            self.speed += (SHIP_THRUST * boost_amount) * dt
-        else:
-            self.thrusting = False
-
-        if self.speed > SHIP_MAX_SPEED:
-            if boost_amount >= 50:
-                return
-
-            self.speed = SHIP_MAX_SPEED
+        # Brakes: a hard, frame-rate independent bleed of velocity
+        self.braking = bool(inputs['tab'])
+        if self.braking:
+            factor = math.exp(-BRAKE_DRAG * dt)
+            self._set_velocity(self.vel_x * factor, self.vel_y * factor)
 
     def dampen(self, dt):
-        self.speed *= (1 - DAMPENING_FORCE * dt)
+        """Drag while coasting. Flight assist (dampener on) bleeds speed quickly;
+        with it off the ship keeps drifting."""
+        k = FLIGHT_ASSIST_DRAG if self.dampening else DRIFT_DRAG
+        factor = math.exp(-k * dt)
+        self._set_velocity(self.vel_x * factor, self.vel_y * factor)
+
+    def _set_velocity(self, vx, vy, max_speed=SHIP_MAX_SPEED):
+        """Store a velocity vector as (dir, speed), clamped to max_speed."""
+        s = math.hypot(vx, vy)
+        if s > max_speed:
+            vx *= max_speed / s
+            vy *= max_speed / s
+            s = max_speed
+        self.speed = s
+        if s > 0:
+            self.dir_x = vx / s
+            self.dir_y = vy / s
+        else:
+            self.dir_x = 0
+            self.dir_y = 0
 
     def bounce(self):
         if self.pos_x > WORLD_WIDTH or self.pos_x < 0:

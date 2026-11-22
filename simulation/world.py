@@ -22,7 +22,7 @@ def empty_command():
     """What a player sends the world each tick.
 
     move:         held movement keys, or None to leave the ship's steering alone
-                  (inputs locked during FTL, or the autopilot is flying).
+                  (inputs locked during FTL).
     actions:      one-off requests, e.g. {'type': 'fire', 'target': 1004}.
     laser_target: net_id of whatever this player's laser is touching, or None.
     """
@@ -48,7 +48,7 @@ class World:
         self.seed = seed
         self.with_npcs = with_npcs
 
-        self.alphabet = ["a","b", "c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"]
+        self.alphabet = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"]
 
         self.ships = []
         self.missiles = []
@@ -88,7 +88,6 @@ class World:
         self._next_id += 1
         return object_id
 
-
     def _generate(self, rng):
         # Asteroids come only from the seed, in a fixed order, so every machine
         # that builds a World from the same seed gets the same rocks with the
@@ -125,9 +124,8 @@ class World:
         length = random.randint(1, 3)
 
         for _ in range(length):
-            name += str(random.randint(0,9))
+            name += str(random.randint(0, 9))
         return name
-
 
     def spawn_ship(self, player_id, is_ai=False):
         x, y = self.random_empty_point()
@@ -247,15 +245,23 @@ class World:
             if not ship.alive:
                 continue
             ship.run(dt)
-            self._bounce_off_asteroids(ship)
+            self._die_on_asteroids(ship, announce=True)
 
-    def _bounce_off_asteroids(self, ship):
+    def _die_on_asteroids(self, ship, announce=False):
         cell = (int(ship.rect.center[0] // GRID_SIZE), int(ship.rect.center[1] // GRID_SIZE))
         for asteroid in self.asteroids.get(cell, []):
             distance, in_range = squared_distance(ship.rect.center, (asteroid.pos_x, asteroid.pos_y), asteroid.size)
             if in_range:
-                ship.dir_x *= -1.5
-                ship.dir_y *= -1.5
+                if ship.speed > 100:
+                    ship.alive = False
+                    ship.took_damage = True
+                else:
+                    ship.health -= 50
+                    ship.impact_count += 1
+                    if announce:
+                        self.events.append(('asteroid_damage', ship.player_id))
+                    ship.dir_x *= -1.5
+                    ship.dir_y *= -1.5
 
     def predict(self, my_id, command, dt):
         """A client's guess at the next dt, between snapshots. Only motion: our own
@@ -268,7 +274,7 @@ class World:
         for ship in self.ships:
             if ship.alive:
                 ship.coast(dt)
-                self._bounce_off_asteroids(ship)
+                self._die_on_asteroids(ship)
                 ship.ease_correction(dt)
                 ship.update_rect()
 
@@ -349,7 +355,7 @@ class World:
                 if in_range:
                     ship.health -= 2
                     ship.took_damage = True
-                    self.events.append(('damage', ship.player_id))
+                    self.events.append(('bullet_damage', ship.player_id))
                     bullets_to_remove.append(bullet)
                 if bullet.alive is False:
                     bullets_to_remove.append(bullet)

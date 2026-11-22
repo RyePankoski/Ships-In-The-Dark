@@ -213,6 +213,7 @@ class Client:
         # Game over screen
         if self.main_scene.quit_requested or (self.main_scene.end_tripped and user_inputs['enter']):
             self.audio_manager.stop_all()
+            self.audio_manager.play_sfx('startup')
             self.audio_manager.play_ambience('ambience')
             self.leave()
             return

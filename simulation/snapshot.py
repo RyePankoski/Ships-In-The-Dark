@@ -155,7 +155,11 @@ def _reconcile(obj, data, fields, age, is_mine):
     for name in MOTION_FIELDS - {'pos_x', 'pos_y'}:
         if name not in data:
             continue
-        if is_mine and name in ('dir_x', 'dir_y', 'speed'):
+        if is_mine and name == 'heading':
+            # Same idea as the steering fields, but an angle, so blend the short way round
+            diff = (data[name] - obj.heading + 180) % 360 - 180
+            obj.heading = (obj.heading + diff * LOCAL_VELOCITY_BLEND) % 360
+        elif is_mine and name in ('dir_x', 'dir_y', 'speed'):
             # We're steering this one: ease toward the server instead of adopting it
             current = getattr(obj, name)
             setattr(obj, name, current + (data[name] - current) * LOCAL_VELOCITY_BLEND)

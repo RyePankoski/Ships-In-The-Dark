@@ -1,11 +1,8 @@
-import pygame
-
-import utility.theme
-from ai.player_ship_ai import PlayerShipAI
 from asset_handlers.crt import crt
 from asset_handlers.draw_game import DrawGame
 from asset_handlers.draw_ui import DrawUI
 from core.cockpit import Cockpit
+from core.pause_menu import PauseMenu
 from instruments.close_range_scan import CloseRangeScan
 from instruments.deep_field_scan import DeepFieldScan
 from instruments.instrument import InstrumentContext
@@ -13,7 +10,7 @@ from instruments.laser_assessor import LaserAssessor
 from instruments.radar_system import RadarSystem
 from simulation.world import MOVE_KEYS, empty_command
 from utility.common import *
-from utility.theme import *
+
 
 
 class MainScene:
@@ -26,9 +23,10 @@ class MainScene:
     The scene never moves world objects itself; it asks via a command.
     """
 
+    SHUTDOWN_WAIT = 2  # seconds of black screen so the shutdown sound can play
+
     def __init__(self, screen, audio_manager, world, my_id, local=True):
         # Classes
-        self.player_ship_ai = PlayerShipAI()
         self.audio_manager = audio_manager
         self.draw_game = DrawGame(screen)
         self.draw_ui = DrawUI(screen)
@@ -78,8 +76,7 @@ class MainScene:
         self.marker_mode = None
         self.end_tripped = False
         self.grid_on = True
-        self.esc_screen = False
-        self.control_screen = False
+        self.pause = PauseMenu()  # the operator console (Esc)
 
         # input timer
         self.input_timer_cooldown = 0.2
@@ -91,7 +88,8 @@ class MainScene:
         # Control
         self.lock_inputs = False
         self.quit_requested = False  # set by QUIT TO MENU; the client acts on it
-        self._command_actions = []   # this frame's command['actions'], for perform()
+        self.shutdown_timer = None  # counts down after QUIT TO MENU, then quit_requested is set
+        self._command_actions = []  # this frame's command['actions'], for perform()
 
         # Fun cinematic type stuff
         self.ftl_traveling = False
@@ -118,6 +116,8 @@ class MainScene:
         self.asteroid_laser_on = True
         self.asteroid_laser_timer = 0
         self.asteroid_laser_cooldown = 4
+        self.impact_seen = 0
+        self.impact_timer = None
 
         # Counts down from missile_contact_duration after any missile hit
         self.missile_contact_timer = 0
@@ -128,11 +128,16 @@ class MainScene:
         return [ship for ship in self.world.ships if ship is not self.player_ship]
 
     def run(self, inputs, dt, events=()):
+        if self.shutdown_timer is not None:
+            self.run_shutdown(dt)
+            return
 
         crt.set_damage(self.player_ship.health_low)
         # Buttons drawn last frame are what this frame's clicks land on
         buttons = self.draw_ui.buttons
+
         clicks = buttons.clicked_actions(events)
+
         held = buttons.held_action()
 
         if held:
@@ -148,7 +153,11 @@ class MainScene:
             self.end_screen("TARGET DESTROYED", "HOSTILE SIGNAL TERMINATED", 'retro_beep', clicks)
             return
 
-        self.command = self.handle_inputs(inputs, dt, clicks)
+        cockpit_keys = not self.pause.is_open
+        if not cockpit_keys:
+            clicks = self.handle_pause(inputs, clicks)
+
+        self.command = self.handle_inputs(inputs, dt, clicks, cockpit_keys=cockpit_keys)
         if self.local:
             self.world.step({self.my_id: self.command}, dt)
             self.handle_world_events(self.world.events)
@@ -174,6 +183,45 @@ class MainScene:
     def start_input_cooldown(self):
         self.input_cooling_down = True
 
+    def open_pause(self):
+        self.pause.open()
+        self.audio_manager.play_sfx('pause')
+        self.input_cooling_down = True
+
+    def handle_pause(self, inputs, clicks):
+        """While the operator console is open it takes this frame's clicks and keys.
+
+        Returns the clicks left for the cockpit, which is none.
+        """
+        if clicks:
+            self.audio_manager.play_sfx('keyboard_clack')
+        keys_live = not self.input_cooling_down
+        if clicks or (keys_live and any(inputs.get(key) for key in PauseMenu.KEYS)):
+            self.input_cooling_down = True
+
+        outcome = self.pause.handle(inputs, clicks, keys_live)
+        if outcome == 'resume':
+            self.audio_manager.play_sfx('resume')
+        elif outcome == 'quit':
+            self.audio_manager.play_sfx('shutdown')
+            self.shutdown_timer = self.SHUTDOWN_WAIT
+
+        return ()
+
+    def run_shutdown(self, dt):
+        """Black screen behind the console while the shutdown sound plays, then leave."""
+        self.shutdown_timer -= dt
+        if self.shutdown_timer <= 0:
+            self.quit_requested = True
+            return
+
+        self.draw_game.start_blit()
+        self.draw_ui.screen.fill((0, 0, 0))
+        self.draw_ui.buttons.begin_frame()
+        self.pause.draw(self.draw_ui.screen, self.draw_ui.buttons, underlay=False)
+        self.draw_ui.buttons.end_frame()
+        end_blit()
+
     # Key -> action, in the order they're checked. Console buttons produce the
     # same action names (see asset_handlers/buttons.py), so a click and a key
     # press both go through perform().
@@ -181,16 +229,13 @@ class MainScene:
     KEY_ACTIONS = (
         ('right_alt', 'decoy'),
         ('p', 'fire_missile'),
-        ('l', 'toggle_autopilot'),
         ('x', 'debug_enemy_fire'),
         ('m', 'toggle_map'),
         ('t', 'blink'),
+        ('g', 'toggle_dampening'),
         ('esc', 'escape'),
     )
-    # While the operator console is up, these keys mean something else
-    CONSOLE_KEY_ACTIONS ={'q': 'quit_to_menu', 'c': 'open_controls'}
-
-    def handle_inputs(self, inputs, dt, clicks=()):
+    def handle_inputs(self, inputs, dt, clicks=(), cockpit_keys=True):
         """Turn this frame's keys and clicks into cockpit changes + a command for the world."""
         command = empty_command()
         command['actions'] = self.pending_actions
@@ -201,29 +246,21 @@ class MainScene:
         if self.lock_inputs:
             return command
 
-        cockpit = self.cockpit
+        if inputs['up'] or inputs['left'] or inputs['down'] or inputs['right']:
+            self.audio_manager.play_sfx('thrust')
+        else:
+            self.audio_manager.stop_sfx('thrust')
 
-        if cockpit.manual_control:
-            if inputs['up'] or inputs['left'] or inputs['down'] or inputs['right']:
-                self.audio_manager.play_sfx('thrust')
-            else:
-                self.audio_manager.stop_sfx('thrust')
-
-        if cockpit.manual_control:
-            command['move'] = {key: bool(inputs[key]) for key in MOVE_KEYS}
-        elif self.local:
-            self.player_ship_ai.run(self.player_ship)
+        command['move'] = {key: bool(inputs[key]) for key in MOVE_KEYS}
 
         # Held keys repeat every frame, so they wait out the cooldown. A click
         # is a single press and always goes through.
         actions = []
         keys_live = not self.input_cooling_down
         self.instrument_context.keys_live = keys_live
-        if keys_live:
-            if self.esc_screen:
-                actions += [action for key, action in self.CONSOLE_KEY_ACTIONS.items() if inputs[key]]
+        if keys_live and cockpit_keys:
             for key, action in self.key_actions:
-                if inputs[key] and not (self.esc_screen and key in self.CONSOLE_KEY_ACTIONS):
+                if inputs[key]:
                     actions.append(action)
         actions += clicks
 
@@ -251,18 +288,17 @@ class MainScene:
                 self._command_actions.append({'type': 'fire', 'target': target_id})
                 self.input_cooling_down = True
                 sfx('fire_missile')
-        # Autopilot and the debug "enemy fires at me" key only exist in single-player
-        elif action == 'toggle_autopilot':
-            if self.local:
-                cockpit.manual_control = not cockpit.manual_control
-                sfx('retro_beep')
-                self.input_cooling_down = True
+        # The debug "enemy fires at me" key only exists in single-player
         elif action == 'debug_enemy_fire':
             if self.local and self.enemy_ships:
                 enemy = self.enemy_ships[0]
                 enemy.fire()
                 self.world.fire_missile(enemy, self.player_ship)
                 self.input_cooling_down = True
+        elif action == 'toggle_dampening':
+            self.player_ship.dampening = not self.player_ship.dampening
+            sfx('inertial_dampener')
+            self.input_cooling_down = True
         elif action == 'toggle_map':
             self.is_map_open = not self.is_map_open
             self.marker_mode = None
@@ -295,30 +331,17 @@ class MainScene:
             # Esc backs out of marker placement before it closes anything
             self.marker_mode = None
             self.input_cooling_down = True
+
         elif action == 'escape':
-            if self.control_screen:
-                self.control_screen = False
-
-            if self.esc_screen:
-                self.esc_screen = False
-            elif self.is_map_open is False:
-                self.esc_screen = True
-
+            # Esc closes the map first; with the map shut it opens the console
             if self.is_map_open:
                 self.is_map_open = False
-
+            else:
+                self.open_pause()
             self.input_cooling_down = True
-        # Operator console
         elif action == 'open_console':
-            self.esc_screen = True
-            self.input_cooling_down = True
-        elif action == 'open_controls':
-            self.control_screen = True
-            self.input_cooling_down = True
-        elif action == 'close_controls':
-            self.control_screen = False
-            self.input_cooling_down = True
-        elif action in ('quit_to_menu', 'return_to_menu'):
+            self.open_pause()
+        elif action == 'return_to_menu':
             self.quit_requested = True
 
     def update_threats(self):
@@ -390,9 +413,12 @@ class MainScene:
         Multiplayer: relayed from the server by the client (see NetClient.take_events).
         """
         for kind, *data in events:
-            if kind == 'damage':
+            if kind == 'bullet_damage':
                 if data[0] == self.my_id:
                     self.audio_manager.play_sfx('damage_taken')
+            elif kind == 'asteroid_damage':
+                if data[0] == self.my_id:
+                    self.audio_manager.play_sfx('asteroid_damage')
             elif kind == 'missile_contact':
                 self.audio_manager.play_sfx('missile_contact', force=True)
                 self.missile_contact_timer = self.missile_contact_duration
@@ -454,6 +480,15 @@ class MainScene:
                 self.asteroid_laser_on = False
                 self.asteroid_laser_timer = 0
 
+        # Non-fatal asteroid bumps: restart the failure effect on each contact
+        if self.player_ship.impact_count != self.impact_seen:
+            self.impact_seen = self.player_ship.impact_count
+            self.impact_timer = 0.0
+        if self.impact_timer is not None:
+            self.impact_timer += dt
+            if self.impact_timer >= self.draw_ui.IMPACT_DURATION:
+                self.impact_timer = None
+
     def end_screen(self, message, subtitle, sound, clicks=()):
         if 'return_to_menu' in clicks:
             self.quit_requested = True
@@ -503,7 +538,7 @@ class MainScene:
         self.draw_ui.draw_laser_painted_warning(self.player_ship.painted)
         self.draw_ui.draw_ship_info(self.player_ship, cockpit,
                                     [line for line in (i.status_line() for i in self.instruments) if line])
-        self.draw_ui.draw_control_banks(self.player_ship, cockpit, local=self.local,
+        self.draw_ui.draw_control_banks(self.player_ship, cockpit,
                                         map_open=self.is_map_open,
                                         blink_busy=self.blinking or self.blink_arriving,
                                         sensor_buttons=[b for i in self.instruments for b in i.console_buttons()])
@@ -522,11 +557,13 @@ class MainScene:
                                        markers=self.map_markers, marker_mode=self.marker_mode)
         self.draw_ui.draw_corpo_miner_fire_warning(self.player_ship.mining_vessel_sees_you)
         self.draw_ui.draw_bullet_damage_glitch(self.player_ship.took_damage)
+        if self.impact_timer is not None:
+            strength = 1 - self.impact_timer / self.draw_ui.IMPACT_DURATION
+            self.draw_ui.draw_impact_failure(strength, self.impact_timer)
         self.draw_ui.draw_low_health_warning(self.player_ship.health_low)
 
         # Last, so the console sits on top of everything else
-        self.draw_ui.draw_pause_screen(self.esc_screen)
-        self.draw_ui.draw_controls_screen(self.control_screen)
+        self.pause.draw(self.draw_ui.screen, self.draw_ui.buttons)
 
         self.draw_ui.buttons.end_frame()
         end_blit()

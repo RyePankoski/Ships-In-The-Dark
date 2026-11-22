@@ -40,7 +40,6 @@ class LaserAssessor(Instrument):
     def toggle(self):
         self.on = not self.on
         self.laser_locked = False
-        self.set_direction(self.ship.heading)
         self.ctx.sfx('laser')
         self.ctx.start_cooldown()
 

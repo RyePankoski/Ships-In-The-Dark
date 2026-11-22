@@ -43,6 +43,7 @@ class AudioManager:
             'ftl_arrival': 'sounds/ftl_arrival.wav',
             'blink': 'sounds/blink.wav',
             'blink_arrival': 'sounds/blink_arrival.wav',
+            'inertial_dampener': 'sounds/inertial_dampener_toggle.wav',
 
             # Lasers
             'laser': 'sounds/laser_toggle.wav',
@@ -73,9 +74,11 @@ class AudioManager:
             'map_marker_delete': 'sounds/map_marker_delete.wav',
 
             # Warnings, damage & death
+            # "Static Burst 2" by Silverillusionist for Asteroid Damage sfx
             'catastrophic_warning': 'sounds/catastrophic_warning.mp3',
             'pirate_warning': 'sounds/pirate_warning.wav',
             'damage_taken': 'sounds/damage_taken.wav',
+            'asteroid_damage': 'sounds/asteroid_damage.wav',
             'low_health': 'sounds/low_health.wav',
             'death_screen': 'sounds/death_screen.wav',
 
@@ -84,6 +87,9 @@ class AudioManager:
             'close_range_toggle': 'sounds/close_range_toggle.wav',
             'cancel': 'sounds/cancel.wav',
             'typing_click': 'sounds/typing_click.wav',
+            'pause' : 'sounds/pause.wav',
+            'resume' : 'sounds/resume.wav',
+            'shutdown' : 'sounds/shutdown.wav',
 
             # Misc
             'keyboard_clack': 'sounds/keyboard_clack.mp3',

@@ -34,17 +34,16 @@ class Menu:
 
     def main_screen(self, events, callsign, status):
         """Returns 'single', 'host', 'join' or 'callsign' when one is chosen."""
-        return self.screen(
-            events,
-            keys={pygame.K_s: 'single', pygame.K_h: 'host', pygame.K_j: 'join', pygame.K_c: 'callsign'},
-            title="SHIPS IN THE DARK",
-            lines=[f"CALLSIGN  {callsign or '-'}"],
-            buttons=[("SINGLE PLAYER", "S", 'single'),
-                     ("HOST GAME", "H", 'host'),
-                     ("JOIN GAME", "J", 'join'),
-                     ("CHANGE CALLSIGN", "C", 'callsign')],
-            header="ERGOT SYSTEMS // MAIN",
-            footer=status)
+        keys = {pygame.K_s: 'single', pygame.K_h: 'host', pygame.K_j: 'join', pygame.K_c: 'callsign'}
+        buttons = [("SINGLE PLAYER", "S", 'single'),
+                   ("HOST GAME", "H", 'host'),
+                   ("JOIN GAME", "J", 'join'),
+                   ("CHANGE CALLSIGN", "C", 'callsign')]
+        for action in self.menu_actions(events, keys):
+            return action
+
+        self.draw_ui.draw_main_menu("SHIPS IN THE DARK", callsign, buttons, footer=status)
+        return None
 
     def callsign_screen(self, events, callsign):
         """Returns 'done' when confirmed. The Client does the typing (it is shared with the lobby)."""

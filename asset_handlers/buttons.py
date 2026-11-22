@@ -44,6 +44,25 @@ class ButtonLayer:
     def register(self, rect, action, enabled=True, hold=False):
         self._building.append(Button(rect, action, enabled, hold))
 
+    def button(self, screen, rect, label, action, key=None, lit=None, enabled=True, hold=False, **style):
+        """Draw a console button and register its click area in the same call."""
+        draw_button(screen, rect, label, key=key, lit=lit, enabled=enabled, **style)
+        self.register(rect, action, enabled=enabled, hold=hold)
+
+    def button_row(self, screen, rect, specs, gap=8):
+        """Lay buttons out left to right across `rect`.
+
+        specs: list of (weight, label, action, kwargs). Width is shared by weight.
+        """
+        rect = pygame.Rect(rect)
+        total = sum(spec[0] for spec in specs)
+        usable = rect.width - gap * (len(specs) - 1)
+        x = rect.left
+        for i, (weight, label, action, kwargs) in enumerate(specs):
+            w = rect.right - x if i == len(specs) - 1 else int(usable * weight / total)
+            self.button(screen, (x, rect.top, w, rect.height), label, action, **kwargs)
+            x += w + gap
+
     def block_below(self):
         """A full-screen overlay was drawn: nothing registered before it can be clicked."""
         self._building = []
@@ -93,18 +112,40 @@ def draw_frame(screen, rect, color=theme.AMBER, fill=theme.BG, tick=10, width=1)
     pygame.draw.rect(screen, color, rect, width)
 
 
+_blank_lines_cache = None
+
+
+def draw_blank_underlay(screen):
+    """Knock what's on screen back behind a console overlay.
+
+    Not a translucent dim (that's a web lightbox): the tube blanks every
+    other scanline and drops what's left to half strength, like the feed
+    has been switched off the main display. Callers also make the
+    underneath unclickable (ButtonLayer.block_below).
+    """
+    global _blank_lines_cache
+    w, h = screen.get_size()
+    if _blank_lines_cache is None or _blank_lines_cache.get_size() != (w, h):
+        _blank_lines_cache = pygame.Surface((w, h))
+        _blank_lines_cache.fill((110, 110, 110))
+        for y in range(0, h, 2):
+            pygame.draw.line(_blank_lines_cache, theme.BLACK, (0, y), (w, y))
+    screen.blit(_blank_lines_cache, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
+
+
 def draw_button(screen, rect, label, key=None, lit=None, enabled=True, font=None, key_font=None,
-                lit_color=theme.GREEN, align="left"):
+                lit_color=theme.GREEN, align="left", states=("ON", "OFF")):
     """One console push-button in the game's frame style.
 
     Args:
         rect: Where to draw it.
         label: Main text.
         key: Keyboard shortcut shown small in the corner (e.g. "Q"), or None.
-        lit: None for a plain button, else True/False for its status lamp.
+        lit: None for a plain button, else True/False for its status readout.
         enabled: Greyed out and unclickable-looking when False.
-        lit_color: Lamp colour when lit (green = system on, amber = caution).
-        align: "left" (lamp + label) or "center".
+        lit_color: Readout colour when lit (green = system on, amber = caution).
+        align: "left" (status + label) or "center".
+        states: Words shown in the bracketed status readout, (lit, unlit).
     """
     rect = pygame.Rect(rect)
     font = font or fonts.font(17)
@@ -130,12 +171,11 @@ def draw_button(screen, rect, label, key=None, lit=None, enabled=True, font=None
 
     x = rect.left + 10
     if lit is not None:
-        lamp_r = 4
-        lamp_c = (x + lamp_r, rect.centery)
-        pygame.draw.circle(screen, lit_color if (lit and enabled) else theme.AMBER_FAINT, lamp_c, lamp_r)
-        if lit and enabled:
-            pygame.draw.circle(screen, theme.WHITE, lamp_c, 1)
-        x += lamp_r * 2 + 8
+        on = lit and enabled
+        status = font.render_steady(f"[{states[0] if lit else states[1]}]", True,
+                                    lit_color if on else theme.AMBER_DIM)
+        screen.blit(status, status.get_rect(midleft=(x, rect.centery)))
+        x += status.get_width() + 8
 
     # render_steady: buttons are controls, they shouldn't stutter like readouts
     text = font.render_steady(label, True, text_color)

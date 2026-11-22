@@ -58,8 +58,8 @@ class DrawGame:
             base_path = Path(__file__).resolve().parent.parent
 
         asset_path = base_path / "assets"
-        self.player_ship_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship2.png"))
-        self.player_ship_moving_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship2_moving.png"))
+        self.player_ship_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship3.png"))
+        self.player_ship_moving_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship3_moving.png"))
         self.enemy_ship_sprite = pygame.image.load(os.path.join(asset_path, "pngs/enemy_ship.png"))
         self.missile_sprite = pygame.image.load(os.path.join(asset_path, "pngs/missile.png"))
         self.drone_sprite = pygame.image.load(os.path.join(asset_path, "pngs/drone.png"))
@@ -357,13 +357,12 @@ class DrawGame:
         self.screen.blit(surf, (sx - center[0], sy - center[1]))
 
     def draw_blink_arrival(self, ship_position, arrival_timer, camera_x, camera_y, max_duration=1.0):
-        """Draw high-energy impact burst with directional spike lines radiating outward."""
+        """Blink exit: a reticle closes on the ship, one ring pings out, and a readout confirms the lock."""
         if arrival_timer <= 0.0 or arrival_timer >= max_duration:
             return
 
         progress = max(0.0, min(1.0, arrival_timer / max_duration))
 
-        # Convert world coordinates to screen coordinates
         sx = int(ship_position[0] - camera_x)
         sy = int(ship_position[1] - camera_y)
 
@@ -371,53 +370,33 @@ class DrawGame:
         if alpha <= 0:
             return
 
-        # Canvas size to contain the exploding lines
-        max_reach = 180
-        surf_size = max_reach * 2 + 20
+        surf_size = 400
         surf = pygame.Surface((surf_size, surf_size), pygame.SRCALPHA)
         center = (surf_size // 2, surf_size // 2)
 
-        # 1. Immediate Impact Core (Hot white/cyan flash at center)
-        if progress < 0.25:
-            core_p = progress / 0.25
-            core_radius = int(25 * math.sin(core_p * math.pi))
-            if core_radius > 0:
-                pygame.draw.circle(surf, (*theme.WHITE, alpha), center, core_radius)
-                pygame.draw.circle(surf, (*theme.GREEN, int(alpha * 0.6)), center, core_radius + 8, width=2)
+        # 1. Reticle: four corner brackets close from wide to tight on the ship over the first 40%
+        close_p = min(1.0, progress / 0.4)
+        ease = 1.0 - (1.0 - close_p) ** 3
+        half = int(90 - 50 * ease)
+        arm = 12
+        for dx, dy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+            cx = center[0] + dx * half
+            cy = center[1] + dy * half
+            pygame.draw.line(surf, (*theme.WHITE, alpha), (cx, cy), (cx + arm * -dx, cy), 2)
+            pygame.draw.line(surf, (*theme.WHITE, alpha), (cx, cy), (cx, cy + arm * -dy), 2)
 
-        # 2. Exploding Spike Lines
-        num_spikes = 16
-        for i in range(num_spikes):
-            # Seed generator per spike so paths remain consistent frame-to-frame
-            rng = random.Random(i * 307)
-            angle = rng.uniform(0, math.tau)
-            max_length = rng.uniform(80, max_reach)
-            speed = rng.uniform(0.85, 1.15)
-            color_choice = rng.choice([theme.WHITE, theme.GREEN, theme.GREEN_BRIGHT])
+        # 2. One thin ping ring expanding outward and fading
+        ring_r = int(40 + progress * 150)
+        pygame.draw.circle(surf, (*theme.GREEN, int(alpha * 0.6)), center, ring_r, width=1)
 
-            # Fast outward movement with ease-out deceleration
-            eased_p = math.sin((progress * speed) * (math.pi / 2))
-
-            # Line start/end points travel outward together to create flying streaks
-            dist_head = eased_p * max_length
-            dist_tail = max(0.0, dist_head - (35 * (1.0 - progress)))
-
-            x1 = center[0] + int(math.cos(angle) * dist_tail)
-            y1 = center[1] + int(math.sin(angle) * dist_tail)
-            x2 = center[0] + int(math.cos(angle) * dist_head)
-            y2 = center[1] + int(math.sin(angle) * dist_head)
-
-            line_alpha = int(alpha * rng.uniform(0.7, 1.0))
-            if line_alpha > 0 and dist_head > dist_tail:
-                pygame.draw.line(surf, (*color_choice, line_alpha), (x1, y1), (x2, y2), width=2)
-
-        # 3. Outer Shockwave Edge (Thin, fast high-contrast shock ring)
-        shock_r = int(progress * (max_reach * 0.8))
-        if shock_r > 0:
-            pygame.draw.circle(surf, (*theme.GREEN_BRIGHT, int(alpha * 0.4)), center, shock_r, width=1)
-
-        # Blit centered on screen coordinates
         self.screen.blit(surf, (sx - center[0], sy - center[1]))
+
+        # 3. Readout below the reticle: plain text like the charge meter, holds then fades out
+        text_alpha = 255 if progress < 0.6 else int(255 * (1.0 - (progress - 0.6) / 0.4))
+        if text_alpha > 0:
+            text_surf = fonts.font(16).render("BLINK COMPLETE // POS LOCKED", True, theme.GREEN)
+            text_surf.set_alpha(text_alpha)
+            self.screen.blit(text_surf, text_surf.get_rect(midtop=(sx, sy + 100)))
 
     def draw_ship_analysis(self, ship_position, arrival_timer, camera_x, camera_y, max_duration=1.0):
         """Draw a diagnostic targeting sequence with a callout debug terminal."""
@@ -629,7 +608,7 @@ class DrawGame:
         self.screen.blit(scanline_surface, (0, 0))
 
     def draw_charge_animation(self, is_charging, charge_timer, max_charge_time=2.0):
-        """Draw blink drive charge-up: a ring that fills as it charges.
+        """Draw blink drive charge-up as a plain text meter below the ship.
 
         Args:
             is_charging (bool): Whether actively charging
@@ -644,35 +623,19 @@ class DrawGame:
         screen_y = self.screen.get_height() // 2
         progress = min(1.0, charge_timer / max_charge_time)
 
-        PHOSPHOR_DIM = theme.GREEN_DIM
-        BLACK = theme.BLACK
         ready = progress >= 1.0
         accent = theme.AMBER_BRIGHT if ready else theme.GREEN
-        radius = 55
 
-        # Dim base ring, then the charge arc filling clockwise from the top
-        pygame.draw.circle(self.screen, PHOSPHOR_DIM, (screen_x, screen_y), radius, 1)
+        # |####----------------| : filled cells, then empty ones
+        cells = 20
+        filled = int(cells * progress)
+        bar = "|" + "#" * filled + "-" * (cells - filled) + "|"
+        text = f"BLINK READY {bar}" if ready else f"CHARGING {bar} {int(progress * 100):3d}%"
 
-        steps = int(40 * progress)
-        for i in range(steps):
-            a = -math.pi / 2 + (2 * math.pi * progress) * (i / 40)
-            px = screen_x + math.cos(a) * radius
-            py = screen_y + math.sin(a) * radius
-            pygame.draw.circle(self.screen, accent, (int(px), int(py)), 2)
-
-        # Status text in an opaque box below
-        self.font_charge = fonts.font(16)
-
-        label = "BLINK READY" if ready else f"CHARGING {int(progress * 100)}%"
-        text_surf = self.font_charge.render(label, True, accent)
-        text_x = screen_x - text_surf.get_width() // 2
-        text_y = screen_y + radius + 14
-
-        box_rect = pygame.Rect(text_x - 6, text_y - 3,
-                               text_surf.get_width() + 12, text_surf.get_height() + 6)
-        pygame.draw.rect(self.screen, BLACK, box_rect)
-        pygame.draw.rect(self.screen, accent, box_rect, 1)
-        self.screen.blit(text_surf, (text_x, text_y))
+        surf = fonts.font(16).render(text, True, accent)
+        # Well below the ship (which sits at screen centre), so nothing is drawn over it
+        rect = surf.get_rect(midtop=(screen_x, screen_y + 90))
+        self.screen.blit(surf, rect)
 
     def draw_laser(self, lasers, camera):
 

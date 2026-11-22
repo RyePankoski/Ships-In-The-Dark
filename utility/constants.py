@@ -1,9 +1,15 @@
-SHIP_THRUST = 100  # was 1
-
-ANGLE_CHANGE_SPEED = 3  # was 0.4
+# Ship handling (units per second and per second squared; angles in degrees)
+SHIP_THRUST = 50  # acceleration along the nose while thrusting
 SHIP_MAX_SPEED = 200
-DAMPENING_FORCE = 0.9999
-SHIP_BRAKE_FORCE = 0.99
+RETRO_THRUST_FRACTION = 0.5  # reverse burn (down key) as a fraction of forward thrust
+SHIP_TURN_RATE = 150  # top turn rate, degrees per second
+SHIP_TURN_ACCEL = 600  # how quickly the turn rate eases toward its target, degrees per second squared
+SHIP_TURN_SLOWDOWN = 0.4  # fraction of turn rate lost at full speed, so fast ships arc wider
+FLIGHT_ASSIST_DRAG = 0.9  # coasting bleed per second with the dampener on
+DRIFT_DRAG = 0.08  # coasting bleed per second with the dampener off
+BRAKE_DRAG = 3.0  # per second while braking (tab)
+BOOST_THRUST_MULT = 2.0  # shift: thrust multiplier
+BOOST_SPEED_MULT = 1.5  # shift: raises the speed cap
 
 MISSILE_THRUST = 200  # was 0.4
 MISSILE_MAX_SPEED = 500  # was 10

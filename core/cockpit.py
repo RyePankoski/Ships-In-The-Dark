@@ -8,8 +8,6 @@ class Cockpit:
     """
 
     def __init__(self):
-        self.manual_control = True
-
         # Targeting: the object the laser is locked on (a world object or None)
         self.target = None
         self.has_missile_solution = False

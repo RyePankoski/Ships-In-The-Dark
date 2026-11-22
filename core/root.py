@@ -23,9 +23,6 @@ class Core:
             self.client.run(dt, events)
 
     def splash(self, dt):
-
-
-
         inputs = collect_inputs()
         if self.splashing:
             self.splash_screen_timer += dt
