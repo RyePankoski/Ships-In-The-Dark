@@ -1,2 +1,6 @@
 assets/sounds/ambience2.wav
 dist/
+build/
+__pycache__/
+*.pyc
+*.stackdump
