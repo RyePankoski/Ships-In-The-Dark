@@ -1,7 +1,7 @@
 import math
 import random
 from utility.constants import *
-from utility.util import sqrt_distance
+from utility.common import sqrt_distance
 from objects.base import WorldObject
 
 

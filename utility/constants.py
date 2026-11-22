@@ -47,19 +47,13 @@ BULLET_SPEED = 600
 BULLET_LIFETIME = 2
 
 PORT = 27015
-TICK_RATE = 25  # server simulation steps per second
+TICK_RATE = 20  # server simulation steps per second
+BROADCAST_RATE = 20  # server state snapshots sent per second (independent of the frame rate)
 
-# Radio / signal model
-SIGNAL_REFERENCE_DISTANCE = 500  # inside this a source is heard at full power; beyond it, inverse-square falloff
-RADAR_SWEEP_POWER = 1.0          # what a radar sweep emits (strength is 0..power)
-EMISSION_LIFETIME = 5.0          # seconds an emission stays on the log before it is forgotten
-RADIO_NOISE_FLOOR = 0.01         # received strength (after gain) below this is not heard
-RADIO_SATURATION = 1.0           # received strength (after gain) is clipped to this
-RADIO_GAIN_MIN = 0.25
-RADIO_GAIN_MAX = 8.0
-RADIO_GAIN_DEFAULT = 1.0
-RADAR_PING_WINDOW = 1.0          # seconds a sweep counts as "just heard" (the radio plays it once); must outlast network delay
-RADAR_SWEEP_MIN_INTERVAL = 2.0   # the world ignores a player's sweeps closer together than this
-RADIO_GAIN_STEP = 1.25           # one gain click multiplies/divides gain by this
-RADIO_STATIC_LEVEL = 0.05        # raw strength of the hiss on an unused dial position
-RADIO_DIAL_SIZE = 5              # dial positions; the radar channel is position 0
+REF_HZ = 60 # the frame rate the per-step ship handling constants were tuned at
+# Client-side prediction (see simulation/snapshot.py)
+SNAPSHOT_AGE = 0.06  # how old a snapshot is on arrival: one tick plus a LAN trip, roughly
+SNAP_DISTANCE = 400  # a gap bigger than this (blink, respawn) is a teleport, not an error to ease out
+CORRECTION_RATE = 10  # per second; the smaller the gap after a snapshot, the sooner it's gone
+LOCAL_VELOCITY_BLEND = 0.25  # how far our own ship's heading/speed is pulled to the server's per snapshot
+

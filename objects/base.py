@@ -1,3 +1,8 @@
+import math
+
+from utility.constants import CORRECTION_RATE
+
+
 class WorldObject:
     """What every thing in the world has in common.
 
@@ -33,6 +38,21 @@ class WorldObject:
     @property
     def center(self):
         return self.pos_x, self.pos_y
+
+    # Client-side only: how far we still are from where the last snapshot said we
+    # should be. It is eased out a little each frame instead of jumping.
+    err_x = 0.0
+    err_y = 0.0
+
+    def ease_correction(self, dt):
+        if self.err_x == 0.0 and self.err_y == 0.0:
+            return
+        k = 1 - math.exp(-CORRECTION_RATE * dt)
+        dx, dy = self.err_x * k, self.err_y * k
+        self.pos_x += dx
+        self.pos_y += dy
+        self.err_x -= dx
+        self.err_y -= dy
 
     @property
     def moving(self):

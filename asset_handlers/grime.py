@@ -1,7 +1,7 @@
 """Pre-baked panel textures that make the console look old, used and dirty.
 
 Each panel is rendered once (per screen size) into an opaque surface:
-grit, scratches, water rings, phosphor burn-in from text that
+grit, phosphor burn-in from text that
 sat on screen for years, chipped stencil labels, rivets and a worn frame.
 Blitting four opaque surfaces per frame is as cheap as the old rect fills.
 """
@@ -10,6 +10,7 @@ import random
 import pygame
 
 from utility import theme
+from asset_handlers import fonts
 
 
 def _shade(color, delta):
@@ -37,39 +38,6 @@ def _grit(surf, rng, density):
             surf.set_at((x, y), (0, 0, 0))
 
 
-def _scratches(surf, rng, count):
-    w, h = surf.get_size()
-    for _ in range(count):
-        # Scratches come in bunches running roughly the same way
-        cx, cy = rng.randrange(w), rng.randrange(h)
-        angle = rng.uniform(-0.6, 0.6) + (0 if rng.random() < 0.6 else 1.57)
-        dx, dy = pygame.math.Vector2(1, 0).rotate_rad(angle)
-        for _ in range(rng.randint(1, 4)):
-            ox, oy = cx + rng.randint(-12, 12), cy + rng.randint(-12, 12)
-            length = rng.randint(15, 140)
-            col = _shade(theme.BG, rng.randint(8, 22))
-            pts = []
-            for i in range(0, length, 6):
-                pts.append((ox + dx * i + rng.uniform(-0.8, 0.8), oy + dy * i + rng.uniform(-0.8, 0.8)))
-            if len(pts) > 1:
-                pygame.draw.aalines(surf, col, False, pts)
-
-
-def _water_rings(surf, rng, count):
-    w, h = surf.get_size()
-    for _ in range(count):
-        r = rng.randint(18, 60)
-        cx, cy = rng.randrange(w), rng.randrange(h)
-        ring = pygame.Rect(0, 0, r * 2, int(r * 2 * rng.uniform(0.8, 1.0)))
-        ring.center = (cx, cy)
-        # Darker inside, slightly crusted rim
-        stain = pygame.Surface(ring.size)
-        stain.fill((3, 3, 2))
-        surf.blit(stain, ring, special_flags=pygame.BLEND_SUB)
-        pygame.draw.ellipse(surf, _shade(theme.BG, 9), ring, 1)
-        pygame.draw.ellipse(surf, _shade(theme.BG, 4), ring.inflate(-3, -3), 1)
-
-
 # Old fixed screens that were left up for years and burned into the phosphor.
 # Each is a header plus LABEL / VALUE rows, laid out like the form it came from.
 _GHOST_FORMS = [
@@ -95,7 +63,7 @@ _GHOST_FORMS = [
 def _ghost_form(surf, rng, area, form):
     """Burn a fixed readout screen into `area`: header, rule, then dot-leader rows."""
     title, rows = form
-    f = theme.font(17)
+    f = fonts.font(17)
     lh = f.get_height() + 4
     col = (13, 10, 1)
     cols = max(16, (area.width - 24) // max(1, f.size("M")[0]))
@@ -122,21 +90,12 @@ def _ghost_form(surf, rng, area, form):
 def _stencil(surf, rng, label):
     """Chipped stencilled panel ID in the bottom-right corner."""
     w, h = surf.get_size()
-    t = theme.font(13).render_steady(label, True, theme.AMBER_FAINT)
+    t = fonts.font(13).render_steady(label, True, theme.AMBER_FAINT)
     x, y = w - t.get_width() - 18, h - t.get_height() - 14
     surf.blit(t, (x, y))
     for _ in range(6):  # paint flaked off
         cx, cy = x + rng.randrange(t.get_width()), y + rng.randrange(t.get_height())
         pygame.draw.circle(surf, theme.BG, (cx, cy), rng.randint(1, 2))
-
-
-def _rivets(surf):
-    w, h = surf.get_size()
-    for x, y in ((14, 14), (w - 15, 14), (14, h - 15), (w - 15, h - 15)):
-        pygame.draw.circle(surf, (0, 0, 0), (x + 1, y + 1), 3)
-        pygame.draw.circle(surf, (24, 22, 14), (x, y), 3)
-        pygame.draw.line(surf, (8, 8, 5), (x - 2, y + 1), (x + 2, y - 1))  # screw slot
-        surf.set_at((x - 1, y - 2), (50, 45, 25))  # glint
 
 
 def _worn_rect(surf, rng, rect, color, width, wear):
@@ -161,7 +120,16 @@ def _worn_rect(surf, rng, rect, color, width, wear):
             pygame.draw.line(surf, col, p1, p2, width)
 
 
-def build_panel(size, seed, label, border, inset, ghost_areas=()):
+def _rivets(surf):
+    w, h = surf.get_size()
+    for x, y in ((14, 14), (w - 15, 14), (14, h - 15), (w - 15, h - 15)):
+        pygame.draw.circle(surf, (0, 0, 0), (x + 1, y + 1), 3)
+        pygame.draw.circle(surf, (24, 22, 14), (x, y), 3)
+        pygame.draw.line(surf, (8, 8, 5), (x - 2, y + 1), (x + 2, y - 1))  # screw slot
+        surf.set_at((x - 1, y - 2), (50, 45, 25))  # glint
+
+
+def build_panel(size, seed, label, border, ghost_areas=()):
     """One panel's texture. `ghost_areas` are panel-local rects that get a burned-in old readout."""
     w, h = size
     rng = random.Random(seed)
@@ -173,14 +141,10 @@ def build_panel(size, seed, label, border, inset, ghost_areas=()):
         forms = rng.sample(_GHOST_FORMS, min(len(ghost_areas), len(_GHOST_FORMS)))
         for area, form in zip(ghost_areas, forms):
             _ghost_form(surf, rng, pygame.Rect(area), form)
-        _water_rings(surf, rng, rng.randint(0, 2) + (w * h) // 400000)
-        _scratches(surf, rng, max(2, (w * h) // 40000))
         _grit(surf, rng, 0.012)
         _stencil(surf, rng, label)
         _rivets(surf)
         _worn_rect(surf, rng, surf.get_rect(), border, 2, 0.012)
-        _worn_rect(surf, rng, surf.get_rect().inflate(-10, -10), inset, 1, 0.03)
     else:
         pygame.draw.rect(surf, border, surf.get_rect(), 2)
-        pygame.draw.rect(surf, inset, surf.get_rect().inflate(-10, -10), 1)
     return surf

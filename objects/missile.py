@@ -33,7 +33,9 @@ class Missile(WorldObject):
         self.avoid_x = 0.0
         self.avoid_y = 0.0
 
-    def run(self, dt, asteroids):
+    def run(self, dt, asteroids, authoritative=True):
+        """authoritative=False is a client guessing between snapshots: it flies the
+        same way but never decides a hit (the server does, and tells us)."""
 
         if self.target is not None:
             self.has_solution = True
@@ -42,11 +44,11 @@ class Missile(WorldObject):
             self.propel(dt)
 
         if self.has_solution:
-            self.steer(asteroids)
+            self.steer(asteroids, authoritative)
 
         self.move(dt)
 
-    def steer(self, asteroids):
+    def steer(self, asteroids, authoritative=True):
 
         target_x, target_y = self.target.center
         dx = target_x - self.pos_x
@@ -55,6 +57,8 @@ class Missile(WorldObject):
         distance = math.hypot(dx, dy)
 
         if distance < 50:
+            if not authoritative:
+                return
             self.alive = False
             self.reached_target = True
 

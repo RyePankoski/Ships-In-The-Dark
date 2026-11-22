@@ -12,12 +12,19 @@ field says how to pack it:
     INT       whole number, sent as is
     BOOL      sent as 0/1, turned back into True/False on arrival
 """
+import math
+
 from objects.decoy import Decoy
 from objects.missile import Missile
 from objects.ship import Ship
 
+from utility.constants import SNAP_DISTANCE, LOCAL_VELOCITY_BLEND
+
 INT = 'int'
 BOOL = 'bool'
+
+# The fields a client keeps moving itself between snapshots; see apply_snapshot
+MOTION_FIELDS = {'pos_x', 'pos_y', 'dir_x', 'dir_y', 'vel_x', 'vel_y', 'speed', 'heading'}
 
 SHIP_FIELDS = (
     ('pos_x', 1), ('pos_y', 1), ('dir_x', 3), ('dir_y', 3), ('speed', 1), ('heading', 1),
@@ -44,26 +51,35 @@ def make_snapshot(world):
     }
 
 
-def apply_snapshot(world, snapshot):
+def apply_snapshot(world, snapshot, age=0.0, my_id=None):
     """Update a client's copy of the world in place.
 
     Objects are updated, not replaced, so anything holding a reference to them
     (the instruments hold the player's ship, the radar holds the lists) stays valid.
+
+    The client keeps simulating between snapshots (World.predict), so a snapshot
+    isn't allowed to yank anything. Where the server says an object is, moved on by
+    `age` (how old the snapshot is), becomes its target, and the gap is eased out
+    over the next frames. A gap too big to be drift is a teleport and just happens.
+    Our own ship (my_id) keeps its own heading and speed, nudged toward the server's.
     """
     ships = [_unpack(row, SHIP_FIELDS) for row in snapshot['ships']]
     _sync_list(world.ships, ships, SHIP_FIELDS,
-               lambda d: Ship(d['pos_x'], d['pos_y'], player_id=d['id']), key='player_id')
+               lambda d: Ship(d['pos_x'], d['pos_y'], player_id=d['id']), key='player_id',
+               age=age, mine=my_id)
     for ship in world.ships:
         ship.update_rect()
 
     decoys = [_unpack(row, DECOY_FIELDS) for row in snapshot['decoys']]
     _sync_list(world.decoys, decoys, DECOY_FIELDS,
-               lambda d: Decoy(d['pos_x'], d['pos_y'], d['dir_x'], d['dir_y'], d['speed']))
+               lambda d: Decoy(d['pos_x'], d['pos_y'], d['dir_x'], d['dir_y'], d['speed']),
+               age=age)
 
     missiles = [_unpack(row, MISSILE_FIELDS) for row in snapshot['missiles']]
     targets = {d['id']: d['extra'][0] for d in missiles}
     _sync_list(world.missiles, missiles, MISSILE_FIELDS,
-               lambda d: Missile(d['pos_x'], d['pos_y'], 0, 0, None, d['owner']))
+               lambda d: Missile(d['pos_x'], d['pos_y'], 0, 0, None, d['owner']),
+               age=age)
     for missile in world.missiles:
         missile.target = world.find(targets[missile.net_id])
 
@@ -90,7 +106,7 @@ def _unpack(row, fields):
     return data
 
 
-def _sync_list(objects, dicts, fields, create, key='net_id'):
+def _sync_list(objects, dicts, fields, create, key='net_id', age=0.0, mine=None):
     existing = {getattr(obj, key): obj for obj in objects}
     seen = set()
     for data in dicts:
@@ -100,7 +116,48 @@ def _sync_list(objects, dicts, fields, create, key='net_id'):
             if key == 'net_id':
                 obj.net_id = data['id']
             objects.append(obj)
-        for name, _ in fields:
-            setattr(obj, name, data[name])
+            _copy_fields(obj, data, fields)
+        else:
+            _reconcile(obj, data, fields, age, is_mine=(data['id'] == mine and key == 'player_id'))
         seen.add(data['id'])
     objects[:] = [obj for obj in objects if getattr(obj, key) in seen]
+
+
+def _copy_fields(obj, data, fields):
+    for name, _ in fields:
+        setattr(obj, name, data[name])
+    obj.err_x = obj.err_y = 0.0
+
+
+def _reconcile(obj, data, fields, age, is_mine):
+    # Where the server says it is now: its position, carried on by the snapshot's age
+    if 'vel_x' in data:
+        vel_x, vel_y = data['vel_x'], data['vel_y']
+    else:
+        vel_x, vel_y = data['dir_x'] * data['speed'], data['dir_y'] * data['speed']
+    target_x = data['pos_x'] + vel_x * age
+    target_y = data['pos_y'] + vel_y * age
+
+    # Whatever isn't about motion is simply the server's
+    for name, _ in fields:
+        if name not in MOTION_FIELDS:
+            setattr(obj, name, data[name])
+
+    gap_x, gap_y = target_x - obj.pos_x, target_y - obj.pos_y
+    if math.hypot(gap_x, gap_y) > SNAP_DISTANCE:
+        for name in MOTION_FIELDS & data.keys():
+            setattr(obj, name, data[name])
+        obj.pos_x, obj.pos_y = target_x, target_y
+        obj.err_x = obj.err_y = 0.0
+        return
+
+    obj.err_x, obj.err_y = gap_x, gap_y
+    for name in MOTION_FIELDS - {'pos_x', 'pos_y'}:
+        if name not in data:
+            continue
+        if is_mine and name in ('dir_x', 'dir_y', 'speed'):
+            # We're steering this one: ease toward the server instead of adopting it
+            current = getattr(obj, name)
+            setattr(obj, name, current + (data[name] - current) * LOCAL_VELOCITY_BLEND)
+        else:
+            setattr(obj, name, data[name])

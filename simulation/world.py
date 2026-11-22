@@ -6,10 +6,9 @@ from objects.drone import Drone
 from objects.mining_vessel import MiningVessel
 from objects.missile import Missile
 from objects.ship import Ship
-from radio.signal import RADAR_SWEEP, EmissionLog
 from simulation.contacts import Contacts
 from utility.constants import *
-from utility.util import squared_distance
+from utility.common import squared_distance
 
 # The only keys the simulation cares about for flying a ship.
 MOVE_KEYS = ('left', 'right', 'up', 'down', 'left_shift', 'tab')
@@ -45,12 +44,11 @@ class World:
     copy that is updated from the server's snapshots (simulation/snapshot.py).
     """
 
-    def __init__(self, seed, with_npcs=True):
+    def __init__(self, seed, with_npcs=True, online=False):
         self.seed = seed
         self.with_npcs = with_npcs
 
         self.alphabet = ["a","b", "c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"]
-
 
         self.ships = []
         self.missiles = []
@@ -74,10 +72,7 @@ class World:
         # (sounds etc). Only meaningful when the world is stepped locally.
         self.events = []
 
-        # Everything emitted lately (radar sweeps, ...) and the world clock that stamps it
-        self.emissions = EmissionLog()
         self.time = 0.0
-        self._last_sweep = {}  # player_id -> world time of their last radar sweep
 
         # How sensors look at everything above (see simulation/contacts.py)
         self.contacts = Contacts(self)
@@ -104,7 +99,7 @@ class World:
             asteroid = Asteroid(pos_x, pos_y, rng.randint(50, 100))
             asteroid.net_id = self.new_id()
 
-            asteroid.id_for_ui = self._generate_name()
+            asteroid.id_for_ui = self._generate_asteroid_names()
             self.asteroids.setdefault(asteroid.cell, []).append(asteroid)
 
         if not self.with_npcs:
@@ -121,7 +116,7 @@ class World:
         pirate.net_id = self.new_id()
         self.pirates.setdefault((int(100 // GRID_SIZE), int(100 // GRID_SIZE)), []).append(pirate)
 
-    def _generate_name(self):
+    def _generate_asteroid_names(self):
         length = random.randint(1, 3)
         name = ""
         for _ in range(length):
@@ -192,7 +187,6 @@ class World:
         """Advance the world by dt. commands = {player_id: command dict}."""
         self.events = []
         self.time += dt
-        self.emissions.prune(self.time)
 
         for ship in self.ships:
             command = commands.get(ship.player_id)
@@ -229,14 +223,6 @@ class World:
             decoy.net_id = self.new_id()
             self.decoys.append(decoy)
 
-        elif kind == 'radar_sweep':
-            if self.time - self._last_sweep.get(ship.player_id, -RADAR_SWEEP_MIN_INTERVAL) >= RADAR_SWEEP_MIN_INTERVAL:
-                self._last_sweep[ship.player_id] = self.time
-                x, y = ship.center
-                self.emissions.publish(ship.player_id, x, y, RADAR_SWEEP, RADAR_SWEEP_POWER, self.time)
-                # Tells clients (who don't step the world) so their radios can hear it
-                self.events.append(('radar_sweep', ship.player_id, round(x, 1), round(y, 1), round(self.time, 3)))
-
         elif kind == 'blink':
             ship.pos_x, ship.pos_y = self.random_empty_point()
             ship.update_rect()
@@ -261,13 +247,37 @@ class World:
             if not ship.alive:
                 continue
             ship.run(dt)
+            self._bounce_off_asteroids(ship)
 
-            cell = (int(ship.rect.center[0] // GRID_SIZE), int(ship.rect.center[1] // GRID_SIZE))
-            for asteroid in self.asteroids.get(cell, []):
-                distance, in_range = squared_distance(ship.rect.center, (asteroid.pos_x, asteroid.pos_y), asteroid.size)
-                if in_range:
-                    ship.dir_x *= -1.5
-                    ship.dir_y *= -1.5
+    def _bounce_off_asteroids(self, ship):
+        cell = (int(ship.rect.center[0] // GRID_SIZE), int(ship.rect.center[1] // GRID_SIZE))
+        for asteroid in self.asteroids.get(cell, []):
+            distance, in_range = squared_distance(ship.rect.center, (asteroid.pos_x, asteroid.pos_y), asteroid.size)
+            if in_range:
+                ship.dir_x *= -1.5
+                ship.dir_y *= -1.5
+
+    def predict(self, my_id, command, dt):
+        """A client's guess at the next dt, between snapshots. Only motion: our own
+        ship answers our keys, everything else coasts. Hits, damage, firing and
+        events are the server's call, and the next snapshot corrects any drift."""
+        mine = self.get_ship(my_id)
+        if mine is not None and mine.alive and command.get('move') is not None:
+            mine.apply_inputs(command['move'], dt)
+
+        for ship in self.ships:
+            if ship.alive:
+                ship.coast(dt)
+                self._bounce_off_asteroids(ship)
+                ship.ease_correction(dt)
+                ship.update_rect()
+
+        for missile in self.missiles:
+            missile.run(dt, self.asteroids, authoritative=False)
+            missile.ease_correction(dt)
+
+        for decoy in self.decoys:
+            decoy.ease_correction(dt)
 
     def _step_missiles(self, dt):
         for missile in list(self.missiles):

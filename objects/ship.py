@@ -100,6 +100,13 @@ class Ship(DirectionSteered):
 
         self.bounce()
 
+    def coast(self, dt):
+        self.move(dt)
+        self.update_rect()
+        if self.dampening:
+            self.dampen(dt)
+        self.bounce()
+
     def fire(self):
         if not self.missile_cooling_down:
             self.missile_cooling_down = True
@@ -135,8 +142,11 @@ class Ship(DirectionSteered):
     def apply_inputs(self, inputs, dt):
         boost_amount = 50 if inputs['left_shift'] else 1
 
+        # Per-step factors are scaled to dt so the 20 Hz server and a 60 Hz client agree
+        steps = dt * REF_HZ
+
         if inputs["tab"]:
-            self.speed *= SHIP_BRAKE_FORCE
+            self.speed *= SHIP_BRAKE_FORCE ** steps
 
         if inputs["left"]:
             self.dir_x -= ANGLE_CHANGE_SPEED * dt
@@ -161,8 +171,8 @@ class Ship(DirectionSteered):
             self.dir_x /= length
             self.dir_y /= length
 
-        self.dir_x *= 0.95
-        self.dir_y *= 0.95
+        self.dir_x *= 0.95 ** steps
+        self.dir_y *= 0.95 ** steps
 
         if inputs['up'] or inputs['left'] or inputs['down'] or inputs['right']:
             self.thrusting = True

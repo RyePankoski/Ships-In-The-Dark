@@ -1,6 +1,6 @@
 from instruments.instrument import Instrument
 from utility.constants import CORRIDOR_WIDTH, CORRIDOR_DEPTH
-from utility.util import in_quadrant, dfs_sqrt_distance
+from utility.common import in_quadrant, dfs_sqrt_distance
 
 # What the DFS makes of each kind of contact: (label it reports, confidence).
 # Drones read as 'unknown': this scanner can't tell them apart from anything else.

@@ -36,7 +36,6 @@ class RadarSystem(Instrument):
 
     def sweep(self):
         self.ctx.sfx('radar')
-        self.ctx.send_action({'type': 'radar_sweep'})
         self.signatures = []
         self.begin_scan()
         self.ctx.start_cooldown()
@@ -46,7 +45,14 @@ class RadarSystem(Instrument):
             self.signatures.extend(self.continue_scan())
 
     def draw_panel(self, ui):
-        ui.draw_radar(self.ship, self.signatures, self.scanning)
+        ui.draw_radar(self.ship, self.signatures, self.scanning, self._sweep_angle())
+
+    def _sweep_angle(self):
+        """Direction of the ray being cast right now, or None when no sweep is running."""
+        if not self.scanning or self.radar_rays is None:
+            return None
+        dx, dy = self.radar_rays[max(0, self.current_ray - 1)]
+        return math.atan2(dy, dx)
 
     def draw_controls(self, ui):
         ui.draw_radar_controls(self.scanning)

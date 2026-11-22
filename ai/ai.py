@@ -2,7 +2,7 @@ import math
 import random
 
 from utility.constants import *
-from utility.util import squared_distance, sqrt_distance
+from utility.common import squared_distance, sqrt_distance
 
 
 class AI:

@@ -7,6 +7,7 @@ from simulation.world import World
 from utility.constants import *
 
 TICK_DT = 1 / TICK_RATE
+BROADCAST_DT = 1 / BROADCAST_RATE
 MAX_STEPS_PER_RUN = 5
 # World events (hits, damage) are resent in every state for this many ticks, so a
 # dropped packet doesn't lose one. Clients skip ids they've already handled.
@@ -15,10 +16,12 @@ EVENT_RESEND_TICKS = TICK_RATE // 2
 PLAYER_TIMEOUT = 5.0
 # Plenty for a LAN party, and keeps one snapshot comfortably inside a UDP packet
 MAX_PLAYERS = 16
-MIN_PLAYERS_TO_LAUNCH = 2
+MIN_PLAYERS_TO_LAUNCH = 1
 
 CALLSIGN_MAX = 10
 CALLSIGN_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-")
+
+
 
 
 def clean_callsign(text):
@@ -30,11 +33,11 @@ def clean_callsign(text):
 class PlayerSlot:
     def __init__(self, player_id):
         self.player_id = player_id
-        self.move = None            # latest held movement keys
+        self.move = None  # latest held movement keys
         self.laser_target = None
-        self.last_seq = -1          # newest input packet seen (older ones are ignored)
-        self.last_action_id = 0     # newest action accepted (sent back as 'ack')
-        self.queued_actions = []    # accepted, waiting for the next tick
+        self.last_seq = -1  # newest input packet seen (older ones are ignored)
+        self.last_action_id = 0  # newest action accepted (sent back as 'ack')
+        self.queued_actions = []  # accepted, waiting for the next tick
         self.last_heard = time.monotonic()
         self.wanted_callsign = None  # what they last asked to be called
         # What this client has confirmed it already has, so we stop sending it
@@ -85,6 +88,7 @@ class Server:
         self.started = False
         self.tick = 0
         self.accumulator = 0.0
+        self.broadcast_timer = 0.0
 
         self.recent_events = []  # (tick, [event_id, kind, *data])
         self.next_event_id = 1
@@ -99,6 +103,7 @@ class Server:
             print(f"[SERVER] Launching with {len(self.players)} players")
 
     def run(self, dt):
+
         for message, address in self.network.receive_all():
             self.handle_message(message, address)
         self.drop_silent_players()
@@ -113,7 +118,12 @@ class Server:
             if steps == MAX_STEPS_PER_RUN:
                 self.accumulator = 0.0  # we fell badly behind; don't try to catch up
 
-        self.broadcast()
+        # Snapshots go out at BROADCAST_RATE, not every frame; the timer is separate
+        # from the simulation accumulator so the two don't interfere.
+        self.broadcast_timer += dt
+        if self.broadcast_timer >= BROADCAST_DT:
+            self.broadcast_timer %= BROADCAST_DT
+            self.broadcast()
 
     def handle_message(self, message, address):
         kind = message.get('type')

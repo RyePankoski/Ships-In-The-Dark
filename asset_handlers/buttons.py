@@ -14,6 +14,7 @@ sweep the laser).
 import pygame
 
 from utility import theme
+from asset_handlers import fonts
 
 
 class Button:
@@ -76,30 +77,20 @@ class ButtonLayer:
         return None
 
 
-def draw_frame(screen, rect, color=theme.AMBER, fill=theme.BG, inset=True, tick=10, width=1):
-    """The one instrument-box style: border, recessed inset line, bright corner ticks.
+def draw_frame(screen, rect, color=theme.AMBER, fill=theme.BG, tick=10, width=1):
+    """The one instrument-box style: a single plain border.
 
     Args:
         rect: Box to draw.
-        color: Border colour. The inset and ticks are derived from it.
+        color: Border colour.
         fill: Background colour, or None to leave what's underneath.
-        inset: Draw the recessed second line just inside the border.
-        tick: Length of the corner accents (0 for none).
-        width: Outer border thickness.
+        tick: Unused. Kept so callers don't change.
+        width: Border thickness.
     """
     rect = pygame.Rect(rect)
     if fill is not None:
         pygame.draw.rect(screen, fill, rect)
     pygame.draw.rect(screen, color, rect, width)
-    if inset:
-        dim = tuple(c * 2 // 5 for c in color)
-        pygame.draw.rect(screen, dim, rect.inflate(-8, -8), 1)
-    if tick:
-        bright = tuple(min(255, c + 45) for c in color)
-        for cx, cy, dx, dy in ((rect.left, rect.top, 1, 1), (rect.right - 1, rect.top, -1, 1),
-                               (rect.left, rect.bottom - 1, 1, -1), (rect.right - 1, rect.bottom - 1, -1, -1)):
-            pygame.draw.line(screen, bright, (cx, cy), (cx + tick * dx, cy), 3)
-            pygame.draw.line(screen, bright, (cx, cy), (cx, cy + tick * dy), 3)
 
 
 def draw_button(screen, rect, label, key=None, lit=None, enabled=True, font=None, key_font=None,
@@ -116,8 +107,8 @@ def draw_button(screen, rect, label, key=None, lit=None, enabled=True, font=None
         align: "left" (lamp + label) or "center".
     """
     rect = pygame.Rect(rect)
-    font = font or theme.font(17)
-    key_font = key_font or theme.font(12)
+    font = font or fonts.font(17)
+    key_font = key_font or fonts.font(12)
 
     # No hover state: a physical switch doesn't react to a cursor floating over it,
     # only to being pushed in.
@@ -133,13 +124,6 @@ def draw_button(screen, rect, label, key=None, lit=None, enabled=True, font=None
 
     pygame.draw.rect(screen, fill, rect)
     pygame.draw.rect(screen, border, rect, 1)
-    # Bright corner ticks top-left / bottom-right, like the instrument frames
-    tick = 5
-    pygame.draw.line(screen, border, rect.topleft, (rect.left + tick, rect.top), 2)
-    pygame.draw.line(screen, border, rect.topleft, (rect.left, rect.top + tick), 2)
-    br = (rect.right - 1, rect.bottom - 1)
-    pygame.draw.line(screen, border, br, (br[0] - tick, br[1]), 2)
-    pygame.draw.line(screen, border, br, (br[0], br[1] - tick), 2)
 
     clip = screen.get_clip()
     screen.set_clip(rect.inflate(-2, -2))

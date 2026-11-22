@@ -7,6 +7,7 @@ import sys
 import os
 from utility.constants import *
 from utility import theme
+from asset_handlers import fonts
 from pathlib import Path
 
 
@@ -68,7 +69,7 @@ class DrawGame:
         self.pirate_ship_ambushing = pygame.image.load(os.path.join(asset_path, "pngs/pirate_ambushing.png"))
 
 
-        self.font_asteroid_name = theme.font(14)
+        self.font_asteroid_name = fonts.font(14)
 
         # Generate starfield
         self.stars = generate_stars(10000, WORLD_WIDTH, WORLD_HEIGHT)
@@ -87,7 +88,9 @@ class DrawGame:
 
             # Only draw if on screen
             if -10 < screen_x < screen_width + 10 and -10 < screen_y < screen_height + 10:
-                pygame.draw.circle(self.screen, (brightness, brightness, brightness), (screen_x, screen_y), size)
+                tint = theme.STAR_TINT
+                color = (brightness * tint[0] // 255, brightness * tint[1] // 255, brightness * tint[2] // 255)
+                pygame.draw.circle(self.screen, color, (screen_x, screen_y), size)
 
     def draw_asteroids(self, asteroids, camera_x, camera_y):
         for asteroid_list in asteroids.values():
@@ -177,113 +180,21 @@ class DrawGame:
         for bullet in bullets:
             screen_x = bullet.pos_x - camera_x
             screen_y = bullet.pos_y - camera_y
+            # Phosphor persistence: a short tracer trail that dims toward black behind the round
+            speed = math.hypot(bullet.vel_x, bullet.vel_y)
+            if speed > 0:
+                ux, uy = -bullet.vel_x / speed, -bullet.vel_y / speed
+                length = theme.BULLET_TRAIL_LENGTH
+                steps = 3
+                for k in range(steps):
+                    near = length * k / steps
+                    far = length * (k + 1) / steps
+                    fade = 1 - (k + 0.5) / steps
+                    trail = tuple(int(c * fade) for c in bullet.color)
+                    pygame.draw.line(self.screen, trail,
+                                     (screen_x + ux * near, screen_y + uy * near),
+                                     (screen_x + ux * far, screen_y + uy * far), 2)
             pygame.draw.circle(self.screen, bullet.color, (screen_x, screen_y), 2)
-
-    def draw_end_game(self, message="SIGNAL LOST", subtitle="SYNCHRONIZATION LOST. DEBUG:42*1a2"):
-        w, h = self.screen.get_width(), self.screen.get_height()
-        t = time.time()
-
-        # Base phosphor colors
-        PHOSPHOR = theme.GREEN
-        PHOSPHOR_DIM = theme.GREEN_DIM
-        PHOSPHOR_DARK = theme.GREEN_FAINT
-
-        self._sig_font = theme.legacy_font(130)
-        self._sig_font_sub = theme.legacy_font(40)
-        self._diag_font = theme.legacy_font(24)
-
-        # 1. Dead feed: wash to the UI's own black-green.
-        wash = pygame.Surface((w, h), pygame.SRCALPHA)
-        wash.fill((2, 8, 2, 235))
-        self.screen.blit(wash, (0, 0))
-
-        # 2. Grid & Sonar Sweep (Drone Interface)
-        # Faint tactical grid
-        grid = pygame.Surface((w, h), pygame.SRCALPHA)
-        grid_spacing = 60
-        for x in range(0, w, grid_spacing):
-            pygame.draw.line(grid, PHOSPHOR_DARK, (x, 0), (x, h), 1)
-        for y in range(0, h, grid_spacing):
-            pygame.draw.line(grid, PHOSPHOR_DARK, (0, y), (w, y), 1)
-
-        # Center crosshair
-        cx, cy = w // 2, h // 2
-        pygame.draw.circle(grid, PHOSPHOR_DIM, (cx, cy), 150, 1)
-        pygame.draw.line(grid, PHOSPHOR_DIM, (cx - 170, cy), (cx + 170, cy), 1)
-        pygame.draw.line(grid, PHOSPHOR_DIM, (cx, cy - 170), (cx, cy + 170), 1)
-
-        # Sweeping radar/sonar line looking for connection
-        sweep_angle = t * 3  # Speed of rotation
-        sx = cx + math.cos(sweep_angle) * w
-        sy = cy + math.sin(sweep_angle) * w
-        pygame.draw.line(grid, PHOSPHOR_DIM, (cx, cy), (sx, sy), 2)
-        self.screen.blit(grid, (0, 0))
-
-        # 3. Monochrome phosphor snow
-        noise = pygame.Surface((w, h), pygame.SRCALPHA)
-        for _ in range(160):
-            nx = random.randint(0, w)
-            ny = random.randint(0, h)
-            v = random.randint(20, 70)
-            pygame.draw.rect(noise, (0, v + 40, v, v), (nx, ny, 2, 2))
-        self.screen.blit(noise, (0, 0))
-
-        # 4. Gentle phosphor flicker
-        flicker = 0.82 + 0.18 * math.sin(t * 14)
-
-        # 5. Diagnostic overlay (Top Left)
-        # Randomizing the hex code slightly based on time to look like it's churning
-        err_code = hex(int(t * 100) % 0xFFFF)[2:].upper()
-        diagnostics = [
-            "UPLINK_NODE_04 ... FAIL",
-            "TELEMETRY      ... NO CARRIER",
-            "PNEUMATICS     ... OFFLINE",
-            "SONAR_PING     ... TIMEOUT",
-            f"SYS_ERR_LOG    ... 0x{err_code}"
-        ]
-
-        dy = 20
-        for msg in diagnostics:
-            diag_surf = self._diag_font.render(msg, True, PHOSPHOR_DIM)
-            diag_surf.set_alpha(int(200 * flicker))
-            self.screen.blit(diag_surf, (20, dy))
-            dy += 22
-
-        # 6. Title with soft monochrome bloom
-        core = self._sig_font.render(message, True, PHOSPHOR)
-        halo = self._sig_font.render(message, True, PHOSPHOR_DIM)
-        core.set_alpha(int(255 * flicker))
-        halo.set_alpha(int(150 * flicker))
-        tw, th = core.get_width(), core.get_height()
-        tx = w // 2 - tw // 2
-        ty = h // 2 - th // 2 - 20
-
-        # Draw halo slightly offset
-        for ox, oy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
-            self.screen.blit(halo, (tx + ox, ty + oy))
-        self.screen.blit(core, (tx, ty))
-
-        # 7. Subtitle with a blinking underscore cursor
-        cursor = "_" if int(t * 2) % 2 == 0 else " "
-        sub = self._sig_font_sub.render(f"> {subtitle} {cursor}", True, PHOSPHOR)
-        sub.set_alpha(int(220 * flicker))
-        self.screen.blit(sub, (w // 2 - sub.get_width() // 2, ty + th + 16))
-
-        # 8. Reconnection attempt text (Bottom Left)
-        attempt_num = int(t * 0.5) % 99
-        dots = "." * (int(t * 3) % 4)
-        reconnect_txt = f"AUTO-RECONNECT ATTEMPT {attempt_num:02d}/99{dots}"
-        reconnect_surf = self._diag_font.render(reconnect_txt, True, PHOSPHOR)
-        reconnect_surf.set_alpha(int(255 * flicker))
-        self.screen.blit(reconnect_surf, (20, h - 30))
-
-        # 9. One bright monochrome tear line sweeping slowly down the tube
-        tear_y = int((t * 90) % h)
-        tear = pygame.Surface((w, 3), pygame.SRCALPHA)
-        tear.fill((*theme.GREEN, 45))
-        self.screen.blit(tear, (0, tear_y))
-
-        # (Scanlines come from the CRT filter applied to every frame)
 
     def draw_ftl_jump_tunnel(self, ftl_jumping):
         """Draw a hyperspace warp effect implying FTL speed, with a retro UI."""
@@ -337,7 +248,7 @@ class DrawGame:
                 p[2] = random.uniform(1, 4)
 
         # 3. Dashboard Text - Low-fidelity terminal styling
-        self.font_ftl = theme.font(44)
+        self.font_ftl = fonts.font(44)
 
         # Hard on/off blink every 500ms instead of a smooth sine wave
         is_blink_on = (pygame.time.get_ticks() // 500) % 2 == 0
@@ -547,14 +458,6 @@ class DrawGame:
                                  (center[0] - current_radius, center[1] + i),
                                  (center[0] + current_radius, center[1] + i), 1)
 
-        # 3. Target Brackets
-        b_len = 12
-        for bx, by in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
-            cx = center[0] + (current_radius * bx)
-            cy = center[1] + (current_radius * by)
-            pygame.draw.line(surf, (*ui_bright, alpha), (cx, cy), (cx - (b_len * bx), cy), 2)
-            pygame.draw.line(surf, (*ui_bright, alpha), (cx, cy), (cx, cy - (b_len * by)), 2)
-
         # 4. Scanning Sweep
         if 0.2 < progress < 0.9:
             scan_p = (progress - 0.2) / 0.7
@@ -601,7 +504,7 @@ class DrawGame:
             pygame.draw.rect(surf, (*ui_green, alpha), box_rect, 1)
 
             # Load monospace font once
-            analysis_font = theme.font(13)
+            analysis_font = fonts.font(13)
 
             # Generate rapidly scrambling hex values tied to the timer
             # Updating the seed every ~0.08 seconds creates a harsh terminal flicker
@@ -695,7 +598,7 @@ class DrawGame:
                              (ship_screen_x + grid_size, ship_screen_y), 1)
 
         # 3. Retro Terminal Text & Telemetry UI
-        self.font_blink = theme.font(19)
+        self.font_blink = fonts.font(19)
 
         # Display countdown frames and status
         time_left_sec = max(0.0, blink_timer / 60.0)
@@ -758,7 +661,7 @@ class DrawGame:
             pygame.draw.circle(self.screen, accent, (int(px), int(py)), 2)
 
         # Status text in an opaque box below
-        self.font_charge = theme.font(16)
+        self.font_charge = fonts.font(16)
 
         label = "BLINK READY" if ready else f"CHARGING {int(progress * 100)}%"
         text_surf = self.font_charge.render(label, True, accent)

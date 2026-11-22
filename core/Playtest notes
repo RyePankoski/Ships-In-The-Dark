@@ -1,0 +1,1 @@
+Make the pirate lock on to stationary players who havent moved in a while, and start navigating to them. The pirate is slow by default, but if it locks on to a player, it moves roughly x3 as fast

@@ -5,7 +5,7 @@ import pygame
 
 from objects.bullet import Bullet
 from utility.constants import *
-from utility.util import squared_distance, sqrt_distance
+from utility.common import squared_distance, sqrt_distance
 
 
 from objects.base import WorldObject

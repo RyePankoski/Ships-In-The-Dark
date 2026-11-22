@@ -1,7 +1,7 @@
 import pygame
 import os
 
-from utility.theme import _asset_dir
+from utility.paths import asset_dir
 
 
 class AudioManager:
@@ -21,7 +21,7 @@ class AudioManager:
         self.master_volume = 0.2
         self.current_ambience = None
 
-        self._load_all_sounds(assets_path or _asset_dir())
+        self._load_all_sounds(assets_path or asset_dir())
         self._assign_channels()
 
         self.ambience_channel = pygame.mixer.Channel(self.AMBIENCE_CHANNEL)
@@ -33,45 +33,61 @@ class AudioManager:
 
     def _load_all_sounds(self, assets_path):
         sound_files = {
-            'ambience': 'sounds/ambience.mp3',
-            'retro_beep': 'sounds/retro_beep.wav',
+            # Ambience & music
+            'ambience': 'sounds/ambience2.wav',
+            'startup_theme': 'sounds/startup_theme.wav',
+
+            # Ship movement & FTL / blink
             'thrust': 'sounds/thrust.wav',
-            'enemy_missile_lock': 'sounds/enemy_missile_lock.wav',
-            'radar': 'sounds/radar.wav',
-            'death_screen': 'sounds/death_screen.wav',
+            'ftl_jumping': 'sounds/ftl_jumping.wav',
+            'ftl_arrival': 'sounds/ftl_arrival.wav',
+            'blink': 'sounds/blink.wav',
+            'blink_arrival': 'sounds/blink_arrival.wav',
+
+            # Lasers
             'laser': 'sounds/laser_toggle.wav',
             'laser_dir_change': 'sounds/laser_dir_change.wav',
-            'fire_missile': 'sounds/fire_missile.wav',
-            'dfs_dir_change': 'sounds/dfs_dir_change.mp3',
-            'dfs_scan': 'sounds/dfs_scan.wav',
-            'dfs_toggle': 'sounds/dfs_toggle.wav',
-            'map_open': 'sounds/map_open.wav',
-            'map_close': 'sounds/map_close.wav',
-            'close_range_toggle': 'sounds/close_range_toggle.wav',
             'laser_warning': 'sounds/laser_warning.wav',
-            'catastrophic_warning': 'sounds/catastrophic_warning.mp3',
-            'dfs_scan_warning': 'sounds/dfs_scan_warning.wav',
             'laser_locked': 'sounds/laser_locked.wav',
             'laser_turn_off': 'sounds/laser_turn_off.wav',
             'laser_lock_lost': 'sounds/laser_lock_lost.mp3',
-            'deploy_decoy': 'sounds/deploy_decoy.wav',
-            'pirate_warning': 'sounds/pirate_warning.wav',
-            'damage_taken': 'sounds/damage_taken.wav',
-            'low_health': 'sounds/low_health.wav',
-            'startup_theme': 'sounds/startup_theme.wav',
-            'ftl_jumping': 'sounds/ftl_jumping.wav',
-            'ftl_arrival': 'sounds/ftl_arrival.wav',
-            'blink_arrival': 'sounds/blink_arrival.wav',
-            'blink': 'sounds/blink.wav',
+
+            # DFS scanner
+            'dfs_toggle': 'sounds/dfs_toggle.wav',
+            'dfs_scan': 'sounds/dfs_scan.wav',
+            'dfs_dir_change': 'sounds/dfs_dir_change.mp3',
+            'dfs_scan_warning': 'sounds/dfs_scan_warning.wav',
+
+            # Missiles, radar & combat
+            'fire_missile': 'sounds/fire_missile.wav',
+            'enemy_missile_lock': 'sounds/enemy_missile_lock.wav',
             'missile_contact': 'sounds/missile_contact.wav',
+            'deploy_decoy': 'sounds/deploy_decoy.wav',
+            'radar': 'sounds/radar.wav',
+
+            # Map & map markers
+            'map_open': 'sounds/map_open.wav',
+            'map_close': 'sounds/map_close.wav',
             'map_marker': 'sounds/map_marker.wav',
             'map_marker_place': 'sounds/map_marker_place.wav',
             'map_marker_delete': 'sounds/map_marker_delete.wav',
-            'cancel' : 'sounds/cancel.wav',
-            # Placeholders for the radio: swap the files to change the sounds
-            'radio_ping': 'sounds/radar_ping.wav',
-            'radio_static': 'sounds/static.wav',
-            'radio_click': 'sounds/channel_select.wav',
+
+            # Warnings, damage & death
+            'catastrophic_warning': 'sounds/catastrophic_warning.mp3',
+            'pirate_warning': 'sounds/pirate_warning.wav',
+            'damage_taken': 'sounds/damage_taken.wav',
+            'low_health': 'sounds/low_health.wav',
+            'death_screen': 'sounds/death_screen.wav',
+
+            # UI
+            'retro_beep': 'sounds/retro_beep.wav',
+            'close_range_toggle': 'sounds/close_range_toggle.wav',
+            'cancel': 'sounds/cancel.wav',
+            'typing_click': 'sounds/typing_click.wav',
+
+            # Misc
+            'keyboard_clack': 'sounds/keyboard_clack.mp3',
+            'startup' : 'sounds/startup.wav',
         }
 
         for name, filename in sound_files.items():
@@ -97,19 +113,6 @@ class AudioManager:
             self.sfx_channels[name] = pygame.mixer.Channel(self.FIRST_SFX_CHANNEL + i)
 
     def play_sfx(self, name, force=False, loops=0, volume=1.0):
-        """Play a sound effect on its own dedicated channel.
-
-        If this same sound is already playing, it is left running (so calling
-        this every frame won't restart it). Pass force=True to restart it from
-        the beginning. Different sounds are on different channels, so any number
-        of them can play at the same time.
-
-        Args:
-            name: Sound identifier
-            force: If True, restart this sound even if it's already playing
-            loops: Extra repeats (-1 = until stopped)
-            volume: 0..1, on top of the master volume
-        """
         channel = self.sfx_channels.get(name)
         if channel is None:
             print(f"[AUDIO] Sound not found: {name}")

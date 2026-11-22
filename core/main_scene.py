@@ -1,6 +1,8 @@
 import pygame
 
+import utility.theme
 from ai.player_ship_ai import PlayerShipAI
+from asset_handlers.crt import crt
 from asset_handlers.draw_game import DrawGame
 from asset_handlers.draw_ui import DrawUI
 from core.cockpit import Cockpit
@@ -9,11 +11,9 @@ from instruments.deep_field_scan import DeepFieldScan
 from instruments.instrument import InstrumentContext
 from instruments.laser_assessor import LaserAssessor
 from instruments.radar_system import RadarSystem
-from instruments.radio_receiver import RadioReceiver
-from radio.signal import RADAR_SWEEP
 from simulation.world import MOVE_KEYS, empty_command
-from utility.constants import RADAR_SWEEP_POWER
-from utility.util import *
+from utility.common import *
+from utility.theme import *
 
 
 class MainScene:
@@ -60,9 +60,7 @@ class MainScene:
         self.deep_field_scan = DeepFieldScan(self.instrument_context)
         self.laser_assessor = LaserAssessor(self.instrument_context)
         self.close_range_scan = CloseRangeScan(self.instrument_context)
-        self.radio_receiver = RadioReceiver(self.instrument_context, my_id)
-        self.instruments = [self.radar_system, self.deep_field_scan, self.laser_assessor, self.close_range_scan,
-                            self.radio_receiver]
+        self.instruments = [self.radar_system, self.deep_field_scan, self.laser_assessor, self.close_range_scan]
 
         self.key_actions = self.KEY_ACTIONS + tuple(k for i in self.instruments for k in i.keys)
         self.instrument_actions = {}
@@ -130,10 +128,13 @@ class MainScene:
         return [ship for ship in self.world.ships if ship is not self.player_ship]
 
     def run(self, inputs, dt, events=()):
+
+        crt.set_damage(self.player_ship.health_low)
         # Buttons drawn last frame are what this frame's clicks land on
         buttons = self.draw_ui.buttons
         clicks = buttons.clicked_actions(events)
         held = buttons.held_action()
+
         if held:
             inputs = dict(inputs)
             inputs[held] = True
@@ -151,6 +152,8 @@ class MainScene:
         if self.local:
             self.world.step({self.my_id: self.command}, dt)
             self.handle_world_events(self.world.events)
+        else:
+            self.world.predict(self.my_id, self.command, dt)
 
         for ship in self.world.ships:
             ship.player = ship is self.player_ship
@@ -390,12 +393,6 @@ class MainScene:
             if kind == 'damage':
                 if data[0] == self.my_id:
                     self.audio_manager.play_sfx('damage_taken')
-            elif kind == 'radar_sweep':
-                # Single-player's world already logged it; in multiplayer our copy of the
-                # world isn't stepped, so the server's report is how we learn of it
-                if not self.local:
-                    source_id, x, y, timestamp = data
-                    self.world.emissions.publish(source_id, x, y, RADAR_SWEEP, RADAR_SWEEP_POWER, timestamp)
             elif kind == 'missile_contact':
                 self.audio_manager.play_sfx('missile_contact', force=True)
                 self.missile_contact_timer = self.missile_contact_duration
@@ -460,12 +457,7 @@ class MainScene:
     def end_screen(self, message, subtitle, sound, clicks=()):
         if 'return_to_menu' in clicks:
             self.quit_requested = True
-        self.draw_game.start_blit()
-        self.draw_game.draw_end_game(message, subtitle)
-        self.draw_ui.buttons.begin_frame()
-        self.draw_ui.draw_end_screen_button()
-        self.draw_ui.buttons.end_frame()
-        end_blit()
+        self.draw_ui.draw_debrief_screen(message, subtitle, 'return_to_menu', "RETURN TO MENU")
         if not self.end_tripped:
             self.audio_manager.stop_all()
             self.audio_manager.play_sfx(sound)

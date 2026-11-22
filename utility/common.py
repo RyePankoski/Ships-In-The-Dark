@@ -1,6 +1,8 @@
 import pygame
 from utility.constants import *
 import math
+from asset_handlers.audio_manager import AudioManager
+audio_manager = AudioManager()
 
 
 def collect_inputs():
@@ -67,6 +69,25 @@ def collect_inputs():
     return inputs
 
 
+def blink_cursor():
+    return "_" if pygame.time.get_ticks() // 500 % 2 == 0 else " "
+
+
+def edit_text(events, text, allowed, max_len):
+    """Apply this frame's typing to `text`: backspace, plus characters `allowed` accepts."""
+    for event in events:
+        if event.type != pygame.KEYDOWN:
+            continue
+        if event.key == pygame.K_BACKSPACE:
+            text = text[:-1]
+            audio_manager.play_sfx('typing_click', force=True)
+        elif event.unicode and allowed(event.unicode) and len(text) < max_len:
+            text += event.unicode
+            audio_manager.play_sfx('typing_click', force=True)
+
+    return text
+
+
 def dfs_sqrt_distance(x1, y1, pos):
     dx = pos[0] - x1
     dy = pos[1] - y1
@@ -124,18 +145,15 @@ def end_blit():
     pygame.display.flip()
 
 
+
+
 # Profanity section
 import re
 import unicodedata
 
 REPLACEMENTS = [
-    "LOSER",
-    "REDDITOR",
-    "BOOT LICKER",
-    "CUCK",
-    "JOBLESS",
-    "REDDIT MOD",
-    "DISCORD MOD",
+    "LOSER", "REDDITOR", "BOOT LICKER", "CUCK", "JOBLESS",
+    "REDDIT MOD", "DISCORD MOD", "CHUD", "CRINGE", "GOY"
 ]
 
 _LEET = {
@@ -278,15 +296,19 @@ _WORDS = [
     "heil hitler"
 ]
 
+
 def _pattern(word: str) -> str:
     return "".join(f"(?:{_LEET.get(c, re.escape(c))}{_SEP})+" for c in word)
 
+
 _BANNED_RE = re.compile("|".join(_pattern(w) for w in _WORDS), re.IGNORECASE)
+
 
 def _normalize(text: str) -> str:
     text = unicodedata.normalize("NFKD", text)
     text = "".join(c for c in text if not unicodedata.combining(c))
     return re.sub(r"[\u200b-\u200f\u2060\ufeff]", "", text)
+
 
 def check_for_profanity(text: str) -> bool:
     return bool(_BANNED_RE.search(_normalize(text)))

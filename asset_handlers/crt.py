@@ -13,8 +13,8 @@ class CRTFilter:
     2. Glow: shrink the frame, stretch it back up (which blurs it), and add it on
        top. Bright lines bleed light; the dark background stays dark.
     3. Hum bar: a faint bright band that rolls slowly down the tube.
-    4. Static overlay: scanlines, a brownish vignette, and dirt on the glass
-       (dust, smudges, scratches). Precomputed, rebuilt only if the window size changes.
+    4. Static overlay: scanlines, a brownish vignette, and smudges on the glass.
+       Precomputed, rebuilt only if the window size changes.
     5. Grain: animated static, tiled from a few small precomputed noise tiles.
     6. Flicker: the odd frame where the whole tube sags.
 
@@ -31,9 +31,14 @@ class CRTFilter:
         self._overlay_size = None
         self._hum = None
         self._grain = None
+        self.tear_chance = theme.TEAR_CHANCE
 
     def toggle(self):
         self.enabled = not self.enabled
+
+    def set_damage(self, low_health):
+        """The scene reports ship state; the filter decides how much the picture tears."""
+        self.tear_chance = 0.2 if low_health else 0.05
 
     def apply(self, screen):
         if not self.enabled:
@@ -51,6 +56,7 @@ class CRTFilter:
         self._hum_bar(screen)
         screen.blit(self._overlay, (0, 0))
         self._static(screen)
+
         if theme.FLICKER_CHANCE > 0 and random.random() < theme.FLICKER_CHANCE:
             v = random.randint(200, 235)
             screen.fill((v, v, v), special_flags=pygame.BLEND_MULT)
@@ -58,9 +64,8 @@ class CRTFilter:
     # ------------------------------------------------------------------
     # Per-frame effects
     # ------------------------------------------------------------------
-    @staticmethod
-    def _tear(screen):
-        if theme.TEAR_CHANCE <= 0 or random.random() >= theme.TEAR_CHANCE:
+    def _tear(self, screen):
+        if self.tear_chance <= 0 or random.random() >= self.tear_chance:
             return
         w, h = screen.get_size()
         # A few adjacent strips slide by different amounts, like a sync hiccup
@@ -176,28 +181,6 @@ class CRTFilter:
                 blob = pygame.transform.smoothscale(blob, (rad * 2, int(rad * 2 * rng.uniform(0.5, 1.0))))
                 smudge.blit(blob, (cx - rad, cy - rad))
             glass.blit(pygame.transform.smoothscale(smudge, size), (0, 0))
-
-            # Dust specks
-            for _ in range(int(w * h / 2500 * dirt)):
-                x, y = rng.randrange(w), rng.randrange(h)
-                a = rng.randint(25, 80)
-                if rng.random() < 0.85:
-                    glass.set_at((x, y), (170, 160, 140, a))
-                else:
-                    pygame.draw.circle(glass, (150, 140, 120, a // 2), (x, y), rng.randint(1, 2))
-
-            # Hairline scratches in the glass
-            for _ in range(int(6 * dirt)):
-                x, y = rng.randrange(w), rng.randrange(h)
-                ang = rng.uniform(0, math.tau)
-                length = rng.randint(40, 260)
-                pts = [(x, y)]
-                for _ in range(length // 10):
-                    ang += rng.uniform(-0.08, 0.08)
-                    x += math.cos(ang) * 10
-                    y += math.sin(ang) * 10
-                    pts.append((x, y))
-                pygame.draw.aalines(glass, (200, 195, 170, int(28 * dirt)), False, pts)
 
             overlay.blit(glass, (0, 0))
 

@@ -5,17 +5,17 @@ import random
 import pygame
 from utility.constants import *
 from utility import theme
+from asset_handlers import fonts
 from asset_handlers.buttons import ButtonLayer, draw_button, draw_frame
 from asset_handlers.grime import build_panel
 from asset_handlers.readouts import TopPanelReadouts
+from utility.common import end_blit, blink_cursor
 
 
 class DrawUI:
     # region constant
     PANEL_WIDTH = 600
     THIN_HEIGHT = 200
-    NOTCH_LENGTH = 12
-    NOTCH_WIDTH = 3
 
     # Radar Configuration
     RADAR_PADDING = 20
@@ -33,13 +33,11 @@ class DrawUI:
 
     # Missile Vector Display
     MISSILE_VECTOR_LENGTH = 75
-    MISSILE_LOCK_BOX_SIZE = 12
 
     # Colour palette: see utility/theme.py for what each colour means
     COLOR_PANEL_BG = theme.BG
     COLOR_BORDER_PRIMARY = theme.AMBER
     COLOR_BORDER_INSET = theme.AMBER_DIM
-    COLOR_CORNER_ACCENT = theme.AMBER_BRIGHT
     COLOR_DATA = theme.GREEN
     COLOR_HUD_AMBER = theme.AMBER
     COLOR_GRID = theme.AMBER_FAINT
@@ -97,13 +95,341 @@ class DrawUI:
         self._telemetry_rect = None
 
         # Initialize all fonts at once
-        self.font_large = theme.legacy_font(self.FONT_SIZE_LARGE)
-        self.font_body = theme.legacy_font(self.FONT_SIZE_BODY)
-        self.font_radar_label = theme.legacy_font(self.FONT_SIZE_RADAR)
-        self.font_scan_header = theme.legacy_font(self.FONT_SIZE_SCAN_HEADER)
-        self.font_scan_body = theme.legacy_font(self.FONT_SIZE_SCAN_BODY)
-        self.font_grid = theme.legacy_font(self.FONT_SIZE_GRID)
-        self.font_tiny = theme.legacy_font(self.FONT_SIZE_TINY)
+        self.font_large = fonts.legacy_font(self.FONT_SIZE_LARGE)
+        self.font_body = fonts.legacy_font(self.FONT_SIZE_BODY)
+        self.font_radar_label = fonts.legacy_font(self.FONT_SIZE_RADAR)
+        self.font_scan_header = fonts.legacy_font(self.FONT_SIZE_SCAN_HEADER)
+        self.font_scan_body = fonts.legacy_font(self.FONT_SIZE_SCAN_BODY)
+        self.font_grid = fonts.legacy_font(self.FONT_SIZE_GRID)
+        self.font_tiny = fonts.legacy_font(self.FONT_SIZE_TINY)
+
+        # Console screens (menus, lobby)
+        self.menu_title_font = fonts.font(56)
+        self.menu_font = fonts.font(28)
+        self.menu_small_font = fonts.font(18)
+        self.menu_key_font = fonts.font(14)
+
+    #Menu stuff
+
+    def draw_text_screen(self, title, lines, footer="", header="", buttons=()):
+        """A framed console, same style as the in-game operator console: header
+        strip, title, readout lines, a column of buttons
+        [(label, key hint, action) or (label, key hint, action, enabled)],
+        and a fault line (`footer`) or the input prompt along the bottom."""
+        self.screen.fill(theme.BLACK)
+        self.buttons.begin_frame()
+        w, h = self.screen.get_size()
+
+        small = self.menu_small_font
+        title_surf = self.menu_title_font.render(title, True, theme.AMBER_BRIGHT)
+        line_surfs = [self.menu_font.render(line, True, theme.GREEN) for line in lines]
+        footer_surf = small.render(footer, True, theme.RED) if footer else None
+
+        btn_w, btn_h, btn_gap = 360, 50, 12
+        body_w = max([title_surf.get_width(), btn_w] + [s.get_width() for s in line_surfs])
+        panel_w = min(w - 32, max(520, body_w + 80))
+        panel_h = (52 + title_surf.get_height() + 36
+                   + sum(s.get_height() + 12 for s in line_surfs) + (24 if lines and buttons else 0)
+                   + len(buttons) * (btn_h + btn_gap) + 56)
+        panel = pygame.Rect(0, 0, panel_w, panel_h)
+        panel.center = (w // 2, h // 2)
+        draw_frame(self.screen, panel, width=2, tick=14)
+
+        # Everything hangs off one left margin: no per-line centring
+        x0 = panel.left + 24
+        header_surf = small.render(header.upper(), True, theme.AMBER_DIM)
+        self.screen.blit(header_surf, header_surf.get_rect(topleft=(x0, panel.top + 16)))
+
+        y = panel.top + 52
+        self.screen.blit(title_surf, title_surf.get_rect(topleft=(x0, y)))
+        y += title_surf.get_height() + 36
+        for surf in line_surfs:
+            self.screen.blit(surf, surf.get_rect(topleft=(x0, y)))
+            y += surf.get_height() + 12
+        if lines and buttons:
+            y += 24
+        for label, key, action, *rest in buttons:
+            enabled = rest[0] if rest else True
+            rect = pygame.Rect(x0, y, btn_w, btn_h)
+            draw_button(self.screen, rect, label, key=key, enabled=enabled, align="left",
+                        font=self.menu_font, key_font=self.menu_key_font)
+            self.buttons.register(rect, action, enabled=enabled)
+            y += btn_h + btn_gap
+
+        # Bottom line: the last fault if there is one, else the input prompt
+        if footer_surf is None:
+            footer_surf = small.render(f"STATUS: AWAITING INPUT {blink_cursor()}", True, theme.AMBER_DIM)
+        self.screen.blit(footer_surf, footer_surf.get_rect(bottomleft=(x0, panel.bottom - 16)))
+
+        self.buttons.end_frame()
+        end_blit()
+
+    def draw_debrief_screen(self, status, detail, action, label):
+        """End-of-mission readout: plain left-aligned fields on black, no frame or
+        ornament. The one action is an underlined text line that is its own click area."""
+        from datetime import datetime, timezone
+
+        self.screen.fill(theme.BLACK)
+        self.buttons.begin_frame()
+        w, h = self.screen.get_size()
+        x0 = 40
+        head = self.menu_small_font
+        body = self.menu_font
+
+        top = 32
+        self.screen.blit(head.render("ERGOT SYSTEMS // MISSION LOG", True, theme.AMBER_DIM), (x0, top))
+        utc = head.render(f"UTC {datetime.now(timezone.utc).strftime('%H:%M:%S')}", True, theme.AMBER_DIM)
+        self.screen.blit(utc, utc.get_rect(topright=(w - x0, top)))
+        rule_y = top + head.get_height() + 10
+        pygame.draw.line(self.screen, theme.AMBER_FAINT, (x0, rule_y), (w - x0, rule_y))
+
+        line_h = body.get_height() + 10
+        label_w = body.size("STATUS  ")[0]
+        y = rule_y + 24
+        for name, value, color in (("STATUS", status, theme.AMBER_BRIGHT), ("DETAIL", detail, theme.GREEN)):
+            self.screen.blit(body.render(name, True, theme.AMBER_DIM), (x0, y))
+            self.screen.blit(body.render(value, True, color), (x0 + label_w, y))
+            y += line_h
+
+        # The one action, bottom-left, as plain text with an underline
+        text = body.render(label, True, theme.AMBER)
+        key = head.render("  [ENTER]", True, theme.AMBER_DIM)
+        y = h - 48
+        self.screen.blit(text, (x0, y))
+        self.screen.blit(key, key.get_rect(bottomleft=(x0 + text.get_width(), y + text.get_height())))
+        underline_y = y + text.get_height() + 2
+        pygame.draw.line(self.screen, theme.AMBER_DIM, (x0, underline_y), (x0 + text.get_width() + key.get_width(), underline_y))
+        click = pygame.Rect(x0 - 8, y - 6, text.get_width() + key.get_width() + 16, text.get_height() + 12)
+        self.buttons.register(click, action)
+
+        self.buttons.end_frame()
+        end_blit()
+
+    def draw_splash_screen(self, enabled: bool, timer: float):
+        """Boot screen in the operator-console style: a small system identification
+        strip, labelled sections with left-aligned fields, a scrolling boot log with
+        status words, and a load block that states progress as numbers and text."""
+        if not enabled:
+            return
+
+        import re
+        from datetime import datetime, timezone
+
+        w, h = self.screen.get_size()
+        flicker = 0.96 + math.sin(timer * 35.0) * 0.02
+
+        def lit(col):
+            return tuple(int(v * flicker) for v in col)
+
+        FRAME = theme.AMBER
+        TITLE = lit(theme.AMBER_BRIGHT)
+        HEAD = theme.AMBER_DIM
+        RULE = theme.AMBER_FAINT
+        LOG = lit(theme.GREEN)
+        LOG_HOT = lit(theme.GREEN_BRIGHT)
+        FAULT = lit(theme.RED_BRIGHT)
+
+        ident_font = fonts.font(17)
+        field_font = fonts.font(19)
+        boot_font = fonts.font(19)
+        tab_font = fonts.font(15)
+        status_font = fonts.font(17)
+
+        self.screen.fill(theme.BLACK)
+
+        pw = min(w - 48, 900)
+        ph = min(h - 48, 780)
+        panel = pygame.Rect(0, 0, pw, ph)
+        panel.center = (w // 2, h // 2)
+        self._frame(panel, FRAME, fill=theme.BG, tick=14, width=2)
+
+        x0, x1 = panel.left + 24, panel.right - 24
+        utc = datetime.now(timezone.utc).strftime("%H:%M:%S")
+
+        def section(rect, title):
+            """Framed section with its name set into the top border."""
+            self._frame(rect, HEAD, fill=None, tick=8)
+            tab = tab_font.render(f" {title} ", True, FRAME)
+            r = tab.get_rect(midleft=(rect.left + 14, rect.top))
+            pygame.draw.rect(self.screen, theme.BG, r)
+            self.screen.blit(tab, r)
+
+        # ------------------------------------------------------------------
+        # System identification strip (small: operational data comes first)
+        # ------------------------------------------------------------------
+        y = panel.top + 18
+        ident = ident_font.render("ERGOT SYSTEMS // INTERSTELLAR COMPUTING DIVISION", True, HEAD)
+        self.screen.blit(ident, (x0, y))
+        rev = ident_font.render("REV 4.7.2  BUILD 2026.11.21", True, HEAD)
+        self.screen.blit(rev, rev.get_rect(topright=(x1, y)))
+        y += ident.get_height() + 8
+        pygame.draw.line(self.screen, RULE, (x0, y), (x1, y))
+        y += 16
+
+        # ------------------------------------------------------------------
+        # System identification: fixed two-column field grid
+        # ------------------------------------------------------------------
+        line_h = field_font.get_height() + 6
+        id_box = pygame.Rect(x0, y, x1 - x0, 3 * line_h + 40)
+        section(id_box, "SYSTEM IDENTIFICATION")
+        fields = [
+            [("UNIT ID", "ITD-218562B"), ("DEBUG REF", "218562B")],
+            [("FIRMWARE", "4.7.2"), ("BUILD", "2026.11.21")],
+            [("MISSION", "SEEK AND DESTROY"), ("UTC", utc)],
+        ]
+        col_w = (x1 - x0) // 2
+        for r, row in enumerate(fields):
+            for c, (label, value) in enumerate(row):
+                fx = x0 + 22 + c * col_w
+                fy = id_box.top + 22 + r * line_h
+                self.screen.blit(field_font.render(label, True, HEAD), (fx, fy))
+                self.screen.blit(field_font.render(value, True, LOG), (fx + 150, fy))
+        y = id_box.bottom + 14
+
+        # ------------------------------------------------------------------
+        # Load block, pinned to the bottom of the frame
+        # ------------------------------------------------------------------
+        load_h = 104
+        load_box = pygame.Rect(x0, panel.bottom - 18 - load_h, x1 - x0, load_h)
+
+        # ------------------------------------------------------------------
+        # Boot log: label, dotted leader, status column. Scrolls like a terminal.
+        # ------------------------------------------------------------------
+        lines = [
+            "INITIALIZING MEMORY.........................OK",
+            "CHECKING ECC MEMORY BANKS...................OK",
+            "VERIFYING FIRMWARE CRC......................OK",
+            "STARTING SENSOR SUBSYSTEM...................OK",
+            "INITIALIZING INERTIAL GUIDANCE..............OK",
+            "LINKING DEEP SPACE TELEMETRY................OK",
+            "ESTABLISHING QUANTUM RELAY..................FAILED",
+            "VERIFYING NAVIGATION DATABASE...............OK",
+            "LOADING STELLAR CATALOG.....................OK",
+            "UPDATING EPHEMERIS CACHE....................OK",
+            "CHECKING REACTION CONTROL THRUSTERS.........OK",
+            "INITIALIZING REACTOR CONTROL................OK",
+            "REACTOR OUTPUT..............................98.7%",
+            "SCANNING EXTERNAL HARDPOINTS................OK",
+            "BOOTING FLIGHT COMPUTER.....................OK",
+            "LOADING TARGETING MATRICES..................OK",
+            "INITIALIZING THREAT ANALYSIS................OK",
+            "ARMOR STATUS................................NOMINAL",
+            "LONG RANGE ARRAY............................ONLINE",
+            "PASSIVE RADAR...............................ONLINE",
+            "COMMUNICATIONS ARRAY........................ONLINE",
+            "DISTRESS RECEIVER...........................STANDBY",
+            "ENCRYPTION KEYS.............................VALID",
+            "AUTHENTICATING COMMAND AUTHORITY............OK",
+            "MISSION PROFILE.............................SEEK AND DESTROY",
+            f"UTC TIME....................................{utc}",
+            "DEBUG MONITOR: REF 218562B",
+            "SYSTEM READY.",
+        ]
+
+        boot_start = 1.1
+        line_delay = 0.48
+
+        log_box = pygame.Rect(x0, y, x1 - x0, load_box.top - 14 - y)
+        section(log_box, f"BOOT LOG  //  {len(lines)} ENTRIES")
+
+        boot_lh = boot_font.get_height() + 4
+        log_top = log_box.top + 28
+        log_left = log_box.left + 22
+        log_right = log_box.right - 22
+        status_x = log_left + int((log_right - log_left) * 0.64)
+        visible = max(1, (log_box.bottom - 12 - log_top) // boot_lh)
+
+        started = [i for i in range(len(lines)) if timer > boot_start + i * line_delay]
+        if started:
+            last = started[-1]
+            first = max(0, last - visible + 1)
+            for row, i in enumerate(range(first, last + 1)):
+                text = lines[i]
+                chars = min(len(text), int((timer - (boot_start + i * line_delay)) * 42))
+                y0 = log_top + row * boot_lh
+                m = re.match(r"^(.*?)\.{3,}\s*(.*)$", text)
+
+                if m is None:
+                    color = TITLE if text.startswith("SYSTEM READY") else LOG
+                    surf = boot_font.render(text[:chars], True, color)
+                    self.screen.blit(surf, (log_left, y0))
+                    cursor_x = log_left + surf.get_width()
+                else:
+                    label, status = m.group(1), m.group(2)
+                    status_start = m.start(2)
+
+                    lab = boot_font.render(label[:chars], True, LOG)
+                    self.screen.blit(lab, (log_left, y0))
+                    cursor_x = log_left + lab.get_width()
+
+                    if chars >= len(label):
+                        label_end = log_left + boot_font.size(label)[0] + 10
+                        for gx in range(label_end, status_x - 10, 9):
+                            pygame.draw.rect(self.screen, theme.AMBER_DIM, (gx, y0 + boot_lh - 9, 2, 2))
+                        cursor_x = status_x
+
+                    if chars > status_start:
+                        word = status.upper()
+                        if "FAIL" in word:
+                            color = FAULT
+                        elif "STANDBY" in word or "SEEK" in word:
+                            color = TITLE
+                        else:
+                            color = LOG_HOT
+                        st = boot_font.render(status[:chars - status_start], True, color)
+                        self.screen.blit(st, (status_x, y0))
+                        cursor_x = status_x + st.get_width()
+
+                if i == last:
+                    cur = boot_font.render(blink_cursor(), True, LOG_HOT)
+                    self.screen.blit(cur, (cursor_x + 2, y0))
+
+        # ------------------------------------------------------------------
+        # Load block: bar, numeric readout, explicit status text
+        # ------------------------------------------------------------------
+        section(load_box, "LOAD SEQUENCE")
+
+        total = len(lines) * line_delay
+        frac = min(1.0, max(0.0, (timer - boot_start) / total))
+        faults = sum(1 for i in started if "FAILED" in lines[i])
+        entries_done = len(started)
+
+        bar = pygame.Rect(load_box.left + 22, load_box.top + 24, load_box.width - 44, 10)
+        pygame.draw.rect(self.screen, theme.GREEN_FAINT, bar)
+        pygame.draw.rect(self.screen, LOG, (bar.left, bar.top, int(bar.width * frac), bar.height))
+        pygame.draw.rect(self.screen, HEAD, bar, 1)
+
+        def blit_seq(x, y, parts):
+            for text, color in parts:
+                surf = status_font.render(text, True, color)
+                self.screen.blit(surf, (x, y))
+                x += surf.get_width()
+
+        row_a = bar.bottom + 12
+        blit_seq(load_box.left + 22, row_a, [
+            (f"LOAD {int(frac * 100):3d}%", LOG),
+            (f"   ENTRIES {entries_done:02d}/{len(lines):02d}", HEAD),
+            (f"   FAULTS {faults:02d}", FAULT if faults else HEAD),
+        ])
+
+        if timer < boot_start:
+            status_text, status_color = "STATUS: INITIALIZING", HEAD
+        elif frac < 1.0:
+            status_text, status_color = "STATUS: BOOTING", LOG
+        elif faults:
+            status_text, status_color = f"STATUS: READY, {faults} FAULT{'S' if faults != 1 else ''}", FAULT
+        else:
+            status_text, status_color = "STATUS: READY", TITLE
+
+        row_b = row_a + status_font.get_height() + 8
+        blit_seq(load_box.left + 22, row_b, [(status_text, status_color)])
+
+        if timer > 4.2 and int(timer * 2.5) % 2 == 0:
+            msg = status_font.render("PRESS ENTER TO CONTINUE", True, TITLE)
+            self.screen.blit(msg, msg.get_rect(topright=(load_box.right - 22, row_b)))
+        else:
+            msg = status_font.render("INPUT: LOCKED", True, HEAD)
+            self.screen.blit(msg, msg.get_rect(topright=(load_box.right - 22, row_b)))
 
     def _get_world_bounds(self):
         """Calculate world viewport bounds from screen dimensions.
@@ -130,9 +456,9 @@ class DrawUI:
             pygame.Rect(w - self.PANEL_WIDTH, self.THIN_HEIGHT, self.PANEL_WIDTH, h - 2 * self.THIN_HEIGHT),
         )
 
-    def _frame(self, rect, color=theme.AMBER, fill=theme.BG, inset=True, tick=10, width=1):
+    def _frame(self, rect, color=theme.AMBER, fill=theme.BG, tick=10, width=1):
         """The one instrument-box style (see draw_frame in asset_handlers/buttons.py)."""
-        draw_frame(self.screen, rect, color, fill, inset, tick, width)
+        draw_frame(self.screen, rect, color, fill, tick=tick, width=width)
 
     def _button(self, rect, label, action, key=None, lit=None, enabled=True, hold=False, **style):
         """Draw a console button and make it clickable (see asset_handlers/buttons.py)."""
@@ -156,8 +482,8 @@ class DrawUI:
     def _bank(self, rect, title, specs, cols):
         """A framed bank of buttons in a grid. specs: (label, action, kwargs) per button."""
         rect = pygame.Rect(rect)
-        self._frame(rect, theme.AMBER_DIM, inset=False, tick=8)
-        font = theme.font(15)
+        self._frame(rect, theme.AMBER_DIM, tick=8)
+        font = fonts.font(15)
         tab_surf = font.render_steady(f" {title} ", True, theme.AMBER)
         tab = tab_surf.get_rect(midleft=(rect.left + 14, rect.top))
         pygame.draw.rect(self.screen, theme.BG, tab)
@@ -210,13 +536,6 @@ class DrawUI:
         self._bank(left, "HELM // WEAPONS", helm, cols)
         self._bank(right, "SENSORS // DISPLAYS", displays, cols)
 
-    def draw_end_screen_button(self):
-        """RETURN TO MENU under the end-of-game message."""
-        w, h = self.screen.get_size()
-        rect = pygame.Rect(0, 0, 320, 48)
-        rect.midbottom = (w // 2, h - 90)
-        self._button(rect, "RETURN TO MENU", 'return_to_menu', key="ENTER", align="center", font=theme.font(20))
-
     def _get_radar_bounds(self):
         """Calculate radar panel bounds and return geometry.
 
@@ -240,7 +559,7 @@ class DrawUI:
         Column widths come from the text they hold, so nothing overlaps whatever
         the numbers are; the box grows to fit and stays centred under the viewport.
         """
-        font = theme.font(19)
+        font = fonts.font(19)
         line_h = font.get_height() + 3
 
         LIVE = theme.GREEN          # live readouts / system on
@@ -257,7 +576,7 @@ class DrawUI:
             (f"POS  X {int(ship.pos_x):+06d}  Y {int(ship.pos_y):+06d}", LIVE),
             (f"GRID {self.grid_ref(ship.pos_x, ship.pos_y)}", LIVE),
             (f"VEL  X {ship.dir_x:+05.1f}  Y {ship.dir_y:+05.1f}", LIVE),
-            (f"SPD  {ship.speed:03.0f} u", LIVE),
+            (f"SPD  {ship.speed:03.0f} / {SHIP_MAX_SPEED:03d} U", LIVE),
             (f"HDG  {int(ship.heading) % 360:03d} DEG", LIVE),
         ]
 
@@ -273,18 +592,18 @@ class DrawUI:
 
         # --- Column 3: tactical ---
         if ship.missile_cooling_down:
-            msl = (f"MISSILES  {ship.total_missiles:02d}  RCHG {ship.missile_cooldown_timer:.1f}s", CAUTION)
+            msl = (f"MSL  {ship.total_missiles:02d}/{TOTAL_MISSILES:02d}  RCHG {ship.missile_cooldown_timer:.1f}S", CAUTION)
         else:
-            msl = (f"MISSILES  {ship.total_missiles:02d}  READY", LIVE)
-        health = int(getattr(ship, "health", 5))
-        hull_col = THREAT if health <= 20 else (CAUTION if health <= 40 else LIVE)
+            msl = (f"MSL  {ship.total_missiles:02d}/{TOTAL_MISSILES:02d}  READY", LIVE)
+        health = int(getattr(ship, "health", 100))
+        hull_col = THREAT if health < 20 else (CAUTION if health < 40 else LIVE)
         if ship.painted or cockpit.enemy_has_missile_solution:
-            threat = ("! LOCK DETECTED !" if cockpit.enemy_has_missile_solution else "! RADAR PAINTED !", THREAT)
+            threat = ("THREAT  LOCK ON YOU" if cockpit.enemy_has_missile_solution else "THREAT  RADAR PAINTED", THREAT)
         elif cockpit.has_missile_solution:
-            threat = ("> TGT LOCK ACQUIRED <", CAUTION)
+            threat = ("TGT   LOCK ACQUIRED", CAUTION)
         else:
-            threat = ("NO THREAT LOCKS", LABEL)
-        tactical = [("TACTICAL", LABEL), msl, (f"HULL      {health:03d}", hull_col), threat]
+            threat = ("THREAT  NONE", LABEL)
+        tactical = [("TACTICAL", LABEL), threat, msl, (f"HULL  {health:03d}/100", hull_col)]
 
         columns = [nav, subsystems, tactical]
         rendered = [[font.render(t, True, c) for t, c in col] for col in columns]
@@ -329,7 +648,7 @@ class DrawUI:
         screen_width, screen_height = self.screen.get_size()
         panels = self._get_panel_rects()
 
-        # 1-3. Grimy, worn panel chassis (background, frame and inset line),
+        # 1-3. Grimy, worn panel chassis (background and frame),
         # baked once per screen size in asset_handlers/grime.py
         key = (screen_width, screen_height)
         if getattr(self, "_panel_cache_key", None) != key:
@@ -345,8 +664,7 @@ class DrawUI:
                 (),
             ]
             self._panel_cache = [
-                build_panel(p.size, 1983 + i, labels[i], self.COLOR_BORDER_PRIMARY, self.COLOR_BORDER_INSET,
-                            ghosts[i])
+                build_panel(p.size, 1983 + i, labels[i], self.COLOR_BORDER_PRIMARY, ghosts[i])
                 for i, p in enumerate(panels)
             ]
             self._panel_cache_key = key
@@ -354,130 +672,11 @@ class DrawUI:
             self.screen.blit(surf, panel)
 
         # Background machine chatter in the top panel, either side of the callsign plate
-        self.readouts.draw(self.screen, panels[0], exclude=self._callsign_rect(),
-                           exclude_right=self._radio_rect())
-
-        # 4. Viewport Corner Notch Ticks
-        v_left = self.PANEL_WIDTH
-        v_right = screen_width - self.PANEL_WIDTH
-        v_top = self.THIN_HEIGHT
-        v_bottom = screen_height - self.THIN_HEIGHT
-
-        # Top-Left Notch
-        pygame.draw.line(
-            self.screen, self.COLOR_CORNER_ACCENT, (v_left, v_top),
-            (v_left + self.NOTCH_LENGTH, v_top), self.NOTCH_WIDTH
-        )
-        pygame.draw.line(
-            self.screen, self.COLOR_CORNER_ACCENT, (v_left, v_top),
-            (v_left, v_top + self.NOTCH_LENGTH), self.NOTCH_WIDTH
-        )
-
-        # Top-Right Notch
-        pygame.draw.line(
-            self.screen, self.COLOR_CORNER_ACCENT, (v_right, v_top),
-            (v_right - self.NOTCH_LENGTH, v_top), self.NOTCH_WIDTH
-        )
-        pygame.draw.line(
-            self.screen, self.COLOR_CORNER_ACCENT, (v_right, v_top),
-            (v_right, v_top + self.NOTCH_LENGTH), self.NOTCH_WIDTH
-        )
-
-        # Bottom-Left Notch
-        pygame.draw.line(
-            self.screen, self.COLOR_CORNER_ACCENT, (v_left, v_bottom),
-            (v_left + self.NOTCH_LENGTH, v_bottom), self.NOTCH_WIDTH
-        )
-        pygame.draw.line(
-            self.screen, self.COLOR_CORNER_ACCENT, (v_left, v_bottom),
-            (v_left, v_bottom - self.NOTCH_LENGTH), self.NOTCH_WIDTH
-        )
-
-        # Bottom-Right Notch
-        pygame.draw.line(
-            self.screen, self.COLOR_CORNER_ACCENT, (v_right, v_bottom),
-            (v_right - self.NOTCH_LENGTH, v_bottom), self.NOTCH_WIDTH
-        )
-        pygame.draw.line(
-            self.screen, self.COLOR_CORNER_ACCENT, (v_right, v_bottom),
-            (v_right, v_bottom - self.NOTCH_LENGTH), self.NOTCH_WIDTH
-        )
+        self.readouts.draw(self.screen, panels[0], exclude=self._callsign_rect())
 
     def _callsign_rect(self):
         """The pilot ID box: top-left of the top panel."""
         return pygame.Rect(24, 22, 380, self.THIN_HEIGHT - 44)
-
-    def _radio_rect(self):
-        """The radio: top-right of the top panel, same height as the pilot ID box."""
-        w = self.screen.get_width()
-        return pygame.Rect(w - 24 - 440, 22, 440, self.THIN_HEIGHT - 44)
-
-    def draw_radio_panel(self, radio, level, saturated):
-        """Dial position, signal needle and gain for the radio (see instruments/radio_receiver.py)."""
-        rect = self._radio_rect()
-        LABEL = theme.AMBER_DIM
-        on = radio.on
-
-        self._frame(rect)
-        font = theme.font(19)
-        title = font.render(" RADIO ", True, theme.AMBER)
-        tab = title.get_rect(midleft=(rect.left + 18, rect.top))
-        pygame.draw.rect(self.screen, theme.BG, tab)
-        self.screen.blit(title, tab)
-
-        pad = 22
-        x0, x1 = rect.left + pad, rect.right - pad
-        small = theme.font(17)
-
-        # Channel readout and dial ticks
-        channel = radio.channel.name if on else "OFF"
-        color = theme.AMBER_BRIGHT if on and not getattr(radio.channel, 'is_static', False) else theme.AMBER
-        big = theme.font(26)
-        label = big.render(f"CH {radio.index + 1}  {channel}", True, color if on else LABEL)
-        row_y = rect.top + 16
-        self.screen.blit(label, (x0, row_y))
-        # Dial ticks, to the right of the channel name on the same row
-        n = len(radio.dial)
-        dial_left = x0 + 270
-        mid_y = row_y + label.get_height() // 2
-        for i in range(n):
-            tx = dial_left + int((x1 - dial_left) * (i + 0.5) / n)
-            sel = on and i == radio.index
-            half = 11 if sel else 6
-            pygame.draw.line(self.screen, theme.AMBER_BRIGHT if sel else theme.AMBER_FAINT,
-                             (tx, mid_y - half), (tx, mid_y + half), 3 if sel else 1)
-
-        # Signal strength bar and gain bar
-        bar_h = 12
-        y = row_y + label.get_height() + 14
-        label_w = small.size("SIG ")[0] + 8
-        for name, fraction, bar_color in (
-                ("SIG", level if on else 0.0, theme.AMBER_BRIGHT if saturated else theme.GREEN),
-                ("GAIN", self._gain_fraction(radio), theme.GREEN)):
-            self.screen.blit(small.render(name, True, LABEL), (x0, y - 3))
-            bar = pygame.Rect(x0 + label_w + 18, y, x1 - x0 - label_w - 18, bar_h)
-            pygame.draw.rect(self.screen, theme.GREEN_FAINT, bar)
-            pygame.draw.rect(self.screen, bar_color, (bar.left, bar.top, int(bar.width * min(1.0, fraction)), bar_h))
-            pygame.draw.rect(self.screen, LABEL, bar, 1)
-            y += bar_h + 10
-
-    @staticmethod
-    def _gain_fraction(radio):
-        """Gain on a log scale, 0 at its minimum and 1 at its maximum."""
-        return math.log(radio.gain / RADIO_GAIN_MIN) / math.log(RADIO_GAIN_MAX / RADIO_GAIN_MIN)
-
-    def draw_radio_controls(self, radio):
-        """Radio buttons, under the readout box's bottom edge (drawn last so they stay clickable)."""
-        rect = self._radio_rect()
-        row = pygame.Rect(rect.left + 22, rect.bottom - 44, rect.width - 44, 30)
-        font = theme.font(15)
-        self._button_row(row, [
-            (1.2, "PWR", 'toggle_radio', dict(key="G", lit=radio.on, font=font)),
-            (1, "< CH", 'radio_tune_down', dict(key="1", font=font, align="center", enabled=radio.on)),
-            (1, "CH >", 'radio_tune_up', dict(key="2", font=font, align="center", enabled=radio.on)),
-            (1, "GAIN-", 'radio_gain_down', dict(key="3", font=font, align="center", enabled=radio.on)),
-            (1, "GAIN+", 'radio_gain_up', dict(key="4", font=font, align="center", enabled=radio.on)),
-        ], gap=6)
 
     def draw_callsign_plate(self, callsign, player_id, pilots_on_net, local):
         """Pilot ID readout: callsign, IFF code and link status, in the same
@@ -487,7 +686,7 @@ class DrawUI:
         LIVE = theme.GREEN
 
         self._frame(rect)
-        font = theme.font(19)
+        font = fonts.font(19)
         title = font.render(" PILOT ID ", True, theme.AMBER)
         tab = title.get_rect(midleft=(rect.left + 18, rect.top))
         pygame.draw.rect(self.screen, theme.BG, tab)
@@ -498,10 +697,10 @@ class DrawUI:
 
         # Callsign: the one big thing in the box
         name = callsign or "UNREGISTERED"
-        big = theme.font(34)
+        big = fonts.font(34)
         name_surf = big.render(name, True, theme.AMBER_BRIGHT)
         if name_surf.get_width() > rect.width - 2 * pad:
-            name_surf = theme.font(26).render(name, True, theme.AMBER_BRIGHT)
+            name_surf = fonts.font(26).render(name, True, theme.AMBER_BRIGHT)
         name_y = rect.top + 20
         self.screen.blit(name_surf, (x, name_y))
 
@@ -519,7 +718,7 @@ class DrawUI:
             ("IFF", f"{iff >> 12:03X}-{iff & 0xFFF:03X}", LIVE),
             ("NET", net_value, net_color),
         ]
-        small = theme.font(17)
+        small = fonts.font(17)
         line_h = small.get_height() + 4
         value_x = x + small.size("IFF ")[0] + 14
         y = rule_y + 10
@@ -564,7 +763,7 @@ class DrawUI:
 
         # Font
         if not hasattr(self, 'font_crt'):
-            self.font_crt = theme.legacy_font(20)
+            self.font_crt = fonts.legacy_font(20)
 
         # Simple boxes with text in each panel
         panels = [
@@ -673,41 +872,12 @@ class DrawUI:
         blink_frequency = 8  # Faster than missile lock warning
 
         if (self.lock_blink_counter // blink_frequency) % 2 == 0:
-            # Draw red corner brackets in all 4 corners of viewport
-            bracket_size = 20
-            bracket_width = 2
-            bracket_color = theme.RED_BRIGHT
-
-            # Top-Left
-            pygame.draw.line(self.screen, bracket_color,
-                             (world_left, world_top), (world_left + bracket_size, world_top), bracket_width)
-            pygame.draw.line(self.screen, bracket_color,
-                             (world_left, world_top), (world_left, world_top + bracket_size), bracket_width)
-
-            # Top-Right
-            pygame.draw.line(self.screen, bracket_color,
-                             (world_right, world_top), (world_right - bracket_size, world_top), bracket_width)
-            pygame.draw.line(self.screen, bracket_color,
-                             (world_right, world_top), (world_right, world_top + bracket_size), bracket_width)
-
-            # Bottom-Left
-            pygame.draw.line(self.screen, bracket_color,
-                             (world_left, world_bottom), (world_left + bracket_size, world_bottom), bracket_width)
-            pygame.draw.line(self.screen, bracket_color,
-                             (world_left, world_bottom), (world_left, world_bottom - bracket_size), bracket_width)
-
-            # Bottom-Right
-            pygame.draw.line(self.screen, bracket_color,
-                             (world_right, world_bottom), (world_right - bracket_size, world_bottom), bracket_width)
-            pygame.draw.line(self.screen, bracket_color,
-                             (world_right, world_bottom), (world_right, world_bottom - bracket_size), bracket_width)
-
             # Warning text in the bottom-right corner, clear of the gun-solution banner up top
             warning_text = self.font_body.render("LASER LOCK DETECTED", True, theme.RED_BRIGHT)
             self.screen.blit(warning_text, (world_right - warning_text.get_width() - 20,
                                             world_bottom - warning_text.get_height() - 20))
 
-    def draw_radar(self, player_ship, signatures, is_scanning=False):
+    def draw_radar(self, player_ship, signatures, is_scanning=False, sweep_angle=None):
         radar_x, radar_y, radar_size = self._get_radar_bounds()
         radar_rect = pygame.Rect(radar_x, radar_y, radar_size, radar_size)
         center_x = radar_x + radar_size // 2
@@ -723,7 +893,7 @@ class DrawUI:
         for y in range(radar_y, radar_y + radar_size, 4):
             pygame.draw.line(self.screen, theme.GREEN_FAINT, (radar_x, y), (radar_x + radar_size, y))
 
-        self._frame(radar_rect, self.COLOR_HUD_AMBER, fill=None, inset=False, tick=15)
+        self._frame(radar_rect, self.COLOR_HUD_AMBER, fill=None, tick=15)
 
         # --- Tactical Grid ---
         # Hardware clip prevents edge blips or grid lines from ever drawing outside the radar box
@@ -745,6 +915,11 @@ class DrawUI:
         # Player position (Glowing cluster)
         pygame.draw.circle(self.screen, theme.WHITE, (center_x, center_y), 3)
         pygame.draw.rect(self.screen, theme.WHITE, (center_x - 1, center_y - 1, 3, 3))  # Hot core
+
+        # --- Sweep arm: only while a scan is running (R), pointing at the ray being cast ---
+        if sweep_angle is not None:
+            arm_end = (center_x + math.cos(sweep_angle) * max_radius, center_y + math.sin(sweep_angle) * max_radius)
+            pygame.draw.line(self.screen, theme.GREEN_BRIGHT, (center_x, center_y), arm_end, 1)
 
         # --- Plot Signatures ---
         radar_scale = max_radius / self.RADAR_SCALE
@@ -877,7 +1052,7 @@ class DrawUI:
         box_h = self.screen.get_height() - self.THIN_HEIGHT - 12 - box_y
 
         border_color = self.COLOR_HUD_AMBER if enabled else theme.AMBER_DIM
-        self._frame((box_x, box_y, box_w, box_h), border_color, inset=False, tick=8)
+        self._frame((box_x, box_y, box_w, box_h), border_color, tick=8)
 
         # Title tab sitting on the top border
         header = self.font_tiny.render(" LASER TARGET ANALYSIS ", True, border_color)
@@ -999,57 +1174,6 @@ class DrawUI:
                     self.screen, self.COLOR_MISSILE_VECTOR,
                     (end_x - perp_x, end_y - perp_y),
                     (end_x + perp_x, end_y + perp_y), 2
-                )
-
-                # Target Lock Bracket Box at Edge Anchor
-                hx, hy = edge_x, edge_y
-
-                # Top-Left corner
-                pygame.draw.line(
-                    self.screen, self.COLOR_MISSILE_LOCK,
-                    (hx - self.MISSILE_LOCK_BOX_SIZE, hy - self.MISSILE_LOCK_BOX_SIZE),
-                    (hx - self.MISSILE_LOCK_BOX_SIZE + 5, hy - self.MISSILE_LOCK_BOX_SIZE), 2
-                )
-                pygame.draw.line(
-                    self.screen, self.COLOR_MISSILE_LOCK,
-                    (hx - self.MISSILE_LOCK_BOX_SIZE, hy - self.MISSILE_LOCK_BOX_SIZE),
-                    (hx - self.MISSILE_LOCK_BOX_SIZE, hy - self.MISSILE_LOCK_BOX_SIZE + 5), 2
-                )
-
-                # Top-Right corner
-                pygame.draw.line(
-                    self.screen, self.COLOR_MISSILE_LOCK,
-                    (hx + self.MISSILE_LOCK_BOX_SIZE, hy - self.MISSILE_LOCK_BOX_SIZE),
-                    (hx + self.MISSILE_LOCK_BOX_SIZE - 5, hy - self.MISSILE_LOCK_BOX_SIZE), 2
-                )
-                pygame.draw.line(
-                    self.screen, self.COLOR_MISSILE_LOCK,
-                    (hx + self.MISSILE_LOCK_BOX_SIZE, hy - self.MISSILE_LOCK_BOX_SIZE),
-                    (hx + self.MISSILE_LOCK_BOX_SIZE, hy - self.MISSILE_LOCK_BOX_SIZE + 5), 2
-                )
-
-                # Bottom-Left corner
-                pygame.draw.line(
-                    self.screen, self.COLOR_MISSILE_LOCK,
-                    (hx - self.MISSILE_LOCK_BOX_SIZE, hy + self.MISSILE_LOCK_BOX_SIZE),
-                    (hx - self.MISSILE_LOCK_BOX_SIZE + 5, hy + self.MISSILE_LOCK_BOX_SIZE), 2
-                )
-                pygame.draw.line(
-                    self.screen, self.COLOR_MISSILE_LOCK,
-                    (hx - self.MISSILE_LOCK_BOX_SIZE, hy + self.MISSILE_LOCK_BOX_SIZE),
-                    (hx - self.MISSILE_LOCK_BOX_SIZE, hy + self.MISSILE_LOCK_BOX_SIZE - 5), 2
-                )
-
-                # Bottom-Right corner
-                pygame.draw.line(
-                    self.screen, self.COLOR_MISSILE_LOCK,
-                    (hx + self.MISSILE_LOCK_BOX_SIZE, hy + self.MISSILE_LOCK_BOX_SIZE),
-                    (hx + self.MISSILE_LOCK_BOX_SIZE - 5, hy + self.MISSILE_LOCK_BOX_SIZE), 2
-                )
-                pygame.draw.line(
-                    self.screen, self.COLOR_MISSILE_LOCK,
-                    (hx + self.MISSILE_LOCK_BOX_SIZE, hy + self.MISSILE_LOCK_BOX_SIZE),
-                    (hx + self.MISSILE_LOCK_BOX_SIZE, hy + self.MISSILE_LOCK_BOX_SIZE - 5), 2
                 )
 
     @staticmethod
@@ -1377,10 +1501,9 @@ class DrawUI:
         pygame.draw.circle(self.screen, indicator_color, (world_left + 15, world_top + 15), indicator_size, 2)
         pygame.draw.circle(self.screen, indicator_color, (world_right - 15, world_top + 15), indicator_size, 2)
 
-        # Warning text in center
-        warning_text = self.font_scan_body.render("DFS SWEEP DETECTED!", True, theme.RED)
-        text_rect = warning_text.get_rect(center=(center_x, center_y + 80))
-        self.screen.blit(warning_text, text_rect)
+        # Status line at a fixed position, left-aligned under the corner indicator
+        warning_text = self.font_scan_body.render("STATUS: DFS SWEEP DETECTED", True, theme.RED)
+        self.screen.blit(warning_text, (world_left + 32, world_top + 30))
 
     def draw_missile_contact(self, time_left, duration=1.5):
         """Banner at the top of the viewport confirming a missile reached its contact.
@@ -1393,8 +1516,6 @@ class DrawUI:
             return
 
         world_left, world_right, world_top, world_bottom = self._get_world_bounds()
-        center_x = (world_left + world_right) // 2
-
         # No fade-in/fade-out (that's a toast notification). The readout is either
         # lit or not: hard flicker as the hit registers, steady, then it stutters
         # out over the last third like the line is being cleared.
@@ -1404,11 +1525,11 @@ class DrawUI:
         if time_left < duration / 3 and int(time_left * 12) % 2:
             return
 
-        text = self.font_scan_header.render("MISSILE CONTACT", True, theme.AMBER_BRIGHT)
+        text = self.font_scan_header.render("MSL STATUS: CONTACT CONFIRMED", True, theme.AMBER_BRIGHT)
         pad_x, pad_y = 18, 8
         box = pygame.Rect(0, 0, text.get_width() + pad_x * 2, text.get_height() + pad_y * 2)
-        box.midtop = (center_x, world_top + 40)
-        self._frame(box, theme.AMBER, fill=theme.BG, inset=False, tick=6)
+        box.topleft = (world_left + 16, world_top + 64)
+        self._frame(box, theme.AMBER, fill=theme.BG, tick=6)
         self.screen.blit(text, (box.left + pad_x, box.top + pad_y))
 
     def draw_deep_field_panel(self, contacts, direction_index, system_online=True):
@@ -1425,7 +1546,7 @@ class DrawUI:
         # Offline Mode
         if not system_online:
             rect = pygame.Rect(panel_x, panel_y, panel_width, 60)
-            self._frame(rect, self.COLOR_DFS_INSET, fill=self.COLOR_DFS_BG, inset=False, tick=8)
+            self._frame(rect, self.COLOR_DFS_INSET, fill=self.COLOR_DFS_BG, tick=8)
 
             txt = self.font_scan_header.render(
                 "DEEP FIELD SCAN // OFFLINE", True, self.COLOR_DFS_INSET
@@ -1709,7 +1830,7 @@ class DrawUI:
 
         # Draw "PIRATE LOCK" text at top center
         if not hasattr(self, 'font_pirate_lock'):
-            self.font_pirate_lock = theme.legacy_font(24)
+            self.font_pirate_lock = fonts.legacy_font(24)
 
         # Text pulses between readable and bright, never as dim as the sweep line
         text_color = theme.RED if pulse < 0.7 else theme.RED_BRIGHT
@@ -1784,7 +1905,7 @@ class DrawUI:
 
             # Draw text
             if not hasattr(self, 'font_critical'):
-                self.font_critical = theme.font(15)
+                self.font_critical = fonts.font(15)
 
             text = self.font_critical.render("HULL CRITICAL", True, color)
             text_x = box_x + (box_w - text.get_width()) // 2
@@ -1836,9 +1957,9 @@ class DrawUI:
 
         self._blank_underlay()
 
-        title_font = theme.font(48)
-        body_font = theme.font(24)
-        small_font = theme.font(18)
+        title_font = fonts.font(48)
+        body_font = fonts.font(24)
+        small_font = fonts.font(18)
 
         options = self.CONSOLE_OPTIONS
 
@@ -1851,26 +1972,28 @@ class DrawUI:
 
         self._frame(panel, width=2, tick=14)
 
+        # Everything hangs off one left margin
+        x0 = panel.left + 24
+
         # Header strip
-        header = small_font.render("UPLINK HELD // SHIP STILL LIVE", True, theme.AMBER_DIM)
-        self.screen.blit(header, header.get_rect(midtop=(panel.centerx, panel.top + 16)))
+        header = small_font.render("UPLINK HELD  //  SHIP STILL LIVE", True, theme.AMBER_DIM)
+        self.screen.blit(header, header.get_rect(topleft=(x0, panel.top + 16)))
 
         # Title
         title = title_font.render("OPERATOR CONSOLE", True, theme.AMBER_BRIGHT)
-        self.screen.blit(title, title.get_rect(midtop=(panel.centerx, panel.top + 46)))
+        self.screen.blit(title, title.get_rect(topleft=(x0, panel.top + 46)))
 
         # Options
         y = panel.top + 120
         for label, key, action in options:
-            rect = pygame.Rect(0, 0, 380, line_h - 12)
-            rect.midtop = (panel.centerx, y)
-            self._button(rect, label, action, key=key, align="center", font=body_font, key_font=theme.font(14))
+            rect = pygame.Rect(x0, y, 380, line_h - 12)
+            self._button(rect, label, action, key=key, align="left", font=body_font, key_font=fonts.font(14))
             y += line_h
 
-        # Blinking cursor line at the bottom
+        # Status line at the bottom, with a blinking input cursor
         cursor = "_" if int(t * 2) % 2 == 0 else " "
-        footer = small_font.render(f"AWAITING INPUT {cursor}", True, theme.AMBER_DIM)
-        self.screen.blit(footer, footer.get_rect(midbottom=(panel.centerx, panel.bottom - 16)))
+        footer = small_font.render(f"STATUS: PAUSED  //  AWAITING INPUT {cursor}", True, theme.AMBER_DIM)
+        self.screen.blit(footer, footer.get_rect(bottomleft=(x0, panel.bottom - 16)))
 
     # Shown on the controls screen. Left column, then right column; each is a
     # list of (section title, [(key, description), ...]). Keep in sync with
@@ -1903,11 +2026,6 @@ class DrawUI:
                 ("R", "RADAR SWEEP"),
                 ("Q", "CLOSE RANGE SCAN"),
             ]),
-            ("RADIO", [
-                ("G", "RADIO ON / OFF"),
-                ("1 2", "TUNE DIAL"),
-                ("3 4", "GAIN DOWN / UP"),
-            ]),
             ("DEEP FIELD SCANNER", [
                 ("K", "DFS ON / OFF"),
                 ("UP DOWN", "CHANGE BEARING"),
@@ -1933,7 +2051,7 @@ class DrawUI:
         self._blank_underlay()
 
         if not hasattr(self, '_controls_fonts'):
-            self._controls_fonts = (theme.font(40), theme.font(20), theme.font(18), theme.font(16))
+            self._controls_fonts = (fonts.font(40), fonts.font(20), fonts.font(18), fonts.font(16))
         title_font, row_font, section_font, small_font = self._controls_fonts
 
         row_h = row_font.get_height() + 8
@@ -1955,10 +2073,10 @@ class DrawUI:
 
         self._frame(panel, width=2, tick=14)
 
-        header = small_font.render("OPERATOR CONSOLE // INPUT MAP", True, theme.AMBER_DIM)
-        self.screen.blit(header, header.get_rect(midtop=(panel.centerx, panel.top + 16)))
+        header = small_font.render("OPERATOR CONSOLE  //  INPUT MAP", True, theme.AMBER_DIM)
+        self.screen.blit(header, header.get_rect(topleft=(panel.left + pad, panel.top + 16)))
         title = title_font.render("CONTROLS", True, theme.AMBER_BRIGHT)
-        self.screen.blit(title, title.get_rect(midtop=(panel.centerx, panel.top + 40)))
+        self.screen.blit(title, title.get_rect(topleft=(panel.left + pad, panel.top + 40)))
 
         body_top = panel.top + 110
         divider_x = panel.left + pad + col_w + col_gap // 2
@@ -1987,5 +2105,5 @@ class DrawUI:
                 y += section_gap
 
         back = pygame.Rect(0, 0, 200, 38)
-        back.midbottom = (panel.centerx, panel.bottom - 14)
-        self._button(back, "BACK", 'close_controls', key="ESC", align="center", font=row_font)
+        back.bottomleft = (panel.left + pad, panel.bottom - 14)
+        self._button(back, "BACK", 'close_controls', key="ESC", align="left", font=row_font)
