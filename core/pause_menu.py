@@ -60,6 +60,7 @@ class PauseMenu:
             ]),
             ("DISPLAYS", [
                 ("M", "TACTICAL MAP"),
+                ("H", "HEADING / VELOCITY VECTORS"),
                 ("F9", "CRT FILTER"),
                 ("ESC", "CONSOLE / CLOSE"),
             ]),

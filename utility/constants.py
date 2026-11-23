@@ -46,10 +46,10 @@ LASER_STEP = 2
 LASER_RANGE = 5000
 
 # Mining laser: locks the nearest mineable rock in range and burns it away.
-MINING_RANGE = 500  # centre to centre, world units
+MINING_RANGE = 200  # centre to centre, world units
 MINING_TIME = 8.0  # seconds of beam on one rock
 MINING_DRAW = 1.5  # power draw while the mining beam is on (LaserAssessor draws 1)
-MINING_FUEL_YIELD = 40  # fuel from an icy rock
+MINING_FUEL_YIELD = 80  # fuel from an icy rock
 MINING_MISSILE_YIELD = 1  # missiles from a metallic rock
 # What each mineable material pays out. Anything not listed can't be mined.
 MINING_YIELD = {'icy': 'fuel', 'metallic': 'missile'}

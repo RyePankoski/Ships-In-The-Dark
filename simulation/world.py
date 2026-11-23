@@ -14,7 +14,7 @@ from utility.common import squared_distance
 # The only keys the simulation cares about for flying a ship.
 MOVE_KEYS = ('left', 'right', 'up', 'down', 'left_shift', 'tab')
 # Switches that change a ship's power draw. The owning player sets them; the server applies them.
-POWER_FLAGS = ('laser_on', 'prox_scan_on', 'blinking', 'deep_field_on', 'dampening', 'material_assessor_on', 'mining_on')
+POWER_FLAGS = ('laser_on', 'prox_scan_on', 'blinking', 'deep_field_on', 'dampening', 'material_assessor_on')
 
 # Ids below this are player ships (1, 2, ...). Everything else the world creates
 # gets an id from FIRST_OBJECT_ID upwards.
@@ -233,6 +233,12 @@ class World:
             ship.pos_x, ship.pos_y = self.random_empty_point()
             ship.update_rect()
 
+        elif kind == 'mine':
+            self._start_mining(ship, action.get('target'))
+
+        elif kind == 'mine_off':
+            self._drop_mining(ship)
+
     def fire_missile(self, ship, target):
         missile = Missile(ship.rect.center[0], ship.rect.center[1], 0, 0, target, ship.player_id)
         missile.net_id = self.new_id()
@@ -309,21 +315,17 @@ class World:
                 self.decoys.remove(decoy)
 
     def _step_mining(self, dt):
-        """The mining beam locks the nearest rock it can mine and burns it down.
-        Moving out of range, switching off, or the rock going away drops the lock
-        and the progress with it."""
+        """Burns the rock the ship has designated. Nothing is picked automatically:
+        the designation is made by a 'mine' action (see do_action). It ends when the
+        rock is mined out, dies, or goes out of range, or when the beam switches off."""
         for ship in self.ships:
-            if not ship.alive or not ship.mining_on:
+            if not ship.alive or not ship.mining_on or ship.mining_target is None:
                 self._drop_mining(ship)
                 continue
 
-            rock = self.find(ship.mining_target) if ship.mining_target is not None else None
+            rock = self.find(ship.mining_target)
             if rock is None or not self._can_mine(ship, rock):
-
-                rock = self._nearest_mineable(ship)
-                ship.mining_target = rock.net_id if rock is not None else None
-                ship.mining_progress = 0.0
-            if rock is None:
+                self._drop_mining(ship)
                 continue
 
             ship.mining_progress += dt / MINING_TIME
@@ -332,27 +334,22 @@ class World:
                 self._drop_mining(ship)
 
     def _drop_mining(self, ship):
+        ship.mining_on = False
         ship.mining_target = None
         ship.mining_progress = 0.0
 
-    def _nearest_mineable(self, ship):
-        cx, cy = ship.center
-        cell_x, cell_y = int(cx // GRID_SIZE), int(cy // GRID_SIZE)
-        reach = math.ceil(MINING_RANGE / GRID_SIZE)
-        best, best_dist = None, None
-        for gx in range(cell_x - reach, cell_x + reach + 1):
-            for gy in range(cell_y - reach, cell_y + reach + 1):
-                for rock in self.asteroids.get((gx, gy), ()):
-                    if not self._can_mine(ship, rock):
-                        continue
-                    dist = math.hypot(rock.pos_x - cx, rock.pos_y - cy)
-                    if best_dist is None or dist < best_dist:
-                        best, best_dist = rock, dist
-        return best
+    def _start_mining(self, ship, target_id):
+        """Switch the beam on and lock it onto the rock, if the ship can mine it from here."""
+        rock = self.find(target_id)
+        if rock is None or not ship.alive or not self._can_mine(ship, rock):
+            return
+        ship.mining_on = True
+        ship.mining_target = rock.net_id
+        ship.mining_progress = 0.0
 
     def _can_mine(self, ship, rock):
-        """In range, alive, of a mineable kind, and the ship has room for what it pays."""
-        if not rock.alive or rock.material not in MINING_YIELD:
+        """A live asteroid of a mineable kind, in range, and the ship has room for what it pays."""
+        if getattr(rock, 'kind', None) != 'asteroid' or not rock.alive or rock.material not in MINING_YIELD:
             return False
         cx, cy = ship.center
         if math.hypot(rock.pos_x - cx, rock.pos_y - cy) > MINING_RANGE:
@@ -367,6 +364,7 @@ class World:
         else:
             ship.total_missiles = min(TOTAL_MISSILES, ship.total_missiles + MINING_MISSILE_YIELD)
         rock.alive = False  # _step_asteroids removes it and tells the clients
+        ship.mining_on = False  # the beam switches itself off once the rock is burned out
         self.events.append(('mined', ship.player_id, rock.material))
 
 

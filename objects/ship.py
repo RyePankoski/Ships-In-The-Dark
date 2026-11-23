@@ -129,7 +129,7 @@ class Ship(DirectionSteered):
             self.current_draw += 0.5
         if self.laser_on:
             self.current_draw += 1
-        if self.mining_on:
+        if self.mining_on and self.mining_target is not None:
             self.current_draw += MINING_DRAW
         if self.prox_scan_on:
             self.current_draw += 0.1

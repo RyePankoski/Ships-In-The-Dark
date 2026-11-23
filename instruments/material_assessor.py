@@ -5,7 +5,7 @@ from utility.constants import LASER_RANGE
 from asset_handlers.audio_manager import AudioManager
 
 SCAN_TIME_NEAR = 0.2   # seconds for something right under the ship
-SCAN_TIME_FAR = 15.0   # seconds for something at the laser's full range
+SCAN_TIME_FAR = 8   # seconds for something at the laser's full range
 
 
 def scan_time(distance):

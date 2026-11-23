@@ -60,7 +60,7 @@ class MainScene:
         self.deep_field_scan = DeepFieldScan(self.instrument_context)
         self.laser_assessor = LaserAssessor(self.instrument_context)
         self.material_assessor = MaterialAssessor(self.instrument_context, self.laser_assessor)
-        self.mining_laser = MiningLaser(self.instrument_context)
+        self.mining_laser = MiningLaser(self.instrument_context, self.laser_assessor)
         self.close_range_scan = CloseRangeScan(self.instrument_context)
         self.instruments = [self.radar_system, self.deep_field_scan, self.laser_assessor,
                             self.material_assessor, self.mining_laser, self.close_range_scan]
@@ -81,6 +81,7 @@ class MainScene:
         self.marker_mode = None
         self.end_tripped = False
         self.grid_on = True
+        self.vectors_on = False  # heading / velocity overlay on the ship (H / VECTORS button)
         self.pause = PauseMenu()  # the operator console (Esc)
 
         # input timer
@@ -190,7 +191,6 @@ class MainScene:
         self.player_ship.deep_field_on = self.deep_field_scan.on
         self.player_ship.radar_scan_on = self.radar_system.scanning
         self.player_ship.material_assessor_on = self.material_assessor.scanning is not None
-        self.player_ship.mining_on = self.mining_laser.on
 
     def start_input_cooldown(self):
         self.input_cooling_down = True
@@ -245,6 +245,7 @@ class MainScene:
         ('m', 'toggle_map'),
         ('t', 'blink'),
         ('g', 'toggle_dampening'),
+        ('h', 'toggle_vectors'),
         ('esc', 'escape'),
     )
     def handle_inputs(self, inputs, dt, clicks=(), cockpit_keys=True):
@@ -316,6 +317,10 @@ class MainScene:
         elif action == 'fuel_acknowledge':
             self.player_ship.fuel_acknowledge = not self.player_ship.fuel_acknowledge
             sfx('fuel_fault_acknowledge')
+        elif action == 'toggle_vectors':
+            self.vectors_on = not self.vectors_on
+            sfx('map_open' if self.vectors_on else 'map_close')
+            self.input_cooling_down = True
         elif action == 'toggle_map':
             self.is_map_open = not self.is_map_open
             self.marker_mode = None
@@ -398,6 +403,7 @@ class MainScene:
             self.audio_manager.play_sfx('mining_laser', loops=-1)
         else:
             self.audio_manager.stop_sfx('mining_laser')
+
         if self.cockpit.enemy_has_missile_solution:
             self.audio_manager.play_sfx('enemy_missile_lock')
         else:
@@ -573,7 +579,9 @@ class MainScene:
         self.draw_ui.draw_laser_painted_warning(self.player_ship.painted)
         self.draw_ui.draw_ship_info(self.player_ship, cockpit,
                                     [line for line in (i.status_line() for i in self.instruments) if line])
-        self.draw_ui.draw_control_banks(self.player_ship, cockpit,map_open=self.is_map_open,blink_busy=self.blinking or self.blink_arriving,sensor_buttons=[b for i in self.instruments for b in i.console_buttons()])
+        if self.vectors_on:
+            self.draw_ui.draw_ship_vectors(self.player_ship, camera_x, camera_y)
+        self.draw_ui.draw_control_banks(self.player_ship, cockpit,map_open=self.is_map_open,blink_busy=self.blinking or self.blink_arriving,vectors_on=self.vectors_on,sensor_buttons=[b for i in self.instruments for b in i.console_buttons()])
         self.draw_ui.draw_missile_lock_warning(cockpit.enemy_has_missile_solution)
         self.draw_ui.draw_missile_vectors(self.my_id, world.missiles, camera_x, camera_y)
         for instrument in self.instruments:

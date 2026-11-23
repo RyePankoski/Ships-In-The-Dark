@@ -48,7 +48,7 @@ class Asteroid(WorldObject):
             self.material = 'metallic'
         elif chance > 950:
             self.material = 'semi-metallic'
-        elif chance > 800:
+        elif chance > 600:
             self.material = 'icy'
         else:
             self.material = 'rocky'

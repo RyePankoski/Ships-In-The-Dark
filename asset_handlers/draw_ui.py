@@ -578,7 +578,7 @@ class DrawUI:
             self._button((inner.left + c * (bw + gap), top + r * (bh + gap), bw, bh), label, action, **kwargs)
 
     def draw_control_banks(self, ship, cockpit, map_open=False, blink_busy=False,
-                           sensor_buttons=()):
+                           vectors_on=True, sensor_buttons=()):
         """Two banks of switches in the bottom panel, either side of ship telemetry.
 
         Only the controls that don't belong to an instrument live here; the laser,
@@ -609,6 +609,7 @@ class DrawUI:
         displays = [
             *sensor_buttons,
             ("TAC MAP", 'toggle_map', dict(key="M", lit=map_open)),
+            ("VECTORS", 'toggle_vectors', dict(key="H", lit=vectors_on)),
             ("CONSOLE", 'open_console', dict(key="ESC")),
         ]
         # One merged bank: helm and weapons first, then sensors and displays
@@ -707,6 +708,60 @@ class DrawUI:
             pygame.draw.line(self.screen, theme.AMBER_FAINT,
                              (x, y0 + line_h - 2), (x + w, y0 + line_h - 2))
             x += w + gap
+
+    HEADING_LEN = 110  # px the heading vector reaches from the ship
+    SPEED_LEN = 150  # px the velocity vector reaches at SHIP_MAX_SPEED
+
+    def _arrow(self, start, end, color, width=2, head=10):
+        """A line from start to end with an arrowhead at end."""
+        pygame.draw.line(self.screen, color, start, end, width)
+        dx, dy = end[0] - start[0], end[1] - start[1]
+        length = math.hypot(dx, dy)
+        if length < 1:
+            return
+        ux, uy = dx / length, dy / length
+        base = (end[0] - ux * head, end[1] - uy * head)
+        wing = (-uy * head * 0.5, ux * head * 0.5)
+        pygame.draw.polygon(self.screen, color, [
+            end,
+            (base[0] + wing[0], base[1] + wing[1]),
+            (base[0] - wing[0], base[1] - wing[1]),
+        ])
+
+    def draw_ship_vectors(self, ship, camera_x, camera_y):
+        """Overlay on the ship in the flight window: a heading vector (where the nose
+        points) and a velocity vector (where and how fast it is moving), each with a label.
+        The heading vector has a fixed length; the velocity vector grows with speed."""
+        world_left, world_right, world_top, world_bottom = self._get_world_bounds()
+        cx = ship.rect.center[0] - camera_x
+        cy = ship.rect.center[1] - camera_y
+        clip = pygame.Rect(world_left, world_top, world_right - world_left, world_bottom - world_top)
+        old_clip = self.screen.get_clip()
+        self.screen.set_clip(clip)
+
+        font = fonts.font(16)
+        start_gap = 44  # start outside the ship sprite
+
+        # Heading: where the nose points
+        fx, fy = ship.facing()
+        hdg_start = (cx + fx * start_gap, cy + fy * start_gap)
+        hdg_end = (cx + fx * (start_gap + self.HEADING_LEN), cy + fy * (start_gap + self.HEADING_LEN))
+        self._arrow(hdg_start, hdg_end, theme.AMBER_BRIGHT)
+        label = font.render(f"HDG {int(ship.heading) % 360:03d}", True, theme.AMBER_BRIGHT)
+        self.screen.blit(label, label.get_rect(midbottom=(hdg_end[0], hdg_end[1] - 6)))
+
+        # Velocity: where it is moving, length = speed
+        if ship.speed > 1:
+            ux, uy = ship.dir_x, ship.dir_y
+            length = self.SPEED_LEN * min(1.0, ship.speed / SHIP_MAX_SPEED)
+            vel_start = (cx + ux * start_gap, cy + uy * start_gap)
+            vel_end = (cx + ux * (start_gap + length), cy + uy * (start_gap + length))
+            self._arrow(vel_start, vel_end, theme.GREEN_BRIGHT)
+            label = font.render(f"SPD {ship.speed:03.0f} U", True, theme.GREEN_BRIGHT)
+            anchor = (vel_end[0] + 8, vel_end[1] + 8)
+            self.screen.blit(label, label.get_rect(topleft=anchor))
+
+        self.screen.set_clip(old_clip)
 
     def draw_ui_layout(self):
         """Draw UI panel backgrounds and borders with clean CRT chassis framing."""
