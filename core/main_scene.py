@@ -7,8 +7,10 @@ from instruments.close_range_scan import CloseRangeScan
 from instruments.deep_field_scan import DeepFieldScan
 from instruments.instrument import InstrumentContext
 from instruments.laser_assessor import LaserAssessor
+from instruments.mining_laser import MiningLaser
+from instruments.material_assessor import MaterialAssessor
 from instruments.radar_system import RadarSystem
-from simulation.world import MOVE_KEYS, empty_command
+from simulation.world import MOVE_KEYS, POWER_FLAGS, empty_command
 from utility.common import *
 
 
@@ -57,8 +59,11 @@ class MainScene:
         self.radar_system = RadarSystem(self.instrument_context)
         self.deep_field_scan = DeepFieldScan(self.instrument_context)
         self.laser_assessor = LaserAssessor(self.instrument_context)
+        self.material_assessor = MaterialAssessor(self.instrument_context, self.laser_assessor)
+        self.mining_laser = MiningLaser(self.instrument_context)
         self.close_range_scan = CloseRangeScan(self.instrument_context)
-        self.instruments = [self.radar_system, self.deep_field_scan, self.laser_assessor, self.close_range_scan]
+        self.instruments = [self.radar_system, self.deep_field_scan, self.laser_assessor,
+                            self.material_assessor, self.mining_laser, self.close_range_scan]
 
         self.key_actions = self.KEY_ACTIONS + tuple(k for i in self.instruments for k in i.keys)
         self.instrument_actions = {}
@@ -133,11 +138,8 @@ class MainScene:
             return
 
         crt.set_damage(self.player_ship.health_low)
-        # Buttons drawn last frame are what this frame's clicks land on
         buttons = self.draw_ui.buttons
-
         clicks = buttons.clicked_actions(events)
-
         held = buttons.held_action()
 
         if held:
@@ -175,10 +177,20 @@ class MainScene:
         for instrument in self.instruments:
             instrument.update(dt, inputs)
 
+        self.update_ship_power_use()
         self.handle_general_sound_effects()
         self.draw_scene()
 
         self.explosions = []
+
+    def update_ship_power_use(self):
+        self.player_ship.laser_on = self.laser_assessor.on
+        self.player_ship.prox_scan_on = self.close_range_scan.on
+        self.player_ship.blinking = self.blinking
+        self.player_ship.deep_field_on = self.deep_field_scan.on
+        self.player_ship.radar_scan_on = self.radar_system.scanning
+        self.player_ship.material_assessor_on = self.material_assessor.scanning is not None
+        self.player_ship.mining_on = self.mining_laser.on
 
     def start_input_cooldown(self):
         self.input_cooling_down = True
@@ -267,6 +279,8 @@ class MainScene:
         for action in actions:
             self.perform(action)
 
+        # Read after the actions, so a switch flipped this frame (e.g. dampening) is the one sent
+        command['power'] = {name: getattr(self.player_ship, name) for name in POWER_FLAGS}
         return command
 
     def perform(self, action):
@@ -299,6 +313,9 @@ class MainScene:
             self.player_ship.dampening = not self.player_ship.dampening
             sfx('inertial_dampener')
             self.input_cooling_down = True
+        elif action == 'fuel_acknowledge':
+            self.player_ship.fuel_acknowledge = not self.player_ship.fuel_acknowledge
+            sfx('fuel_fault_acknowledge')
         elif action == 'toggle_map':
             self.is_map_open = not self.is_map_open
             self.marker_mode = None
@@ -324,9 +341,14 @@ class MainScene:
             self.map_markers.clear()
             sfx('map_marker_delete')
         elif action == 'blink':
-            if not self.blinking:
+            if not self.blinking and self.player_ship.fuel > BLINK_FUEL_THRESHOLD:
                 self.blinking = True
                 sfx('blink')
+
+            if self.player_ship.fuel <= BLINK_FUEL_THRESHOLD:
+                self.audio_manager.play_sfx('blink_denied')
+
+
         elif action == 'escape' and self.marker_mode is not None:
             # Esc backs out of marker placement before it closes anything
             self.marker_mode = None
@@ -370,6 +392,12 @@ class MainScene:
         self.previous_missiles = current
 
     def handle_general_sound_effects(self):
+        # The beam hums while it has a rock locked. The world drops the lock when the
+        # rock is mined out or the beam is switched off, so the hum stops with it.
+        if self.player_ship.mining_target is not None:
+            self.audio_manager.play_sfx('mining_laser', loops=-1)
+        else:
+            self.audio_manager.stop_sfx('mining_laser')
         if self.cockpit.enemy_has_missile_solution:
             self.audio_manager.play_sfx('enemy_missile_lock')
         else:
@@ -390,6 +418,9 @@ class MainScene:
             self.audio_manager.play_sfx('low_health')
         else:
             self.audio_manager.stop_sfx('low_health')
+
+        if self.player_ship.low_fuel and not self.player_ship.fuel_acknowledge:
+            self.audio_manager.play_sfx('low_fuel')
 
         if self.ftl_traveling:
             self.audio_manager.play_sfx('ftl_jumping')
@@ -422,6 +453,9 @@ class MainScene:
             elif kind == 'missile_contact':
                 self.audio_manager.play_sfx('missile_contact', force=True)
                 self.missile_contact_timer = self.missile_contact_duration
+            elif kind == 'mined':
+                if data[0] == self.my_id:
+                    self.audio_manager.play_sfx('material_scan_complete')
 
     def timers(self, dt):
         if self.missile_contact_timer > 0:
@@ -535,13 +569,11 @@ class MainScene:
         self.draw_ui.draw_ui_layout()
         self.draw_ui.draw_callsign_plate(world.callsigns.get(self.my_id), self.my_id,
                                          len(world.callsigns), self.local)
+        self.draw_ui.draw_power_readout(self.player_ship)
         self.draw_ui.draw_laser_painted_warning(self.player_ship.painted)
         self.draw_ui.draw_ship_info(self.player_ship, cockpit,
                                     [line for line in (i.status_line() for i in self.instruments) if line])
-        self.draw_ui.draw_control_banks(self.player_ship, cockpit,
-                                        map_open=self.is_map_open,
-                                        blink_busy=self.blinking or self.blink_arriving,
-                                        sensor_buttons=[b for i in self.instruments for b in i.console_buttons()])
+        self.draw_ui.draw_control_banks(self.player_ship, cockpit,map_open=self.is_map_open,blink_busy=self.blinking or self.blink_arriving,sensor_buttons=[b for i in self.instruments for b in i.console_buttons()])
         self.draw_ui.draw_missile_lock_warning(cockpit.enemy_has_missile_solution)
         self.draw_ui.draw_missile_vectors(self.my_id, world.missiles, camera_x, camera_y)
         for instrument in self.instruments:
@@ -561,6 +593,7 @@ class MainScene:
             strength = 1 - self.impact_timer / self.draw_ui.IMPACT_DURATION
             self.draw_ui.draw_impact_failure(strength, self.impact_timer)
         self.draw_ui.draw_low_health_warning(self.player_ship.health_low)
+        self.draw_ui.draw_out_of_fuel_warning(self.player_ship.fuel <= 0)
 
         # Last, so the console sits on top of everything else
         self.pause.draw(self.draw_ui.screen, self.draw_ui.buttons)

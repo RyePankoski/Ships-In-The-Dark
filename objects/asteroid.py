@@ -22,11 +22,12 @@ def make_outline(x, y, size):
 
 from objects.base import WorldObject
 
+material = 'matter'
+
 
 class Asteroid(WorldObject):
-    kind = 'asteroid'
 
-    def __init__(self, x, y, size):
+    def __init__(self, x, y, size, rng=random):
         self.pos_x = x
         self.pos_y = y
         self.size = size
@@ -40,3 +41,16 @@ class Asteroid(WorldObject):
         grid_x = int(x // GRID_SIZE)
         grid_y = int(y // GRID_SIZE)
         self.cell = (grid_x, grid_y)
+
+        # rng is the world's seeded generator, so every client rolls the same material
+        chance = rng.uniform(0, 1000)
+        if chance > 995:
+            self.material = 'metallic'
+        elif chance > 950:
+            self.material = 'semi-metallic'
+        elif chance > 800:
+            self.material = 'icy'
+        else:
+            self.material = 'rocky'
+
+        self.kind = 'asteroid'

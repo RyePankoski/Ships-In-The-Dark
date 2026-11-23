@@ -31,6 +31,8 @@ SHIP_FIELDS = (
     ('thrusting', BOOL), ('health', 1), ('health_low', BOOL), ('total_missiles', INT),
     ('missile_cooling_down', BOOL), ('missile_cooldown_timer', 2), ('alive', BOOL),
     ('painted', BOOL), ('took_damage', BOOL), ('mining_vessel_sees_you', BOOL),
+    ('fuel', 1), ('current_draw', 1), ('low_fuel', BOOL),
+    ('mining_on', BOOL), ('mining_target', INT), ('mining_progress', 2),
 )
 MISSILE_FIELDS = (
     ('pos_x', 1), ('pos_y', 1), ('vel_x', 3), ('vel_y', 3), ('heading', 1), ('speed', 1),

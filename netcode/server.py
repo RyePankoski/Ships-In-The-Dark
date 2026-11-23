@@ -35,6 +35,7 @@ class PlayerSlot:
         self.player_id = player_id
         self.move = None  # latest held movement keys
         self.laser_target = None
+        self.power = None  # the player's power switches (see POWER_FLAGS)
         self.last_seq = -1  # newest input packet seen (older ones are ignored)
         self.last_action_id = 0  # newest action accepted (sent back as 'ack')
         self.queued_actions = []  # accepted, waiting for the next tick
@@ -57,7 +58,7 @@ class Server:
                             input has gone out lately; also how a pilot renames
                             themselves in the lobby
                         {'type': 'input', 'seq', 'move', 'laser_target',
-                         'actions': [... each with 'aid'], 'rv', 'dk'}
+                         'actions': [... each with 'aid'], 'power', 'rv', 'dk'}
       server -> client  {'type': 'welcome', 'player_id', 'seed'}
                         {'type': 'full'}
                         {'type': 'state', 'tick', 'started', 'ack', 'events', ...snapshot,
@@ -152,6 +153,7 @@ class Server:
                 slot.last_seq = seq
                 slot.move = message.get('move')
                 slot.laser_target = message.get('laser_target')
+                slot.power = message.get('power')
             for action in message.get('actions', []):
                 if action.get('aid', 0) > slot.last_action_id:
                     slot.last_action_id = action['aid']
@@ -199,6 +201,7 @@ class Server:
                 'move': slot.move,
                 'actions': slot.queued_actions,
                 'laser_target': slot.laser_target,
+                'power': slot.power,
             }
             slot.queued_actions = []
         self.world.step(commands, TICK_DT)

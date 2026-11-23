@@ -52,6 +52,10 @@ class AudioManager:
             'laser_locked': 'sounds/laser_locked.wav',
             'laser_turn_off': 'sounds/laser_turn_off.wav',
             'laser_lock_lost': 'sounds/laser_lock_lost.mp3',
+            'material_scan' : 'sounds/material_scanner.wav',
+            'material_scan_complete' : 'sounds/material_scan_complete.wav',
+            'scan_interrupt' : 'sounds/scan_interrupt.wav',
+            'mining_laser' : 'sounds/mining_laser.wav',
 
             # DFS scanner
             'dfs_toggle': 'sounds/dfs_toggle.wav',
@@ -81,8 +85,11 @@ class AudioManager:
             'asteroid_damage': 'sounds/asteroid_damage.wav',
             'low_health': 'sounds/low_health.wav',
             'death_screen': 'sounds/death_screen.wav',
+            'low_fuel': 'sounds/low_fuel.wav',
+            'blink_denied' : 'sounds/blink_denied.wav',
 
             # UI
+            # "Glitch (Faulty Core) 9" by Dylan Kelk/SilverIllusionist for fuel acknowledge
             'retro_beep': 'sounds/retro_beep.wav',
             'close_range_toggle': 'sounds/close_range_toggle.wav',
             'cancel': 'sounds/cancel.wav',
@@ -90,9 +97,10 @@ class AudioManager:
             'pause' : 'sounds/pause.wav',
             'resume' : 'sounds/resume.wav',
             'shutdown' : 'sounds/shutdown.wav',
+            'fuel_fault_acknowledge' : 'sounds/fuel_fault_acknowledge.wav',
 
             # Misc
-            'keyboard_clack': 'sounds/keyboard_clack.mp3',
+            'keyboard_clack': 'sounds/keyboard_clack.wav',
             'startup' : 'sounds/startup.wav',
         }
 

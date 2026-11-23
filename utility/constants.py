@@ -6,10 +6,17 @@ SHIP_TURN_RATE = 150  # top turn rate, degrees per second
 SHIP_TURN_ACCEL = 600  # how quickly the turn rate eases toward its target, degrees per second squared
 SHIP_TURN_SLOWDOWN = 0.4  # fraction of turn rate lost at full speed, so fast ships arc wider
 FLIGHT_ASSIST_DRAG = 0.9  # coasting bleed per second with the dampener on
-DRIFT_DRAG = 0.08  # coasting bleed per second with the dampener off
+DRIFT_DRAG = 0.0  # coasting bleed per second with the dampener off (0 = pure drift, no speed loss)
 BRAKE_DRAG = 3.0  # per second while braking (tab)
 BOOST_THRUST_MULT = 2.0  # shift: thrust multiplier
-BOOST_SPEED_MULT = 1.5  # shift: raises the speed cap
+BOOST_SPEED_MULT = 1.5 # shift: raises the speed cap
+
+
+SHIP_MAX_FUEL = 201
+LOW_FUEL_FRACTION = 5 # 20%
+HIGH_USE = 4
+THROTTLED_SPEED = 50
+BLINK_FUEL_THRESHOLD = 50
 
 MISSILE_THRUST = 200  # was 0.4
 MISSILE_MAX_SPEED = 500  # was 10
@@ -37,6 +44,15 @@ RADAR_PULSE_SPEED = 2
 # Laser configuration
 LASER_STEP = 2
 LASER_RANGE = 5000
+
+# Mining laser: locks the nearest mineable rock in range and burns it away.
+MINING_RANGE = 500  # centre to centre, world units
+MINING_TIME = 8.0  # seconds of beam on one rock
+MINING_DRAW = 1.5  # power draw while the mining beam is on (LaserAssessor draws 1)
+MINING_FUEL_YIELD = 40  # fuel from an icy rock
+MINING_MISSILE_YIELD = 1  # missiles from a metallic rock
+# What each mineable material pays out. Anything not listed can't be mined.
+MINING_YIELD = {'icy': 'fuel', 'metallic': 'missile'}
 
 # Deep field scan configuration
 CORRIDOR_DEPTH = 8000

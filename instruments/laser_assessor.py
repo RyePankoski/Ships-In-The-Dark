@@ -27,9 +27,9 @@ class LaserAssessor(Instrument):
         self.laser_locked = False
         self.tracking_lost = False
 
-        self.endpoint = (0, 0)           # where the beam ended last frame
-        self.target_type = "Nothing"     # what it ended on
-        self.hit_id = None               # net_id of what it is touching: sent to the world as the command's laser_target
+        self.endpoint = (0, 0)  # where the beam ended last frame
+        self.target_type = "Nothing"  # what it ended on
+        self.hit_id = None  # net_id of what it is touching: sent to the world as the command's laser_target
         self._unpainted = False
         self.target_distance = 0
 
@@ -120,6 +120,7 @@ class LaserAssessor(Instrument):
                     self.target_distance = distance
                     contact.painted = True
                     self.current_target = contact
+
                     return (ray_x, ray_y), target_type
 
         return (ray_x, ray_y), target_type
@@ -148,9 +149,9 @@ class LaserAssessor(Instrument):
             self.tracking_lost = True
 
         if self.previous_signature_position == self.signature_position:
-            return "ASTEROID / STATIC", signature_distance
+            return "STATIC", signature_distance
         else:
-            return "VESSEL / MOVING", signature_distance
+            return "MOVING", signature_distance
 
     def change_direction(self, inputs, dt):
         if inputs['arrow_key_left']:

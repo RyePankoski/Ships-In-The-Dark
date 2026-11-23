@@ -13,6 +13,7 @@ from objects.base import WorldObject
 
 class MiningVessel(WorldObject):
     kind = 'pirate'
+    material = 'metallic'
 
     def __init__(self, x, y, vel_x=0, vel_y=0, speed=0):
         self.pos_x = x

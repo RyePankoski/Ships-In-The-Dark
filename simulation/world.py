@@ -1,3 +1,4 @@
+import math
 import random
 
 from objects.asteroid import Asteroid
@@ -12,6 +13,8 @@ from utility.common import squared_distance
 
 # The only keys the simulation cares about for flying a ship.
 MOVE_KEYS = ('left', 'right', 'up', 'down', 'left_shift', 'tab')
+# Switches that change a ship's power draw. The owning player sets them; the server applies them.
+POWER_FLAGS = ('laser_on', 'prox_scan_on', 'blinking', 'deep_field_on', 'dampening', 'material_assessor_on', 'mining_on')
 
 # Ids below this are player ships (1, 2, ...). Everything else the world creates
 # gets an id from FIRST_OBJECT_ID upwards.
@@ -25,8 +28,9 @@ def empty_command():
                   (inputs locked during FTL).
     actions:      one-off requests, e.g. {'type': 'fire', 'target': 1004}.
     laser_target: net_id of whatever this player's laser is touching, or None.
+    power:        the ship's power switches (POWER_FLAGS), or None to leave them alone.
     """
-    return {'move': None, 'actions': [], 'laser_target': None}
+    return {'move': None, 'actions': [], 'laser_target': None, 'power': None}
 
 
 def _grid_remove(grid, cell, obj):
@@ -95,10 +99,10 @@ class World:
         for _ in range(100):
             pos_x = rng.randint(0, WORLD_WIDTH)
             pos_y = rng.randint(0, WORLD_HEIGHT)
-            asteroid = Asteroid(pos_x, pos_y, rng.randint(50, 100))
+            asteroid = Asteroid(pos_x, pos_y, rng.randint(50, 100), rng)
             asteroid.net_id = self.new_id()
 
-            asteroid.id_for_ui = self._generate_asteroid_names()
+            asteroid.id_for_ui = self._generate_asteroid_names(rng)
             self.asteroids.setdefault(asteroid.cell, []).append(asteroid)
 
         if not self.with_npcs:
@@ -115,16 +119,16 @@ class World:
         pirate.net_id = self.new_id()
         self.pirates.setdefault((int(100 // GRID_SIZE), int(100 // GRID_SIZE)), []).append(pirate)
 
-    def _generate_asteroid_names(self):
-        length = random.randint(1, 3)
+    def _generate_asteroid_names(self, rng):
+        length = rng.randint(1, 3)
         name = ""
         for _ in range(length):
-            name += (random.choice(self.alphabet))
+            name += (rng.choice(self.alphabet))
 
-        length = random.randint(1, 3)
+        length = rng.randint(1, 3)
 
         for _ in range(length):
-            name += str(random.randint(0, 9))
+            name += str(rng.randint(0, 9))
         return name
 
     def spawn_ship(self, player_id, is_ai=False):
@@ -192,6 +196,9 @@ class World:
                 continue
             if command.get('move') is not None:
                 ship.apply_inputs(command['move'], dt)
+            if command.get('power') is not None:
+                for name in POWER_FLAGS:
+                    setattr(ship, name, bool(command['power'][name]))
             for action in command.get('actions', []):
                 self.do_action(ship, action)
 
@@ -200,6 +207,7 @@ class World:
         self._step_ships(dt)
         self._step_missiles(dt)
         self._step_decoys(dt)
+        self._step_mining(dt)  # before the asteroid sweep, so a mined-out rock goes this step
         self._step_asteroids()
         self._step_mining_lasers(dt)
         self._step_drones(dt)
@@ -299,6 +307,68 @@ class World:
             decoy.run(dt)
             if decoy.alive is False:
                 self.decoys.remove(decoy)
+
+    def _step_mining(self, dt):
+        """The mining beam locks the nearest rock it can mine and burns it down.
+        Moving out of range, switching off, or the rock going away drops the lock
+        and the progress with it."""
+        for ship in self.ships:
+            if not ship.alive or not ship.mining_on:
+                self._drop_mining(ship)
+                continue
+
+            rock = self.find(ship.mining_target) if ship.mining_target is not None else None
+            if rock is None or not self._can_mine(ship, rock):
+
+                rock = self._nearest_mineable(ship)
+                ship.mining_target = rock.net_id if rock is not None else None
+                ship.mining_progress = 0.0
+            if rock is None:
+                continue
+
+            ship.mining_progress += dt / MINING_TIME
+            if ship.mining_progress >= 1.0:
+                self._finish_mining(ship, rock)
+                self._drop_mining(ship)
+
+    def _drop_mining(self, ship):
+        ship.mining_target = None
+        ship.mining_progress = 0.0
+
+    def _nearest_mineable(self, ship):
+        cx, cy = ship.center
+        cell_x, cell_y = int(cx // GRID_SIZE), int(cy // GRID_SIZE)
+        reach = math.ceil(MINING_RANGE / GRID_SIZE)
+        best, best_dist = None, None
+        for gx in range(cell_x - reach, cell_x + reach + 1):
+            for gy in range(cell_y - reach, cell_y + reach + 1):
+                for rock in self.asteroids.get((gx, gy), ()):
+                    if not self._can_mine(ship, rock):
+                        continue
+                    dist = math.hypot(rock.pos_x - cx, rock.pos_y - cy)
+                    if best_dist is None or dist < best_dist:
+                        best, best_dist = rock, dist
+        return best
+
+    def _can_mine(self, ship, rock):
+        """In range, alive, of a mineable kind, and the ship has room for what it pays."""
+        if not rock.alive or rock.material not in MINING_YIELD:
+            return False
+        cx, cy = ship.center
+        if math.hypot(rock.pos_x - cx, rock.pos_y - cy) > MINING_RANGE:
+            return False
+        if MINING_YIELD[rock.material] == 'fuel':
+            return ship.fuel < SHIP_MAX_FUEL
+        return ship.total_missiles < TOTAL_MISSILES
+
+    def _finish_mining(self, ship, rock):
+        if MINING_YIELD[rock.material] == 'fuel':
+            ship.fuel = min(SHIP_MAX_FUEL, ship.fuel + MINING_FUEL_YIELD)
+        else:
+            ship.total_missiles = min(TOTAL_MISSILES, ship.total_missiles + MINING_MISSILE_YIELD)
+        rock.alive = False  # _step_asteroids removes it and tells the clients
+        self.events.append(('mined', ship.player_id, rock.material))
+
 
     def _step_asteroids(self):
         for cell, rocks in list(self.asteroids.items()):

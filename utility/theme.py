@@ -43,6 +43,11 @@ STAR_TINT = (255, 200, 40)
 ASTEROID = (185, 140, 70)        # rock outline
 ASTEROID_FILL = (34, 25, 12)     # rock body
 
+# Per-material rock colours: (outline, body). Rocky uses ASTEROID / ASTEROID_FILL above.
+ASTEROID_METALLIC = ((160, 165, 170), (30, 32, 34))      # gray
+ASTEROID_SEMI_METALLIC = ((200, 170, 125), (38, 31, 20))  # tan
+ASTEROID_ICY = ((110, 170, 255), (14, 24, 42))           # blue
+
 # ---------------------------------------------------------------------------
 # Font
 # ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@ from objects.base import DirectionSteered
 
 class Decoy(DirectionSteered):
     kind = 'decoy'
+    material = 'metallic'
 
     def __init__(self, x, y, dir_x, dir_y, speed):
         self.pos_x = x

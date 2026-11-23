@@ -23,7 +23,9 @@ class WorldObject:
     `painted` off any object, so they never need to know what class it is.
     """
 
-    kind = 'object'              # what a sensor would call it: 'ship', 'asteroid', ...
+    kind = 'object'
+    material = 'matter'
+    # what a sensor would call it: 'ship', 'asteroid', ...
     radar_cross_section = 50
     net_id = None
 

@@ -10,6 +10,16 @@ from utility import theme
 from asset_handlers import fonts
 from pathlib import Path
 
+# Below this speed a turning ship uses the rotate-in-place sprites
+ROTATE_SPRITE_MAX_SPEED = 10
+
+# Asteroid (outline, body) colours by material; rocky is the default in theme
+ASTEROID_COLORS = {
+    'metallic': theme.ASTEROID_METALLIC,
+    'semi-metallic': theme.ASTEROID_SEMI_METALLIC,
+    'icy': theme.ASTEROID_ICY,
+}
+
 
 def generate_stars(star_count=100000, world_width=100000, world_height=100000):
     """Generate random stars across the world"""
@@ -58,16 +68,26 @@ class DrawGame:
             base_path = Path(__file__).resolve().parent.parent
 
         asset_path = base_path / "assets"
-        self.player_ship_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship3.png"))
-        self.player_ship_moving_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship3_moving.png"))
+        self.ship_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship.png"))
+        self.ship_forward_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship_forward.png"))
+        self.ship_backward_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship_backward.png"))
+
+        self.ship_forward_left_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship_forward_left.png"))
+        self.ship_forward_right_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship_forward_right.png"))
+        self.ship_backward_left_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship_backward_left.png"))
+        self.ship_backward_right_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship_backward_right.png"))
+        self.ship_rotate_right_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship_rotate_right.png"))
+        self.ship_rotate_left_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship_rotate_left.png"))
+        self.ship_translate_left = pygame.image.load(os.path.join(asset_path, "pngs/ship_translate_left.png"))
+        self.ship_translate_right = pygame.image.load(os.path.join(asset_path, "pngs/ship_translate_right.png"))
+
         self.enemy_ship_sprite = pygame.image.load(os.path.join(asset_path, "pngs/enemy_ship.png"))
         self.missile_sprite = pygame.image.load(os.path.join(asset_path, "pngs/missile.png"))
         self.drone_sprite = pygame.image.load(os.path.join(asset_path, "pngs/drone.png"))
-        self.drone_mining = pygame.image.load(os.path.join(asset_path, "pngs/drone_mining.png"))
+        self.drone_mining_sprite = pygame.image.load(os.path.join(asset_path, "pngs/drone_mining.png"))
         self.decoy_sprite = pygame.image.load(os.path.join(asset_path, "pngs/decoy.png"))
-        self.pirate_ship_sprite = pygame.image.load(os.path.join(asset_path, "pngs/pirate.png"))
-        self.pirate_ship_ambushing = pygame.image.load(os.path.join(asset_path, "pngs/pirate_ambushing.png"))
-
+        self.pirate_sprite = pygame.image.load(os.path.join(asset_path, "pngs/pirate.png"))
+        self.pirate_ambushing_sprite = pygame.image.load(os.path.join(asset_path, "pngs/pirate_ambushing.png"))
 
         self.font_asteroid_name = fonts.font(14)
 
@@ -101,12 +121,14 @@ class DrawGame:
 
                 screen_x = asteroid.pos_x - camera_x
                 screen_y = asteroid.pos_y - camera_y
+                outline_color, fill_color = ASTEROID_COLORS.get(
+                    asteroid.material, (theme.ASTEROID, theme.ASTEROID_FILL))
                 points = [(screen_x + ox, screen_y + oy) for ox, oy in asteroid.outline]
-                pygame.draw.polygon(self.screen, theme.ASTEROID_FILL, points)
-                pygame.draw.polygon(self.screen, theme.ASTEROID, points, 2)
+                pygame.draw.polygon(self.screen, fill_color, points)
+                pygame.draw.polygon(self.screen, outline_color, points, 2)
 
                 if asteroid.id_for_ui is not None:
-                    name_surf = self.font_asteroid_name.render(str(asteroid.id_for_ui), True, theme.ASTEROID)
+                    name_surf = self.font_asteroid_name.render(str(asteroid.id_for_ui), True, outline_color)
                     self.screen.blit(name_surf, name_surf.get_rect(center=(screen_x, screen_y)))
 
     def draw_explosions(self, explosions, camera_x, camera_y):
@@ -132,7 +154,7 @@ class DrawGame:
                 screen_y = drone.pos_y - camera_y
 
                 if drone.am_mining:
-                    self.screen.blit(self.drone_mining, (screen_x, screen_y))
+                    self.screen.blit(self.drone_mining_sprite, (screen_x, screen_y))
                 else:
                     self.screen.blit(self.drone_sprite, (screen_x, screen_y))
 
@@ -142,20 +164,48 @@ class DrawGame:
             screen_y = decoy.pos_y - camera_y
             self.screen.blit(self.decoy_sprite, (screen_x, screen_y))
 
+    def pick_player_sprite(self, ship):
+        """Choose the player's sprite from thrust direction, turn input and speed."""
+        # Retro is checked first: ship.thrusting is also True during a reverse burn
+
+        if ship.translate_left:
+            return self.ship_translate_left
+        elif ship.translate_right:
+            return self.ship_translate_right
+
+        if ship.retro_thrust:
+            if ship.rotate_left:
+                return self.ship_backward_left_sprite
+            if ship.rotate_right:
+                return self.ship_backward_right_sprite
+            return self.ship_backward_sprite
+
+        if ship.thrusting:
+            if ship.rotate_left:
+                return self.ship_forward_left_sprite
+            if ship.rotate_right:
+                return self.ship_forward_right_sprite
+            return self.ship_forward_sprite
+
+        # Turning on the spot: no thrust and nearly stopped
+        if not ship.thrusting and not ship.retro_thrust:
+            if ship.rotate_left:
+                return self.ship_rotate_left_sprite
+            if ship.rotate_right:
+                return self.ship_rotate_right_sprite
+
+        return self.ship_sprite
+
     def draw_ships(self, ships, camera_x, camera_y):
         for ship in ships:
             screen_x = ship.rect.center[0] - camera_x
             screen_y = ship.rect.center[1] - camera_y
 
             if ship.player:
-                if ship.thrusting:
-                    rotated_sprite = pygame.transform.rotate(self.player_ship_moving_sprite, ship.heading)
-                    rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
-                    self.screen.blit(rotated_sprite, rotated_rect)
-                else:
-                    rotated_sprite = pygame.transform.rotate(self.player_ship_sprite, ship.heading)
-                    rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
-                    self.screen.blit(rotated_sprite, rotated_rect)
+                sprite = self.pick_player_sprite(ship)
+                rotated_sprite = pygame.transform.rotate(sprite, ship.heading)
+                rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
+                self.screen.blit(rotated_sprite, rotated_rect)
             else:
                 rotated_sprite = pygame.transform.rotate(self.enemy_ship_sprite, ship.heading)
                 rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
@@ -168,11 +218,11 @@ class DrawGame:
                 screen_y = pirate.rect.center[1] - camera_y
 
                 if pirate.resting:
-                    rotated_sprite = pygame.transform.rotate(self.pirate_ship_ambushing, pirate.heading)
+                    rotated_sprite = pygame.transform.rotate(self.pirate_ambushing_sprite, pirate.heading)
                     rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
                     self.screen.blit(rotated_sprite, rotated_rect)
                 else:
-                    rotated_sprite = pygame.transform.rotate(self.pirate_ship_sprite, pirate.heading)
+                    rotated_sprite = pygame.transform.rotate(self.pirate_sprite, pirate.heading)
                     rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
                     self.screen.blit(rotated_sprite, rotated_rect)
 

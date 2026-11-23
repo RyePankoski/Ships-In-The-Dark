@@ -50,10 +50,6 @@ class ButtonLayer:
         self.register(rect, action, enabled=enabled, hold=hold)
 
     def button_row(self, screen, rect, specs, gap=8):
-        """Lay buttons out left to right across `rect`.
-
-        specs: list of (weight, label, action, kwargs). Width is shared by weight.
-        """
         rect = pygame.Rect(rect)
         total = sum(spec[0] for spec in specs)
         usable = rect.width - gap * (len(specs) - 1)
@@ -69,7 +65,6 @@ class ButtonLayer:
 
     # --- Input side -------------------------------------------------------
     def _top_at(self, pos):
-        # Last drawn is on top
         for button in reversed(self.active):
             if button.rect.collidepoint(pos):
                 return button
@@ -97,15 +92,6 @@ class ButtonLayer:
 
 
 def draw_frame(screen, rect, color=theme.AMBER, fill=theme.BG, tick=10, width=1):
-    """The one instrument-box style: a single plain border.
-
-    Args:
-        rect: Box to draw.
-        color: Border colour.
-        fill: Background colour, or None to leave what's underneath.
-        tick: Unused. Kept so callers don't change.
-        width: Border thickness.
-    """
     rect = pygame.Rect(rect)
     if fill is not None:
         pygame.draw.rect(screen, fill, rect)
@@ -116,13 +102,6 @@ _blank_lines_cache = None
 
 
 def draw_blank_underlay(screen):
-    """Knock what's on screen back behind a console overlay.
-
-    Not a translucent dim (that's a web lightbox): the tube blanks every
-    other scanline and drops what's left to half strength, like the feed
-    has been switched off the main display. Callers also make the
-    underneath unclickable (ButtonLayer.block_below).
-    """
     global _blank_lines_cache
     w, h = screen.get_size()
     if _blank_lines_cache is None or _blank_lines_cache.get_size() != (w, h):
@@ -135,18 +114,6 @@ def draw_blank_underlay(screen):
 
 def draw_button(screen, rect, label, key=None, lit=None, enabled=True, font=None, key_font=None,
                 lit_color=theme.GREEN, align="left", states=("ON", "OFF")):
-    """One console push-button in the game's frame style.
-
-    Args:
-        rect: Where to draw it.
-        label: Main text.
-        key: Keyboard shortcut shown small in the corner (e.g. "Q"), or None.
-        lit: None for a plain button, else True/False for its status readout.
-        enabled: Greyed out and unclickable-looking when False.
-        lit_color: Readout colour when lit (green = system on, amber = caution).
-        align: "left" (status + label) or "center".
-        states: Words shown in the bracketed status readout, (lit, unlit).
-    """
     rect = pygame.Rect(rect)
     font = font or fonts.font(17)
     key_font = key_font or fonts.font(12)

@@ -8,7 +8,6 @@ from utility import theme
 from asset_handlers import fonts
 from asset_handlers.buttons import ButtonLayer, draw_button, draw_frame
 from asset_handlers.grime import build_panel
-from asset_handlers.readouts import TopPanelReadouts
 from utility.common import end_blit, blink_cursor
 
 
@@ -57,7 +56,7 @@ class DrawUI:
     COLOR_DFS_YELLOW = theme.GREEN_BRIGHT
 
     # Laser/Targeting Colors
-    COLOR_LASER_ACTIVE = theme.GREEN          # your beam is a sensor
+    COLOR_LASER_ACTIVE = theme.GREEN  # your beam is a sensor
     COLOR_LASER_PAINTED = theme.AMBER_BRIGHT  # ...that has something on it
 
     # Threat/Warning Colors
@@ -90,7 +89,6 @@ class DrawUI:
     def __init__(self, screen):
         self.screen = screen
         self.lock_blink_counter = 0
-        self.readouts = TopPanelReadouts()
         self.buttons = ButtonLayer()
         self._telemetry_rect = None
 
@@ -109,7 +107,7 @@ class DrawUI:
         self.menu_small_font = fonts.font(18)
         self.menu_key_font = fonts.font(14)
 
-    #Menu stuff
+    # Menu stuff
 
     def draw_text_screen(self, title, lines, footer="", header="", buttons=()):
         """A framed console, same style as the in-game operator console: header
@@ -591,10 +589,11 @@ class DrawUI:
             return
         w = self.screen.get_width()
         margin = 24
-        bank_w = min(self.PANEL_WIDTH - 140, tele.left - 2 * margin)
+        bank_left = tele.right + 2 * margin
+        bank_w = w - margin - bank_left
         if bank_w < 150:
-            return  # screen too narrow for the banks; the keys still work
-        cols = 2 if bank_w >= 300 else 1
+            return  # screen too narrow for the bank; the keys still work
+        cols = 4 if bank_w >= 700 else (2 if bank_w >= 300 else 1)
 
         has_target = getattr(cockpit.target, 'net_id', None) is not None
         can_fire = ship.can_fire() and has_target
@@ -612,10 +611,9 @@ class DrawUI:
             ("TAC MAP", 'toggle_map', dict(key="M", lit=map_open)),
             ("CONSOLE", 'open_console', dict(key="ESC")),
         ]
-        left = pygame.Rect(margin, tele.top, bank_w, tele.height)
-        right = pygame.Rect(w - margin - bank_w, tele.top, bank_w, tele.height)
-        self._bank(left, "HELM // WEAPONS", helm, cols)
-        self._bank(right, "SENSORS // DISPLAYS", displays, cols)
+        # One merged bank: helm and weapons first, then sensors and displays
+        bank = pygame.Rect(bank_left, tele.top, bank_w, tele.height)
+        self._bank(bank, "HELM // WEAPONS // SENSORS // DISPLAYS", helm + displays, cols)
 
     def _get_radar_bounds(self):
         """Calculate radar panel bounds and return geometry.
@@ -643,10 +641,10 @@ class DrawUI:
         font = fonts.font(19)
         line_h = font.get_height() + 3
 
-        LIVE = theme.GREEN          # live readouts / system on
+        LIVE = theme.GREEN  # live readouts / system on
         CAUTION = theme.AMBER_BRIGHT
         THREAT = theme.RED
-        LABEL = theme.AMBER_DIM     # headings and switched-off systems
+        LABEL = theme.AMBER_DIM  # headings and switched-off systems
 
         def on(flag):
             return LIVE if flag else LABEL
@@ -695,7 +693,7 @@ class DrawUI:
         box_h = self.THIN_HEIGHT - 24
         world_left, world_right, _, world_bottom = self._get_world_bounds()
         box = pygame.Rect(0, 0, box_w, box_h)
-        box.midtop = ((world_left + world_right) // 2, world_bottom + 12)
+        box.topleft = (24, world_bottom + 12)  # left end of the bottom strip; the control bank takes the rest
         self._telemetry_rect = box
         self._frame(box)
 
@@ -737,9 +735,6 @@ class DrawUI:
             self._panel_cache_key = key
         for panel, surf in zip(panels, self._panel_cache):
             self.screen.blit(surf, panel)
-
-        # Background machine chatter in the top panel, either side of the callsign plate
-        self.readouts.draw(self.screen, panels[0], exclude=self._callsign_rect())
 
     def _callsign_rect(self):
         """The pilot ID box: top-left of the top panel."""
@@ -797,6 +792,79 @@ class DrawUI:
             lamp_on = (pygame.time.get_ticks() // 700) % 2 == 0
             lamp = (rect.right - pad - 4, rule_y + 10 + line_h + small.get_height() // 2)
             pygame.draw.circle(self.screen, LIVE if lamp_on else theme.GREEN_FAINT, lamp, 4)
+
+    def draw_power_readout(self, ship):
+        """Fuel and current draw, right-aligned in the top panel opposite the pilot ID."""
+        top = self._get_panel_rects()[0]
+        font = fonts.font(26)
+        line_h = font.get_height() + 6
+
+        # The frame is exactly as wide as the radar beneath it; everything inside is fitted to that width.
+        radar_x, _, radar_size = self._get_radar_bounds()
+        PAD, GAP, ACK_W = 16, 16, 170
+        alert_font = fonts.font(20)
+        box_h = 2 * line_h + 14 + alert_font.get_height() + 20 + 12  # frame: 12 above the block, to the alert row's bottom
+        y = top.centery - box_h // 2 + 12  # so the frame is centred in the top panel
+        alert_y = y + 2 * line_h + 14
+        panel_box = pygame.Rect(radar_x, y - 12, radar_size, box_h)
+        self._frame(panel_box, fill=theme.BG, tick=10, width=1)
+
+        # Top rows: [fault button] then label / bar / value columns filling the rest
+        x_val = panel_box.right - PAD
+        val_w = font.size("0000")[0]
+        lab_w = font.size("DRAW")[0]
+        x_lab = panel_box.left + PAD + ACK_W + GAP
+        x_bar = x_lab + lab_w + GAP
+        bar_w = x_val - val_w - GAP - x_bar
+        BAR_CELLS = max(4, (bar_w - font.size("||")[0]) // font.size("#")[0])  # as many cells as fit
+        self._power_rect = pygame.Rect(x_lab, y, x_val - x_lab, 2 * line_h)  # the whole block, for overlays
+
+        fuel = max(0, min(SHIP_MAX_FUEL, ship.fuel))
+        filled = round(BAR_CELLS * fuel / SHIP_MAX_FUEL)
+        frac = fuel / SHIP_MAX_FUEL
+        bar_col = theme.RED if frac < 0.2 else (theme.AMBER_BRIGHT if frac < 0.4 else theme.GREEN)
+        bar = font.render(f"|{'#' * filled}{' ' * (BAR_CELLS - filled)}|", True, bar_col)
+
+        self.screen.blit(font.render("FUEL", True, theme.AMBER_DIM), (x_lab, y))
+        self.screen.blit(bar, (x_bar, y))
+        self._fuel_bar_rect = pygame.Rect(x_bar, y, bar.get_width(), bar.get_height())  # for the depleted card
+        self._throttle_rect = pygame.Rect(x_bar, y + line_h, bar.get_width(), font.get_height())  # DRAW row, under the bar
+        fuel_val = font.render(f"{int(fuel):04d}", True, bar_col)
+        self.screen.blit(fuel_val, fuel_val.get_rect(topright=(x_val, y)))
+
+        self.screen.blit(font.render("DRAW", True, theme.AMBER_DIM), (x_lab, y + line_h))
+        draw_val = font.render(f"{ship.current_draw}", True, theme.GREEN)
+        self.screen.blit(draw_val, draw_val.get_rect(topright=(x_val, y + line_h)))
+
+        # Fault acknowledge: left of the readout, as tall as its two rows
+        self._button(pygame.Rect(panel_box.left + PAD, y, ACK_W, 2 * line_h),
+                     "FAULT ACK", 'fuel_acknowledge', lit=ship.fuel_acknowledge)
+
+        if ship.fuel_acknowledge:
+            return
+
+        # Alerts on a row under the readout (clear of the out-of-fuel box, which ends 12px below the block)
+        LOW_FUEL = SHIP_MAX_FUEL / LOW_FUEL_FRACTION  # 20% of the tank
+        # current_draw at or above this is high
+        # Each alert has a fixed slot so it never moves: LOW FUEL bottom-left, HIGH DRAW bottom-right.
+        # A slot's box only appears while its alert is on; the words flash inside it.
+        blink_on = (pygame.time.get_ticks() // 300) % 2 == 0
+        slots = [
+            (fuel <= LOW_FUEL, "LOW FUEL!", "left"),
+            (ship.current_draw >= HIGH_USE, "WARNING, HIGH DRAW!", "right"),
+        ]
+        for active, text, side in slots:
+            if not active:
+                continue
+            surf = alert_font.render(text, True, theme.RED)
+            box = pygame.Rect(0, 0, surf.get_width() + 24, surf.get_height() + 12)
+            if side == "left":
+                box.topleft = (panel_box.left + PAD, alert_y)
+            else:
+                box.topright = (panel_box.right - PAD, alert_y)
+            self._frame(box, theme.RED, fill=theme.BG, tick=8, width=2)
+            if blink_on:
+                self.screen.blit(surf, surf.get_rect(center=box.center))
 
     def draw_ui_ftl_override(self, ftl_jumping):
         """Draw simple FTL JUMPING text boxes that fade out.
@@ -1054,8 +1122,8 @@ class DrawUI:
         # Emitter box at the beam's origin, rotated to the beam direction so it
         # reads as the machine the beam comes out of (drawn over the beam start)
         rad = math.radians(laser.direction)
-        fx, fy = math.cos(rad), math.sin(rad)     # along the beam
-        px, py = -fy, fx                          # across the beam
+        fx, fy = math.cos(rad), math.sin(rad)  # along the beam
+        px, py = -fy, fx  # across the beam
         half_len, half_wid = 5, 4
         cx, cy = screen_origin
         emitter = [
@@ -1110,6 +1178,45 @@ class DrawUI:
 
         self.screen.set_clip(None)
 
+    def draw_mining_beam(self, ship, rock, progress, camera_x, camera_y):
+        """Mining beam from the ship to the rock it is burning. Drawn the same way as
+        the pirate's beam (see DrawGame.draw_laser): layered beam with a pulsing impact
+        ring on the rock. The rock's material and percentage sit beside it."""
+        world_left, world_right, world_top, world_bottom = self._get_world_bounds()
+        viewport = pygame.Rect(world_left, world_top,
+                               world_right - world_left, world_bottom - world_top)
+        self.screen.set_clip(viewport)
+
+        sx = int(ship.center[0] - camera_x)
+        sy = int(ship.center[1] - camera_y)
+        ex = int(rock.pos_x - camera_x)
+        ey = int(rock.pos_y - camera_y)
+
+        # Same three layers as the pirate beam: glow, inner, hot core
+        pygame.draw.line(self.screen, theme.RED_DIM, (sx, sy), (ex, ey), 8)
+        pygame.draw.line(self.screen, theme.RED_BRIGHT, (sx, sy), (ex, ey), 4)
+        pygame.draw.line(self.screen, theme.WHITE, (sx, sy), (ex, ey), 2)
+
+        # Impact ring and crosshair, pulsing the same way the pirate's does
+        pulse = (pygame.time.get_ticks() / 1000 * 3) % 1.0
+        radius = int(4 + pulse * 12)
+        alpha = int(255 * (1.0 - pulse))
+        ring = pygame.Surface((40, 40), pygame.SRCALPHA)
+        pygame.draw.circle(ring, (*theme.RED_BRIGHT, alpha), (20, 20), radius, 2)
+        flare_size = 6 - int(pulse * 4)
+        if flare_size > 0:
+            pygame.draw.line(ring, (*theme.WHITE, alpha), (20 - flare_size, 20), (20 + flare_size, 20), 1)
+            pygame.draw.line(ring, (*theme.WHITE, alpha), (20, 20 - flare_size), (20, 20 + flare_size), 1)
+        self.screen.blit(ring, (ex - 20, ey - 20))
+
+        label = self.font_scan_body.render(f"{rock.material.upper()} {progress * 100:.0f}%", True, theme.RED_BRIGHT)
+        label_rect = label.get_rect(midleft=(ex + rock.size + 8, ey))
+        label_rect.clamp_ip(viewport)
+        pygame.draw.rect(self.screen, theme.BG, label_rect.inflate(6, 2))
+        self.screen.blit(label, label_rect)
+
+        self.screen.set_clip(None)
+
     def draw_laser_targeting_info(self, target_type: str, laser_assessor, enabled: bool):
         """Draw laser targeting assessment status below the radar panel.
 
@@ -1153,7 +1260,7 @@ class DrawUI:
             (1, "<", 'arrow_key_left', dict(key="", enabled=enabled, hold=True, align="center")),
             (1, ">", 'arrow_key_right', dict(key="", enabled=enabled, hold=True, align="center")),
             (2, "LOCK", 'laser_lock', dict(key="SPC", lit=locked, enabled=enabled and (locked or has_contact),
-                                         lit_color=theme.AMBER_BRIGHT)),
+                                           lit_color=theme.AMBER_BRIGHT)),
             (2, "PWR", 'toggle_laser', dict(key="I", lit=enabled)),
         ], gap=6)
 
@@ -1184,6 +1291,77 @@ class DrawUI:
         y = region.centery - surf1.get_height() // 2
         self.screen.blit(surf1, (region.left + 8, y))
         self.screen.blit(surf2, (region.left + 8 + surf1.get_width() + gap, y))
+
+    def material_box_rect(self):
+        """The free space under the laser assessor box, down to the bottom console."""
+        radar_x, radar_y, radar_size = self._get_radar_bounds()
+        laser_y = radar_y + radar_size + 14
+        laser_h = (self.screen.get_height() - self.THIN_HEIGHT - 12 - laser_y) // 2
+        box_y = laser_y + laser_h + 14
+        box_h = self.screen.get_height() - self.THIN_HEIGHT - 12 - box_y
+        return pygame.Rect(radar_x, box_y, radar_size, box_h)
+
+    def draw_material_assessment(self, assessor):
+        """Material assessor box: what the beam is on, scan progress, and the last result.
+
+        assessor: MaterialAssessor (reads .laser, .scanning, .scan_progress(), .result)
+        """
+        box = self.material_box_rect()
+        laser_target = assessor.laser_target()
+        enabled = assessor.laser.on
+        scanning = assessor.scanning is not None
+
+        border_color = self.COLOR_HUD_AMBER if enabled else theme.AMBER_DIM
+        self._frame(box, border_color, tick=8)
+
+        header = self.font_tiny.render(" MATERIAL ASSESSMENT ", True, border_color)
+        tab = header.get_rect(midleft=(box.left + 14, box.top))
+        pygame.draw.rect(self.screen, theme.BG, tab)
+        self.screen.blit(header, tab)
+
+        top_h = box.height // 2
+
+        # Status words, most specific first
+        if not enabled:
+            text_str, color = "ASSESSOR OFFLINE", theme.GREY
+        elif scanning:
+            text_str, color = "SCANNING TARGET", theme.AMBER_BRIGHT
+        elif laser_target is None:
+            text_str, color = "NO TARGET UNDER BEAM", theme.GREY
+        elif assessor.result is not None and assessor.result[0] is laser_target:
+            text_str, color = f"MATERIAL: {assessor.result[1].upper()}", self.COLOR_DATA
+        else:
+            text_str, color = "READY: PRESS SCAN", self.COLOR_HUD_AMBER
+
+        region_top = box.top + tab.height // 2 + 2
+        region = pygame.Rect(box.left + 8, region_top, box.width - 16, box.top + top_h - 22 - region_top)
+        for size in (34, 30, 26, 22, 18, 14):
+            status_font = fonts.font(size)
+            surf = status_font.render(text_str, True, color)
+            if status_font.get_height() <= region.height and surf.get_width() <= region.width:
+                break
+        self.screen.blit(surf, (region.left + 8, region.centery - surf.get_height() // 2))
+
+        # Progress bar along the bottom of the top half: |###########     |
+        # Segment count is worked out from the box width, so the bar runs edge to edge at the body font size.
+        bar_font = self.font_scan_body
+        cell_w = bar_font.size("#")[0]
+        target_w = box.width - 28
+        segments = max(1, (target_w - bar_font.size("||")[0]) // cell_w)
+        filled = round(segments * assessor.scan_progress())
+        bar_text = "|" + "#" * filled + " " * (segments - filled) + "|"
+        bar_surf = bar_font.render(bar_text, True, self.COLOR_HUD_AMBER if scanning else theme.AMBER_DIM)
+        self.screen.blit(bar_surf, bar_surf.get_rect(midleft=(box.left + 14, box.top + top_h - 14)))
+
+    def draw_material_scan_button(self, assessor):
+        """SCAN button in the bottom half of the material box. Drawn after the panel so it sits on top."""
+        box = self.material_box_rect()
+        top_h = box.height // 2
+        controls = pygame.Rect(box.left + 8, box.top + top_h + 4, box.width - 16, box.height - top_h - 8)
+        can_scan = assessor.scanning is None and assessor.laser_target() is not None
+        self._button_row(controls, [
+            (1, "SCAN", 'material_scan', dict(key="N", enabled=can_scan)),
+        ])
 
     def draw_missile_vectors(self, player_id, missiles, camera_x, camera_y):
         world_left, world_right, world_top, world_bottom = self._get_world_bounds()
@@ -1282,7 +1460,8 @@ class DrawUI:
         return (player_x + (pos[0] - center[0]) / scale,
                 player_y + (pos[1] - center[1]) / scale)
 
-    def draw_tactical_map(self, active, player_ship, confirmed_contacts, scan_active=False, scan_range=1000, laser_active=False, laser_direction=0, laser_locked=False, locked_object=None, markers=(), marker_mode=None):
+    def draw_tactical_map(self, active, player_ship, confirmed_contacts, scan_active=False, scan_range=1000, laser_active=False, laser_direction=0, laser_locked=False, locked_object=None, markers=(),
+                          marker_mode=None):
         """marker_mode: None, 'PICK' (choosing a shape) or a shape name (waiting for a click on the map)."""
         if not active:
             return
@@ -1617,8 +1796,8 @@ class DrawUI:
         panel_width = 560
         panel_y = self.THIN_HEIGHT + self.DFS_PANEL_MARGIN
         panel_height = (
-                screen_height - panel_y - self.THIN_HEIGHT - self.DFS_PANEL_MARGIN
-        ) // 2
+                               screen_height - panel_y - self.THIN_HEIGHT - self.DFS_PANEL_MARGIN
+                       ) // 2
         rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
         self._frame(rect, self.COLOR_DFS_BORDER, fill=self.COLOR_DFS_BG, width=2)
 
@@ -1936,6 +2115,31 @@ class DrawUI:
             dim = pygame.Surface((w, h), pygame.SRCALPHA)
             dim.fill((0, 0, 0, int(140 * s)))
             screen.blit(dim, (0, 0))
+
+    def draw_out_of_fuel_warning(self, out_of_fuel):
+        """Flashing red tag slotted over the fuel bar, only while the tank is empty."""
+        if not out_of_fuel or getattr(self, "_fuel_bar_rect", None) is None:
+            return
+
+        box = self._fuel_bar_rect.inflate(8, 8)
+
+        # Hard blink between bright and dull red
+        on = (pygame.time.get_ticks() // 350) % 2 == 0
+        col = theme.RED_BRIGHT if on else theme.RED
+        self._frame(box, col, fill=theme.BG, tick=10, width=2)
+
+        title = fonts.font(20).render("DEPLETED", True, col)
+        self.screen.blit(title, title.get_rect(center=box.center))
+
+        # Systems throttled: a second tag in the free space under the bar, the largest size that fits
+        if getattr(self, "_throttle_rect", None) is not None:
+            tag = self._throttle_rect.inflate(8, 4)
+            size = 18
+            while size > 10 and fonts.font(size).size("SYSTEMS THROTTLED")[0] > tag.width - 8:
+                size -= 1
+            self._frame(tag, col, fill=theme.BG, tick=10, width=2)
+            sub = fonts.font(size).render("SYSTEMS THROTTLED", True, col)
+            self.screen.blit(sub, sub.get_rect(center=tag.center))
 
     def draw_low_health_warning(self, low_health):
         """Draw flashing red warning box in bottom left of viewport.

@@ -139,6 +139,7 @@ class NetClient:
             'seq': self.input_seq,
             'move': command['move'],
             'laser_target': command['laser_target'],
+            'power': command['power'],
             'actions': self.unacked_actions,
         })
 

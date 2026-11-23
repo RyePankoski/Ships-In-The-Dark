@@ -1,4 +1,5 @@
 import math
+from selectors import SelectSelector
 
 import pygame
 from utility.constants import *
@@ -16,8 +17,10 @@ class Ship(DirectionSteered):
     """
 
     kind = 'ship'
+    material = 'metallic'
 
     def __init__(self, x=None, y=None, is_player=False, player_id=None, is_ai=False):
+
         self.player = is_player
         self.pos_x = x
         self.pos_y = y
@@ -28,7 +31,8 @@ class Ship(DirectionSteered):
         self.player_id = player_id
 
         self.heading = 0
-        self.turn_speed = 0.0  # degrees per second, eased toward the turn the keys ask for
+        self.turn_speed = 0.0
+        self.turning = False
 
         if is_ai:
             self.ai = AI(self)
@@ -44,6 +48,25 @@ class Ship(DirectionSteered):
         self.radar_cross_section = 100
         self.health = 100
 
+        # Power related
+        self.fuel = SHIP_MAX_FUEL
+        self.current_draw = 0
+        self.fuel_acknowledge = False
+        self.low_fuel = False
+        self.laser_on = False
+        # Mining beam: the switch is a power flag; target and progress are facts the
+        # world works out (see simulation/world.py: _step_mining).
+        self.mining_on = False
+        self.mining_target = None  # net_id of the rock being mined
+        self.mining_progress = 0.0  # 0.0 to 1.0
+        self.prox_scan_on = False
+        self.blinking = False
+        self.deep_field_on = False
+        self.radar_scan_on = False
+        self.material_assessor_on = False
+
+        self.max_speed = SHIP_MAX_SPEED
+
         self.total_missiles = TOTAL_MISSILES
         self.missile_cooling_down = False
         self.missile_cooldown_timer = 0
@@ -52,6 +75,12 @@ class Ship(DirectionSteered):
         self.mining_vessel_sees_you = False
         self.health_low = False
         self.thrusting = False
+        self.retro_thrust = False
+        self.rotate_left = False
+        self.rotate_right = False
+        self.translate_left = False
+        self.translate_right = False
+
         self.braking = False  # tab held; drives the BRAKE readout (set from local input)
         self.dampening = True
 
@@ -81,7 +110,51 @@ class Ship(DirectionSteered):
     def on_radar_ping(self, angle):
         self.enemy_radar_ping_coordinates.append(angle)
 
+    def calculate_draw_and_use_fuel(self, dt):
+
+        if self.fuel < SHIP_MAX_FUEL / LOW_FUEL_FRACTION:
+            self.low_fuel = True
+        else:
+            self.low_fuel = False
+
+        self.current_draw = 0
+
+        if self.thrusting:
+            self.current_draw += 2
+        if self.dampening:
+            self.current_draw += 1
+        if self.turning:
+            self.current_draw += 0.5
+        if self.braking:
+            self.current_draw += 0.5
+        if self.laser_on:
+            self.current_draw += 1
+        if self.mining_on:
+            self.current_draw += MINING_DRAW
+        if self.prox_scan_on:
+            self.current_draw += 0.1
+        if self.blinking:
+            self.current_draw += 50
+        if self.deep_field_on:
+            self.current_draw += 1
+        if self.radar_scan_on:
+            self.current_draw += 0.25
+        if self.material_assessor_on:
+            self.current_draw += 0.5
+
+        # Per second of play, not per simulation step: singleplayer steps every frame and the
+        # server steps TICK_RATE times a second, so a step-based drain would differ between them.
+        use = self.current_draw / 45 * dt * TICK_RATE
+        self.fuel -= use
+
     def run(self, dt):
+
+        self.calculate_draw_and_use_fuel(dt)
+
+        if self.fuel <= 0:
+            self.max_speed = THROTTLED_SPEED
+        else:
+            self.max_speed = SHIP_MAX_SPEED
 
         if self.took_damage:
             self.damage_timer += dt
@@ -92,7 +165,6 @@ class Ship(DirectionSteered):
 
         if self.health < 20:
             self.health_low = True
-
             self.health += 1 * dt
 
         else:
@@ -161,33 +233,65 @@ class Ship(DirectionSteered):
         rad = math.radians(self.heading)
         return -math.sin(rad), -math.cos(rad)
 
+    def right_vector(self):
+        """Unit vector out of the ship's right side (screen coordinates)."""
+        rad = math.radians(self.heading)
+        return math.cos(rad), -math.sin(rad)
+
     def apply_inputs(self, inputs, dt):
-        boosting = inputs['left_shift']
-        speed_cap = SHIP_MAX_SPEED * (BOOST_SPEED_MULT if boosting else 1)
+
+        translate = inputs['left_shift']
+        speed_cap = self.max_speed
 
         # Turning: left and right set a turn rate that eases toward its target,
-        # so the nose swings up to speed and settles out smoothly.
-        turn_input = (1 if inputs['left'] else 0) - (1 if inputs['right'] else 0)
+        # so the nose swings up to speed and settles out smoothly. With shift held
+        # left and right slide the ship sideways instead, so the nose doesn't turn.
+        turn_input = 0 if translate else (1 if inputs['left'] else 0) - (1 if inputs['right'] else 0)
         slowdown = 1 - SHIP_TURN_SLOWDOWN * min(1.0, self.speed / SHIP_MAX_SPEED)
         target = turn_input * SHIP_TURN_RATE * slowdown
         step = SHIP_TURN_ACCEL * dt
         self.turn_speed += max(-step, min(step, target - self.turn_speed))
         self.heading = (self.heading + self.turn_speed * dt) % 360
 
+        self.rotate_left = bool(inputs['left']) and not translate
+        self.rotate_right = bool(inputs['right']) and not translate
+        self.turning = self.rotate_left or self.rotate_right
+
         # Thrust: up pushes along the nose, down is a weaker reverse burn
         thrust = 0.0
         if inputs['up']:
             thrust = 1.0
         elif inputs['down']:
+            self.retro_thrust = True
             thrust = -RETRO_THRUST_FRACTION
-        self.thrusting = thrust != 0
+        else:
+            self.retro_thrust = False
 
-        if self.thrusting:
-            accel = SHIP_THRUST * (BOOST_THRUST_MULT if boosting else 1) * thrust
+        # Slide: with shift held, left and right push across the nose
+        slide = 0
+        if translate:
+            slide = (1 if inputs['right'] else 0) - (1 if inputs['left'] else 0)
+            self.translate_left = slide < 0
+            self.translate_right = slide > 0
+        else:
+            self.translate_left = False
+            self.translate_right = False
+
+        self.thrusting = thrust != 0 or slide != 0
+
+        if thrust != 0:
+            accel = SHIP_THRUST * 1 * thrust
             fx, fy = self.facing()
             # Never let thrust add speed beyond the cap, but don't cut a ship that is already over it
             self._set_velocity(self.vel_x + fx * accel * dt,
                                self.vel_y + fy * accel * dt,
+                               max(speed_cap, self.speed))
+
+        if slide != 0:
+            accel = SHIP_THRUST * slide
+            rx, ry = self.right_vector()
+            self._set_velocity(self.vel_x + rx * accel * dt,
+                               self.vel_y + ry * accel * dt,
                                max(speed_cap, self.speed))
 
         # Brakes: a hard, frame-rate independent bleed of velocity
