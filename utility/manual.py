@@ -11,7 +11,7 @@ DECOY_MANUAL = ("Decoys are a deployable dummy drone that can be used to defeat 
                 " your trail. To use a decoy, press the button labeled [DECOY] or hit 'left-alt' on your keyboard. THey have a limited lifespan of about 60 seconds before they disappear.")
 BLINK_DRIVE_MANUAL = ("The blink drive is a short range ftl jump that functionally teleports your ship to a random point somewhere in the engagement space. Be warned, it creates a large detectable "
                       "signature and uses a significant amount of fuel. You can use this to defeat a missile, or quickly reposition if you are being collapsed on. To use the blink drive, press "
-                      "the button labeled [BLINK] or hit 't' on your keyboard.")
+                      "the button labeled [BLINK] or hit 't' on your keyboard. Note: YOu cannot blink if you have less than 50 fuel")
 INERT_DAMPENER_MANUAL = ("The inertial dampening is an automated system that slows the ship down slowly when the ship is not using its thrusters. To toggle the inertial dampener, press the button "
                          "labeled [INERT DAMP] or hit 'g' on your keyboard.")
 RADAR_MANUAL = ("The radar is an instrument that detects solid objects and displays them on the radar panel. It sweeps in a circle around the player. Radar cannot see through objects, so for example "

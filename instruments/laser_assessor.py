@@ -114,13 +114,14 @@ class LaserAssessor(Instrument):
             ray_y += dy * LASER_STEP
 
             for contact in self.contacts.near(ray_x, ray_y, reach, exclude=self.ship):
+                if not contact.alive:
+                    continue
                 c_x, c_y = contact.center
                 if (c_x - ray_x) ** 2 + (c_y - ray_y) ** 2 < contact.radar_cross_section ** 2:
                     target_type, distance = self.assess_target(c_x, c_y, contact)
                     self.target_distance = distance
                     contact.painted = True
                     self.current_target = contact
-
                     return (ray_x, ray_y), target_type
 
         return (ray_x, ray_y), target_type

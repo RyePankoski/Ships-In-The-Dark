@@ -99,6 +99,7 @@ class Ship(DirectionSteered):
         # and times the on-screen failure effect from there.
         self.impact_count = 0
 
+
     @property
     def net_id(self):
         return self.player_id

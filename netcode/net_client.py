@@ -47,6 +47,12 @@ class NetClient:
         self.next_action_id = 1
         self.unacked_actions = []
 
+        # Which match the server is running. Bumps when it goes back to the lobby.
+        self.match = 0
+        # Set when our game ends; we keep telling the server until it moves on
+        self.match_over_pending = False
+        self.since_report = HELLO_INTERVAL
+
         self.since_sent = HELLO_INTERVAL  # say hello on the first update
         self.last_heard = time.monotonic()
 
@@ -65,6 +71,12 @@ class NetClient:
         if self.since_sent >= HELLO_INTERVAL:
             self.send({'type': 'hello', 'callsign': self.callsign})
 
+        if self.match_over_pending:
+            self.since_report += dt
+            if self.since_report >= HELLO_INTERVAL:
+                self.since_report = 0.0
+                self.send({'type': 'match_over'})
+
         for message, address in self.network.receive_all():
             if address[1] != self.server_address[1]:
                 continue
@@ -79,7 +91,25 @@ class NetClient:
             elif kind == 'state' and self.welcomed:
                 self.receive_state(message)
 
+    def report_match_over(self):
+        """Our game ended. Tell the server (repeatedly, until it has gone back to the lobby)."""
+        self.match_over_pending = True
+        self.since_report = HELLO_INTERVAL
+
     def receive_state(self, message):
+        match = message.get('match', 0)
+        if match < self.match:
+            return  # left over from a match that has already ended
+        if match > self.match:
+            # A new match: its world, tick and asteroid log all start again
+            self.match = match
+            self.seed = message.get('seed', self.seed)
+            self.match_over_pending = False
+            self.latest_tick = -1
+            self.pending_events = []
+            self.pending_dead = []
+            self.dead_known = 0
+
         # Events, the roster and dead asteroids are taken from every state that
         # arrives, even one that's out of order or superseded before the game
         # reads it, so none of them can be lost.
@@ -147,6 +177,7 @@ class NetClient:
         # Every packet tells the server what we already have, so it can stop resending
         message['rv'] = self.roster_version
         message['dk'] = self.dead_known
+        message['m'] = self.match
         self.network.send(message, self.server_address)
         self.since_sent = 0
 

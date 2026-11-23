@@ -14,6 +14,8 @@ pygame.init()
 clock = pygame.time.Clock()
 FPS = REF_HZ
 
+# A fixed window, not the monitor's size: it fits a 1080p screen (with title bar and taskbar)
+# and doesn't depend on which display the OS lists first
 size = pygame.display.get_desktop_sizes()[0]
 screen = pygame.display.set_mode(size)
 core = Core(screen)

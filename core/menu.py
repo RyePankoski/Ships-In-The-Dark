@@ -33,12 +33,14 @@ class Menu:
         return None
 
     def main_screen(self, events, callsign, status):
-        """Returns 'single', 'host', 'join' or 'callsign' when one is chosen."""
-        keys = {pygame.K_s: 'single', pygame.K_h: 'host', pygame.K_j: 'join', pygame.K_c: 'callsign'}
+        """Returns 'single', 'host', 'join', 'callsign' or 'quit' when one is chosen."""
+        keys = {pygame.K_s: 'single', pygame.K_h: 'host', pygame.K_j: 'join', pygame.K_c: 'callsign',
+                pygame.K_q: 'quit'}
         buttons = [("SINGLE PLAYER", "S", 'single'),
                    ("HOST GAME", "H", 'host'),
                    ("JOIN GAME", "J", 'join'),
-                   ("CHANGE CALLSIGN", "C", 'callsign')]
+                   ("CHANGE CALLSIGN", "C", 'callsign'),
+                   ("QUIT", "Q", 'quit')]
         for action in self.menu_actions(events, keys):
             return action
 

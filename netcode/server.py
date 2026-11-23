@@ -18,6 +18,9 @@ PLAYER_TIMEOUT = 5.0
 MAX_PLAYERS = 16
 MIN_PLAYERS_TO_LAUNCH = 1
 
+# The host's own client joins from this machine, so its packets arrive from here
+HOST_ADDRESS = '127.0.0.1'
+
 CALLSIGN_MAX = 10
 CALLSIGN_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-")
 
@@ -87,6 +90,7 @@ class Server:
         self.roster_version = 1
 
         self.started = False
+        self.match = 0  # bumps every time the server goes back to the lobby
         self.tick = 0
         self.accumulator = 0.0
         self.broadcast_timer = 0.0
@@ -102,6 +106,28 @@ class Server:
         if self.can_launch:
             self.started = True
             print(f"[SERVER] Launching with {len(self.players)} players")
+
+    def return_to_lobby(self):
+        """The match is over: fresh world and seed, same pilots, back to the lobby."""
+        if not self.started:
+            return
+        self.started = False
+        self.match += 1
+        self.seed = random.randrange(2 ** 31)
+        callsigns = dict(self.world.callsigns)
+        self.world = World(self.seed, with_npcs=False)
+        self.world.callsigns = callsigns
+        self.tick = 0
+        self.accumulator = 0.0
+        self.recent_events = []
+        for slot in self.players.values():
+            self.world.spawn_ship(slot.player_id)
+            slot.move = None
+            slot.laser_target = None
+            slot.power = None
+            slot.queued_actions = []
+            slot.dead_known = 0
+        print(f"[SERVER] Match over, back to lobby (match {self.match})")
 
     def run(self, dt):
 
@@ -157,13 +183,23 @@ class Server:
             for action in message.get('actions', []):
                 if action.get('aid', 0) > slot.last_action_id:
                     slot.last_action_id = action['aid']
-                    slot.queued_actions.append(action)
+                    # Acked either way, but actions pressed in the lobby are thrown away
+                    if self.started:
+                        slot.queued_actions.append(action)
+
+        elif kind == 'match_over' and slot is not None:
+            self.heard_from(slot, message)
+            # Only the host (the game running on this machine, which joins via loopback) may send everyone back
+            if address[0] == HOST_ADDRESS:
+                self.return_to_lobby()
 
     def heard_from(self, slot, message):
         slot.last_heard = time.monotonic()
         # Only ever forward: an old packet arriving late mustn't make us resend
         slot.roster_version = max(slot.roster_version, int(message.get('rv', 0)))
-        slot.dead_known = max(slot.dead_known, int(message.get('dk', 0)))
+        # dead_known counts the current match's log, so only trust it for this match
+        if int(message.get('m', -1)) == self.match:
+            slot.dead_known = max(slot.dead_known, int(message.get('dk', 0)))
 
     def add_player(self, address):
         taken = {slot.player_id for slot in self.players.values()}
@@ -209,25 +245,32 @@ class Server:
 
         # world.events is cleared every step and we may step several times per
         # broadcast, so collect them here.
-        for event in self.world.events:
-            self.recent_events.append((self.tick, [self.next_event_id, *event]))
+        # Each entry is (tick, [event_id, kind, *data], audience), where audience is the set
+        # of player_ids it is for, or None for everyone.
+        collected = [(None, event) for event in self.world.events]
+        collected += [(audience, event) for audience, event in self.world.private_events]
+        for audience, event in collected:
+            self.recent_events.append((self.tick, [self.next_event_id, *event], audience))
             self.next_event_id += 1
-        self.recent_events = [(tick, e) for tick, e in self.recent_events
+        self.recent_events = [(tick, e, audience) for tick, e, audience in self.recent_events
                               if self.tick - tick <= EVENT_RESEND_TICKS]
 
     def broadcast(self):
         snapshot = make_snapshot(self.world)
-        snapshot['events'] = [event for _, event in self.recent_events]
         roster = [self.roster_version, [[pid, cs] for pid, cs in sorted(self.world.callsigns.items())]]
         dead_log = self.world.dead_asteroid_log
 
         for address, slot in self.players.items():
             message = dict(snapshot)
+            message['events'] = [event for _, event, audience in self.recent_events
+                                 if audience is None or slot.player_id in audience]
             message.update({
                 'type': 'state',
                 'tick': self.tick,
                 'started': self.started,
                 'ack': slot.last_action_id,
+                'match': self.match,
+                'seed': self.seed,
             })
             if slot.roster_version < self.roster_version:
                 message['roster'] = roster

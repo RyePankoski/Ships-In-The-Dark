@@ -28,6 +28,9 @@ class Missile(WorldObject):
         self.reached_target = False
         self.radar_cross_section = 30
 
+        self.exploded_on_type = None
+        self.exploded_on_player = False
+
         # Smoothed avoidance vector (eases toward the feeler's push instead of
         # snapping, so on/off transitions glide rather than jerk).
         self.avoid_x = 0.0
@@ -65,7 +68,9 @@ class Missile(WorldObject):
             if hasattr(self.target, 'alive'):
                 print(type(self.target), self.target.alive)
                 self.target.alive = False
-
+                self.exploded_on_type = type(self.target)
+                # Human pilots have ai set to None; AI ships and other targets don't count
+                self.exploded_on_player = getattr(self.target, 'ai', True) is None
             return
 
         # Seek: unit vector straight at the target

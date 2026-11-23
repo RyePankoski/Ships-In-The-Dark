@@ -1,5 +1,6 @@
 import random
 import socket
+import sys
 
 import pygame
 
@@ -41,6 +42,7 @@ class Client:
         self.world = None
         self.server = None
         self.net = None
+        self.match_joined = None  # the server's match number when our current game started
 
         self.menu = Menu(screen, self.audio_manager)
         self.callsign = f"{random.choice(CALLSIGN_WORDS)}-{random.randint(1, 9)}"
@@ -51,8 +53,8 @@ class Client:
     # ------------------------------------------------------------------
     def start_single_player(self):
         self.world = World(random.randrange(2 ** 31), with_npcs=True)
-        self.world.spawn_ship(1)
-        self.world.spawn_ship(2, is_ai=True)
+        self.world.spawn_ship(1,x=500, y=500)
+        self.world.spawn_ship(2, is_ai=True, x=500, y=600)
         self.world.callsigns = {1: self.callsign or "PILOT-1", 2: "UNKNOWN"}
         self.main_scene = MainScene(self.screen, self.audio_manager, self.world, my_id=1, local=True)
         self.state = 'playing'
@@ -113,6 +115,9 @@ class Client:
             self.state = 'ip_entry'
         elif action == 'callsign':
             self.state = 'callsign_entry'
+        elif action == 'quit':
+            pygame.quit()
+            sys.exit()
 
     def edit_callsign(self, events):
         self.callsign = edit_text(events, self.callsign, lambda c: c.isalnum() or c == '-' or c == ' ', CALLSIGN_MAX).upper()
@@ -154,10 +159,13 @@ class Client:
             return
 
         state = net.take_state()
-        if net.welcomed and state is not None and state['started']:
+        # While our last game's end is still being reported, a 'started' state is the old match
+        if net.welcomed and state is not None and state['started'] and not net.match_over_pending:
             self.world = World(net.seed, with_npcs=False)
             self.sync_world(state)
             self.main_scene = MainScene(self.screen, self.audio_manager, self.world, my_id=net.player_id, local=False)
+            self.main_scene.is_host = self.server is not None
+            self.match_joined = net.match
             self.state = 'playing'
             return
 
@@ -197,25 +205,48 @@ class Client:
         if self.world.callsigns != self.net.roster:
             self.world.callsigns = dict(self.net.roster)
 
+    def return_to_lobby(self):
+        """Keep the connection (and the server, if we host) and go back to the lobby."""
+        self.main_scene = None
+        self.world = None
+        self.state = 'connecting'
+
     def run_playing(self, user_inputs, dt, events=()):
         if self.net:
             if self.net.timed_out:
                 self.audio_manager.stop_all()
                 self.leave("CARRIER LOST")
                 return
-            state = self.net.take_state()
-            if state is not None:
-                self.sync_world(state)
-            self.main_scene.handle_world_events(self.net.take_events())
+            # The host has sent everyone back to the lobby. This applies even to a pilot
+            # sitting on their own game over screen.
+            if self.net.match != self.match_joined:
+                self.audio_manager.stop_all()
+                self.return_to_lobby()
+                return
+            if self.net.match == self.match_joined:
+                state = self.net.take_state()
+                if state is not None:
+                    self.sync_world(state)
+                self.main_scene.handle_world_events(self.net.take_events())
 
         self.main_scene.run(user_inputs, dt, events)
 
-        # Game over screen
-        if self.main_scene.quit_requested or (self.main_scene.end_tripped and user_inputs['enter']):
+        # Game over screen: the host can take everyone back to the lobby (ENTER or the button);
+        # everyone can go to the menu (ESC, the button, or ENTER for non-hosts)
+        game_over = self.main_scene.end_tripped
+        back_to_lobby = bool(self.net and self.server
+                             and (self.main_scene.lobby_requested or (game_over and user_inputs['enter'])))
+        back_to_menu = self.main_scene.quit_requested or (
+            game_over and (user_inputs['enter'] or user_inputs['escape']))
+        if back_to_lobby or back_to_menu:
             self.audio_manager.stop_all()
             self.audio_manager.play_sfx('startup')
             self.audio_manager.play_ambience('ambience')
-            self.leave()
+            if back_to_lobby:
+                self.net.report_match_over()
+                self.return_to_lobby()
+            else:
+                self.leave()
             return
 
         if self.net:

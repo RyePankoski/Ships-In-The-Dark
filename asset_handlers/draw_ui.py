@@ -157,9 +157,10 @@ class DrawUI:
         self.buttons.end_frame()
         end_blit()
 
-    def draw_debrief_screen(self, status, detail, action, label):
+    def draw_debrief_screen(self, status, detail, options):
         """End-of-mission readout: plain left-aligned fields on black, no frame or
-        ornament. The one action is an underlined text line that is its own click area."""
+        ornament. Each option is an underlined text line that is its own click area.
+        options: [(action, label, key hint), ...], top to bottom."""
         from datetime import datetime, timezone
 
         self.screen.fill(theme.BLACK)
@@ -184,19 +185,150 @@ class DrawUI:
             self.screen.blit(body.render(value, True, color), (x0 + label_w, y))
             y += line_h
 
-        # The one action, bottom-left, as plain text with an underline
-        text = body.render(label, True, theme.AMBER)
-        key = head.render("  [ENTER]", True, theme.AMBER_DIM)
-        y = h - 48
-        self.screen.blit(text, (x0, y))
-        self.screen.blit(key, key.get_rect(bottomleft=(x0 + text.get_width(), y + text.get_height())))
-        underline_y = y + text.get_height() + 2
-        pygame.draw.line(self.screen, theme.AMBER_DIM, (x0, underline_y), (x0 + text.get_width() + key.get_width(), underline_y))
-        click = pygame.Rect(x0 - 8, y - 6, text.get_width() + key.get_width() + 16, text.get_height() + 12)
-        self.buttons.register(click, action)
+        self.draw_options(options)
 
         self.buttons.end_frame()
         end_blit()
+
+    def draw_options(self, options):
+        """Underlined text options down the bottom-left: [(action, label, key hint or None), ...]."""
+        x0 = 40
+        w, h = self.screen.get_size()
+        body = self.menu_font
+        head = self.menu_small_font
+        step = body.get_height() + 14
+        first_y = h - 48 - (len(options) - 1) * step
+        for i, (action, label, key_hint) in enumerate(options):
+            y = first_y + i * step
+            text = body.render(label, True, theme.AMBER)
+            key = head.render(f"  [{key_hint}]", True, theme.AMBER_DIM) if key_hint else pygame.Surface((0, 0))
+            self.screen.blit(text, (x0, y))
+            self.screen.blit(key, key.get_rect(bottomleft=(x0 + text.get_width(), y + text.get_height())))
+            underline_y = y + text.get_height() + 2
+            pygame.draw.line(self.screen, theme.AMBER_DIM, (x0, underline_y), (x0 + text.get_width() + key.get_width(), underline_y))
+            click = pygame.Rect(x0 - 8, y - 6, text.get_width() + key.get_width() + 16, text.get_height() + 12)
+            self.buttons.register(click, action)
+
+    def draw_spectate_hud(self, callsign, watched, number, total, options):
+        """The HUD once our own ship is gone: the same panels and readouts, in the
+        error state. Values read as dashes and the boxes are red. The only live
+        controls are the ones that still work: watching another pilot and leaving.
+
+        callsign: our own (lost) pilot name. watched: the pilot the camera is on.
+        number, total: which living pilot we're watching, out of how many.
+        options: [(action, label, key hint), ...] as for draw_options.
+        """
+        ERR = theme.RED
+        ERR_DIM = theme.RED_DIM
+        ERR_BRIGHT = theme.RED_BRIGHT
+        blink_on = (pygame.time.get_ticks() // 400) % 2 == 0
+        pad = 22
+        small = fonts.font(17)
+        self.draw_ui_layout()
+
+        # Pilot ID: our callsign, with the link down
+        rect = self._callsign_rect()
+        self._frame(rect, ERR)
+        self._box_title(rect, "PILOT ID // LOST", ERR)
+        name = callsign or "UNREGISTERED"
+        big = fonts.font(34)
+        name_surf = big.render(name, True, ERR_BRIGHT)
+        if name_surf.get_width() > rect.width - 2 * pad:
+            name_surf = fonts.font(26).render(name, True, ERR_BRIGHT)
+        name_y = rect.top + 8 + self.BOX_HEAD + 14
+        self.screen.blit(name_surf, (rect.left + pad, name_y))
+        rule_y = name_y + big.get_height() + 6
+        pygame.draw.line(self.screen, ERR_DIM, (rect.left + pad, rule_y), (rect.right - pad, rule_y))
+        value_x = rect.left + pad + small.size("IFF ")[0] + 14
+        y = rule_y + 10
+        for label, value in (("IFF", "--- ---"), ("LINK", "SIGNAL LOST")):
+            self.screen.blit(small.render(label, True, ERR_DIM), (rect.left + pad, y))
+            self.screen.blit(small.render(value, True, ERR), (value_x, y))
+            y += small.get_height() + 4
+
+        # Signal relay: the pilot we are watching, with PREV / NEXT
+        radar_x, radar_y, radar_size = self._get_radar_bounds()
+        top = self._get_panel_rects()[0]
+        relay = pygame.Rect(rect.right + 24, rect.top, max(160, radar_x - 24 - (rect.right + 24)), rect.height)
+        self._frame(relay, ERR)
+        self._box_title(relay, "SIGNAL RELAY", ERR)
+        self.screen.blit(small.render(f"WATCHING {number:02d} OF {total:02d}", True, ERR_DIM),
+                         (relay.left + pad, relay.top + 34))
+        self.screen.blit(fonts.font(26).render(watched, True, theme.GREEN),
+                         (relay.left + pad, relay.top + 34 + small.get_height() + 4))
+        bh = 34
+        bw = (relay.width - 2 * pad - 10) // 2
+        by = relay.bottom - 16 - bh
+        self._button((relay.left + pad, by, bw, bh), "< PREV", 'spectate_prev', enabled=total > 1)
+        self._button((relay.left + pad + bw + 10, by, bw, bh), "NEXT >", 'spectate_next', enabled=total > 1)
+
+        # Power: where the fuel and draw readouts would be
+        power = pygame.Rect(radar_x, top.top + 22, radar_size, top.height - 44)
+        self._frame(power, ERR)
+        self._box_title(power, "POWER // NO FEED", ERR)
+        readout = fonts.font(26)
+        y = power.top + 34
+        self.screen.blit(readout.render("FUEL", True, ERR_DIM), (power.left + pad, y))
+        self.screen.blit(readout.render(f"|{'-' * 6}|", True, ERR), (power.left + pad + 110, y))
+        y += readout.get_height() + 6
+        self.screen.blit(readout.render("DRAW", True, ERR_DIM), (power.left + pad, y))
+        dash = readout.render("----", True, ERR)
+        self.screen.blit(dash, dash.get_rect(topright=(power.right - pad, y)))
+        alert = fonts.font(20).render("CARRIER LOST", True, ERR)
+        if blink_on:
+            box = pygame.Rect(0, 0, alert.get_width() + 24, alert.get_height() + 12)
+            box.midbottom = (power.centerx, power.bottom - 14)
+            self._frame(box, ERR, tick=8, width=2)
+            self.screen.blit(alert, alert.get_rect(center=box.center))
+
+        # Radar: no returns
+        radar = pygame.Rect(radar_x, radar_y, radar_size, radar_size)
+        self._frame(radar, ERR, tick=12)
+        self._box_title(radar, "RADAR // NO RETURNS", ERR)
+        if blink_on:
+            msg = fonts.font(34).render("NO SIGNAL", True, ERR)
+            self.screen.blit(msg, msg.get_rect(center=radar.center))
+
+        # Telemetry: the same three columns as ship info, all dashes
+        font = fonts.font(19)
+        line_h = font.get_height() + 3
+        columns = [
+            [("NAV-COM", ERR_DIM), ("POS  X ------  Y ------", ERR), ("GRID --", ERR),
+             ("VEL  X ----  Y ----", ERR), (f"SPD  --- / {SHIP_MAX_SPEED:03d} U", ERR), ("HDG  --- DEG", ERR)],
+            [("SUBSYSTEMS", ERR_DIM), ("INERT DAMP  [--]", ERR), ("BRAKE       [--]", ERR), ("LINK DOWN", ERR)],
+            [("TACTICAL", ERR_DIM), ("THREAT  NO DATA", ERR), ("MSL  --/--  NO FEED", ERR), ("HULL  000/100", ERR)],
+        ]
+        rendered = [[font.render(t, True, c) for t, c in col] for col in columns]
+        col_w = [max(s.get_width() for s in col) for col in rendered]
+        gap = 44
+        box_w = sum(col_w) + gap * (len(columns) - 1) + 2 * pad
+        box_h = self.THIN_HEIGHT - 24
+        _, _, _, world_bottom = self._get_world_bounds()
+        tele = pygame.Rect(24, world_bottom + 12, box_w, box_h)
+        self._frame(tele, ERR)
+        rows = max(len(c) for c in columns)
+        y0 = tele.top + (box_h - rows * line_h) // 2 + 4
+        x = tele.left + pad
+        for col, cw in zip(rendered, col_w):
+            for i, surf in enumerate(col):
+                self.screen.blit(surf, (x, y0 + i * line_h))
+            pygame.draw.line(self.screen, ERR_DIM, (x, y0 + line_h - 2), (x + cw, y0 + line_h - 2))
+            x += cw + gap
+
+        # Controls: the only live buttons left (watch, return)
+        bank_left = tele.right + 48
+        bank_w = self.screen.get_width() - 24 - bank_left
+        if bank_w >= 150 and options:
+            bank = pygame.Rect(bank_left, tele.top, bank_w, tele.height)
+            self._frame(bank, ERR, tick=8)
+            self._box_title(bank, "CONTROLS // OFFLINE", ERR, steady=True)
+            inner = pygame.Rect(bank.left + 14, bank.top + 24, bank.width - 28, bank.height - 38)
+            n, bgap = len(options), 8
+            bw = min(360, (inner.width - bgap * (n - 1)) // n)
+            bh = min(52, inner.height)
+            by = inner.centery - bh // 2
+            for i, (action, label, key_hint) in enumerate(options):
+                self._button((inner.left + i * (bw + bgap), by, bw, bh), label, action, key=key_hint)
 
     def draw_splash_screen(self, enabled: bool, timer: float):
         """Boot screen in the operator-console style: a small system identification
@@ -1840,6 +1972,26 @@ class DrawUI:
         box = pygame.Rect(0, 0, text.get_width() + pad_x * 2, text.get_height() + pad_y * 2)
         box.topleft = (world_left + 16, world_top + 64)
         self._frame(box, theme.AMBER, fill=theme.BG, tick=6)
+        self.screen.blit(text, (box.left + pad_x, box.top + pad_y))
+
+    def draw_ship_destroyed(self, time_left, duration, callsign):
+        """Banner across the top of the viewport for a couple of seconds when another
+        pilot's ship goes down. Flickers in and out, like the missile contact banner."""
+        if time_left <= 0:
+            return
+
+        world_left, world_right, world_top, world_bottom = self._get_world_bounds()
+        elapsed = duration - time_left
+        if elapsed < 0.2 and int(elapsed * 30) % 2:
+            return
+        if time_left < duration / 4 and int(time_left * 12) % 2:
+            return
+
+        text = self.font_scan_header.render(f"SHIP DESTRUCTION DETECTED: {callsign}", True, theme.RED)
+        pad_x, pad_y = 18, 8
+        box = pygame.Rect(0, 0, text.get_width() + pad_x * 2, text.get_height() + pad_y * 2)
+        box.midtop = ((world_left + world_right) // 2, world_top + 16)
+        self._frame(box, theme.RED, fill=theme.BG, tick=6)
         self.screen.blit(text, (box.left + pad_x, box.top + pad_y))
 
     def draw_deep_field_panel(self, contacts, direction_index, system_online=True):

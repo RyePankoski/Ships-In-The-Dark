@@ -36,6 +36,7 @@ class WorldObject:
     speed = 0
     alive = True
     painted = False
+    drop_lock = False
 
     @property
     def center(self):

@@ -12,7 +12,7 @@ BOOST_THRUST_MULT = 2.0  # shift: thrust multiplier
 BOOST_SPEED_MULT = 1.5 # shift: raises the speed cap
 
 
-SHIP_MAX_FUEL = 201
+SHIP_MAX_FUEL = 401
 LOW_FUEL_FRACTION = 5 # 20%
 HIGH_USE = 4
 THROTTLED_SPEED = 50
@@ -33,9 +33,15 @@ MISSILE_AVOID_CLEARANCE = 250  # berth given to a rock; tune to visible missile 
 MISSILE_AVOID_WEIGHT = 1.0  # 1.0 = up to ~45 deg deflection from straight-at-target
 MISSILE_AVOID_SMOOTH = 0.15  # 0.1 = heavy smoothing (gliding), 0.4 = snappier
 
-WORLD_WIDTH = 10000
-WORLD_HEIGHT = 10000
+# WORLD_WIDTH = 10000
+# WORLD_HEIGHT = 10000
+WORLD_WIDTH = 5000
+WORLD_HEIGHT = 5000
 GRID_SIZE = 500
+
+
+NUMBER_OF_ASTEROIDS = 100
+NUMBER_OF_DRONES = 10
 
 # Radar configuration
 RADAR_PULSE_RANGE = 4000
@@ -49,7 +55,7 @@ LASER_RANGE = 5000
 MINING_RANGE = 200  # centre to centre, world units
 MINING_TIME = 8.0  # seconds of beam on one rock
 MINING_DRAW = 1.5  # power draw while the mining beam is on (LaserAssessor draws 1)
-MINING_FUEL_YIELD = 80  # fuel from an icy rock
+MINING_FUEL_YIELD = 100  # fuel from an icy rock
 MINING_MISSILE_YIELD = 1  # missiles from a metallic rock
 # What each mineable material pays out. Anything not listed can't be mined.
 MINING_YIELD = {'icy': 'fuel', 'metallic': 'missile'}

@@ -98,6 +98,7 @@ class AudioManager:
             'resume' : 'sounds/resume.wav',
             'shutdown' : 'sounds/shutdown.wav',
             'fuel_fault_acknowledge' : 'sounds/fuel_fault_acknowledge.wav',
+            'enemy_ship_destroyed' : 'sounds/enemy_ship_destroyed.wav',
 
             # Misc
             'keyboard_clack': 'sounds/keyboard_clack.wav',

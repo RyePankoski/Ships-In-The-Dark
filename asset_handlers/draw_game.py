@@ -8,6 +8,7 @@ import os
 from utility.constants import *
 from utility import theme
 from asset_handlers import fonts
+from objects.explosion import FLASH_COLOR, phosphor_color
 from pathlib import Path
 
 # Below this speed a turning ship uses the rotate-in-place sprites
@@ -81,6 +82,8 @@ class DrawGame:
         self.ship_translate_left = pygame.image.load(os.path.join(asset_path, "pngs/ship_translate_left.png"))
         self.ship_translate_right = pygame.image.load(os.path.join(asset_path, "pngs/ship_translate_right.png"))
 
+        self.ship_debris = pygame.image.load(os.path.join(asset_path, "pngs/ship_debris.png"))
+
         self.enemy_ship_sprite = pygame.image.load(os.path.join(asset_path, "pngs/enemy_ship.png"))
         self.missile_sprite = pygame.image.load(os.path.join(asset_path, "pngs/missile.png"))
         self.drone_sprite = pygame.image.load(os.path.join(asset_path, "pngs/drone.png"))
@@ -132,10 +135,21 @@ class DrawGame:
                     self.screen.blit(name_surf, name_surf.get_rect(center=(screen_x, screen_y)))
 
     def draw_explosions(self, explosions, camera_x, camera_y):
+        """Vector-style explosions: a flash, expanding rings and debris lines, in one phosphor colour."""
         for explosion in explosions:
-            screen_x = explosion[0] - camera_x
-            screen_y = explosion[1] - camera_y
-            pygame.draw.circle(self.screen, theme.WHITE, (screen_x, screen_y), 50)
+            centre = (explosion.x - camera_x, explosion.y - camera_y)
+            flash_radius = explosion.flash_radius()
+            if flash_radius >= 1:
+                pygame.draw.circle(self.screen, FLASH_COLOR, centre, int(flash_radius))
+            ring_color = phosphor_color(explosion.colour, explosion.fade)
+            for radius in explosion.ring_radii():
+                if radius >= 1:
+                    pygame.draw.circle(self.screen, ring_color, centre, int(radius), 1)
+            for x, y, tail_x, tail_y, piece_fade in explosion.debris_points():
+                color = phosphor_color(explosion.colour, piece_fade)
+                pygame.draw.line(self.screen, color,
+                                 (tail_x - camera_x, tail_y - camera_y),
+                                 (x - camera_x, y - camera_y))
 
     def draw_missiles(self, missiles, camera_x, camera_y):
         for missile in missiles:
@@ -200,6 +214,12 @@ class DrawGame:
         for ship in ships:
             screen_x = ship.rect.center[0] - camera_x
             screen_y = ship.rect.center[1] - camera_y
+
+            if not ship.alive:
+                sprite = pygame.transform.rotate(self.ship_debris, ship.heading)
+                rotated_rect = sprite.get_rect(center=(screen_x, screen_y))
+                self.screen.blit(sprite, rotated_rect)
+                continue
 
             if ship.player:
                 sprite = self.pick_player_sprite(ship)

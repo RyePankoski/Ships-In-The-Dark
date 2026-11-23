@@ -58,11 +58,13 @@ class World:
         self.missiles = []
         self.decoys = []
         self.bullets = []
-        self.lasers = []  # mining-vessel lasers: [vessel, (x, y), time_left, asteroid]
+        self.lasers = []
+        # mining-vessel lasers: [vessel, (x, y), time_left, asteroid]
 
         self.asteroids = {}
         self.drones = {}
         self.pirates = {}
+
 
         self.dead_asteroid_ids = set()
         # Same ids in the order they died. The server sends each client only the
@@ -75,6 +77,9 @@ class World:
         # Things that happened during the last step, for the client to react to
         # (sounds etc). Only meaningful when the world is stepped locally.
         self.events = []
+        # Same, but only for some pilots: [(player_ids, event), ...]. The server sends each
+        # one only to those pilots.
+        self.private_events = []
 
         self.time = 0.0
 
@@ -96,7 +101,7 @@ class World:
         # Asteroids come only from the seed, in a fixed order, so every machine
         # that builds a World from the same seed gets the same rocks with the
         # same ids. Nothing about them needs to go over the network.
-        for _ in range(100):
+        for _ in range(NUMBER_OF_ASTEROIDS):
             pos_x = rng.randint(0, WORLD_WIDTH)
             pos_y = rng.randint(0, WORLD_HEIGHT)
             asteroid = Asteroid(pos_x, pos_y, rng.randint(50, 100), rng)
@@ -108,16 +113,16 @@ class World:
         if not self.with_npcs:
             return
 
-        for _ in range(8):
+        for _ in range(NUMBER_OF_DRONES):
             pos_x = rng.randint(0, WORLD_WIDTH)
             pos_y = rng.randint(0, WORLD_HEIGHT)
             drone = Drone(pos_x, pos_y)
             drone.net_id = self.new_id()
             self.drones.setdefault(drone.cell, []).append(drone)
 
-        pirate = MiningVessel(100, 100, speed=40)
-        pirate.net_id = self.new_id()
-        self.pirates.setdefault((int(100 // GRID_SIZE), int(100 // GRID_SIZE)), []).append(pirate)
+        # pirate = MiningVessel(100, 100, speed=40)
+        # pirate.net_id = self.new_id()
+        # self.pirates.setdefault((int(100 // GRID_SIZE), int(100 // GRID_SIZE)), []).append(pirate)
 
     def _generate_asteroid_names(self, rng):
         length = rng.randint(1, 3)
@@ -131,8 +136,10 @@ class World:
             name += str(rng.randint(0, 9))
         return name
 
-    def spawn_ship(self, player_id, is_ai=False):
-        x, y = self.random_empty_point()
+    def spawn_ship(self, player_id, is_ai=False, x=None, y=None):
+        if x is None or y is None:
+            x, y = self.random_empty_point()
+
         ship = Ship(x, y, player_id=player_id, is_ai=is_ai)
         self.ships.append(ship)
         return ship
@@ -188,6 +195,8 @@ class World:
     def step(self, commands, dt):
         """Advance the world by dt. commands = {player_id: command dict}."""
         self.events = []
+        self.private_events = []
+        alive_before = {ship.player_id: ship.alive for ship in self.ships}
         self.time += dt
 
         for ship in self.ships:
@@ -199,6 +208,9 @@ class World:
             if command.get('power') is not None:
                 for name in POWER_FLAGS:
                     setattr(ship, name, bool(command['power'][name]))
+            # Charging a blink breaks any lock on the ship; the blink action clears it once they've jumped
+            if ship.blinking:
+                ship.drop_lock = True
             for action in command.get('actions', []):
                 self.do_action(ship, action)
 
@@ -213,6 +225,11 @@ class World:
         self._step_drones(dt)
         self._step_pirates(dt)
         self._step_bullets(dt)
+
+        # Whatever did it (missile, bullet, collision), every pilot hears that a ship went down
+        for ship in self.ships:
+            if alive_before.get(ship.player_id) and not ship.alive:
+                self.events.append(('ship_destroyed', ship.player_id))
 
     def do_action(self, ship, action):
         kind = action.get('type')
@@ -232,6 +249,7 @@ class World:
         elif kind == 'blink':
             ship.pos_x, ship.pos_y = self.random_empty_point()
             ship.update_rect()
+            ship.drop_lock = False  # they've jumped: locks on them can hold again
 
         elif kind == 'mine':
             self._start_mining(ship, action.get('target'))
@@ -305,7 +323,13 @@ class World:
             missile.run(dt, self.asteroids)
             if missile.alive is False:
                 if missile.reached_target:
-                    self.events.append(('missile_contact', missile.pos_x, missile.pos_y))
+                    # Only the pilot who fired it and the pilot it hit know it landed
+                    involved = {missile.owner, getattr(missile.target, 'player_id', None)} - {None}
+                    self.private_events.append((involved, ('missile_contact', missile.pos_x, missile.pos_y)))
+                    hit = missile.exploded_on_type
+                    self.private_events.append((involved, ('missile_exploded', missile.pos_x, missile.pos_y,
+                                                           hit.__name__ if hit else None,
+                                                           missile.exploded_on_player)))
                 self.missiles.remove(missile)
 
     def _step_decoys(self, dt):
