@@ -3,12 +3,12 @@ import zlib
 import random
 
 import pygame
-from utility.constants import *
-from utility import theme
+from config.constants import *
+from config import theme
 from asset_handlers import fonts
 from asset_handlers.buttons import ButtonLayer, draw_button, draw_frame
 from asset_handlers.grime import build_panel
-from utility.common import end_blit, blink_cursor
+from utility.text_input import blink_cursor
 
 
 class DrawUI:
@@ -33,7 +33,7 @@ class DrawUI:
     # Missile Vector Display
     MISSILE_VECTOR_LENGTH = 75
 
-    # Colour palette: see utility/theme.py for what each colour means
+    # Colour palette: see config/theme.py for what each colour means
     COLOR_PANEL_BG = theme.BG
     COLOR_BORDER_PRIMARY = theme.AMBER
     COLOR_BORDER_INSET = theme.AMBER_DIM
@@ -114,7 +114,6 @@ class DrawUI:
         strip, title, readout lines, a column of buttons
         [(label, key hint, action) or (label, key hint, action, enabled)],
         and a fault line (`footer`) or the input prompt along the bottom."""
-        self.screen.fill(theme.BLACK)
         self.buttons.begin_frame()
         w, h = self.screen.get_size()
 
@@ -155,7 +154,6 @@ class DrawUI:
         self.screen.blit(footer_surf, footer_surf.get_rect(bottomleft=(x0, h - 32)))
 
         self.buttons.end_frame()
-        end_blit()
 
     def draw_debrief_screen(self, status, detail, options):
         """End-of-mission readout: plain left-aligned fields on black, no frame or
@@ -163,7 +161,6 @@ class DrawUI:
         options: [(action, label, key hint), ...], top to bottom."""
         from datetime import datetime, timezone
 
-        self.screen.fill(theme.BLACK)
         self.buttons.begin_frame()
         w, h = self.screen.get_size()
         x0 = 40
@@ -188,7 +185,6 @@ class DrawUI:
         self.draw_options(options)
 
         self.buttons.end_frame()
-        end_blit()
 
     def draw_options(self, options):
         """Underlined text options down the bottom-left: [(action, label, key hint or None), ...]."""
@@ -358,8 +354,6 @@ class DrawUI:
         field_font = fonts.font(19)
         boot_font = fonts.font(19)
         status_font = fonts.font(17)
-
-        self.screen.fill(theme.BLACK)
 
         pw = min(w - 48, 900)
         ph = min(h - 48, 780)
@@ -576,7 +570,6 @@ class DrawUI:
         registered in the same call that draws it."""
         from datetime import datetime, timezone
 
-        self.screen.fill(theme.BLACK)
         self.buttons.begin_frame()
         w, h = self.screen.get_size()
         flicker = 0.96 + math.sin(pygame.time.get_ticks() / 1000.0 * 35.0) * 0.02
@@ -653,7 +646,6 @@ class DrawUI:
         self.screen.blit(hint, hint.get_rect(topright=(status_box.right - 22, row_a)))
 
         self.buttons.end_frame()
-        end_blit()
 
     def _get_world_bounds(self):
         """Calculate world viewport bounds from screen dimensions.
@@ -1229,6 +1221,36 @@ class DrawUI:
         for i in range(1, self.RADAR_GRID_COUNT + 1):
             offset = grid_spacing * i
             pygame.draw.circle(self.screen, grid_color, (center_x, center_y), offset, 1)
+
+        # --- Out-of-bounds caution hatching: red diagonal lines wherever the map ends ---
+        scale = max_radius / self.RADAR_SCALE
+        px, py = player_ship.rect.center
+        w_left = center_x + (0 - px) * scale
+        w_right = center_x + (WORLD_WIDTH - px) * scale
+        w_top = center_y + (0 - py) * scale
+        w_bottom = center_y + (WORLD_HEIGHT - py) * scale
+        caution_red = (200, 30, 30)
+        r = radar_rect
+        strips = []
+        if w_top > r.top:
+            strips.append(pygame.Rect(r.left, r.top, r.width, min(r.height, int(w_top) - r.top)))
+        if w_bottom < r.bottom:
+            y0 = max(r.top, int(w_bottom))
+            strips.append(pygame.Rect(r.left, y0, r.width, r.bottom - y0))
+        if w_left > r.left:
+            strips.append(pygame.Rect(r.left, r.top, min(r.width, int(w_left) - r.left), r.height))
+        if w_right < r.right:
+            x0 = max(r.left, int(w_right))
+            strips.append(pygame.Rect(x0, r.top, r.right - x0, r.height))
+        for strip in strips:
+            self.screen.set_clip(strip.clip(r))
+            for d in range(-r.height, r.width, 80):
+                pygame.draw.line(self.screen, caution_red,
+                                 (r.left + d, r.bottom), (r.left + d + r.height, r.top), 2)
+        self.screen.set_clip(radar_rect)
+        # Solid red boundary line at the world edge
+        edge = pygame.Rect(int(w_left), int(w_top), int(w_right - w_left), int(w_bottom - w_top))
+        pygame.draw.rect(self.screen, caution_red, edge, 2)
 
         # Player position (Glowing cluster)
         pygame.draw.circle(self.screen, theme.WHITE, (center_x, center_y), 3)

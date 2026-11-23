@@ -76,7 +76,12 @@ BULLET_LIFETIME = 2
 
 PORT = 27015
 TICK_RATE = 20  # server simulation steps per second
+TICK_DT = 1 / TICK_RATE
 BROADCAST_RATE = 20  # server state snapshots sent per second (independent of the frame rate)
+
+CALLSIGN_MAX = 20
+CALLSIGN_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-")
+
 
 REF_HZ = 60 # the frame rate the per-step ship handling constants were tuned at
 # Client-side prediction (see simulation/snapshot.py)
@@ -85,3 +90,6 @@ SNAP_DISTANCE = 400  # a gap bigger than this (blink, respawn) is a teleport, no
 CORRECTION_RATE = 10  # per second; the smaller the gap after a snapshot, the sooner it's gone
 LOCAL_VELOCITY_BLEND = 0.25  # how far our own ship's heading/speed is pulled to the server's per snapshot
 
+
+SINGLE_PLAYER_SPAWN = (500, 500)
+SINGLE_PLAYER_ENEMY_SPAWN = (500, 600)

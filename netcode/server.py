@@ -1,12 +1,12 @@
 import random
 import time
 
+from netcode.callsign import clean_callsign
 from netcode.network_layer import NetworkLayer
 from simulation.snapshot import make_snapshot
 from simulation.world import World
-from utility.constants import *
+from config.constants import *
 
-TICK_DT = 1 / TICK_RATE
 BROADCAST_DT = 1 / BROADCAST_RATE
 MAX_STEPS_PER_RUN = 5
 # World events (hits, damage) are resent in every state for this many ticks, so a
@@ -20,17 +20,6 @@ MIN_PLAYERS_TO_LAUNCH = 1
 
 # The host's own client joins from this machine, so its packets arrive from here
 HOST_ADDRESS = '127.0.0.1'
-
-CALLSIGN_MAX = 10
-CALLSIGN_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-")
-
-
-
-
-def clean_callsign(text):
-    """Upper case, letters/digits/dashes only, at most CALLSIGN_MAX long."""
-    text = str(text or "").upper()
-    return "".join(c for c in text if c in CALLSIGN_CHARS)[:CALLSIGN_MAX].strip('-')
 
 
 class PlayerSlot:

@@ -1,7 +1,7 @@
 import math
 
 from objects.asteroid import Asteroid
-from utility.constants import *
+from config.constants import *
 
 import pygame
 

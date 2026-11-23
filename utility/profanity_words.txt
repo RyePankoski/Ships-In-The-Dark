@@ -1,0 +1,196 @@
+# Banned words/phrases, one per line. '#' starts a comment; blank lines ignored.
+# Duplicates are removed at load time.
+# Racial and ethnic slurs
+nigger
+niggers
+nigga
+niggas
+coon
+darkie
+jigaboo
+sambo
+pickaninny
+porch monkey
+chink
+chinks
+gook
+gooks
+zipperhead
+coolie
+ching chong
+jap
+japs
+spic
+spics
+spick
+wetback
+beaner
+border hopper
+kike
+kikes
+heeb
+yid
+hymie
+sheeny
+raghead
+towelhead
+sandnigger
+camel jockey
+sand monkey
+redskin
+injun
+squaw
+wagon burner
+prairie nigger
+gyppo
+gypo
+honky
+white trash
+paki
+pakis
+kaffir
+kafir
+kaffre
+abbo
+abo
+boong
+wog
+golliwog
+mick
+dago
+wop
+guido
+kraut
+polack
+polak
+wetback
+ dago
+cholo
+
+# Antisemitism
+jew rat
+jew pig
+jew bastard
+jewish parasite
+jewish vermin
+globalist cabal
+zionist parasite
+zionist scum
+jewish conspiracy
+blood libel
+jewish control
+gas the jews
+kill the jews
+death to jews
+exterminate jews
+heil hitler
+sieg heil
+white power
+white supremacy
+aryan supremacy
+master race
+race traitor
+racial purity
+final solution
+
+# Anti-Black hate phrases
+black people are inferior
+inferior race
+subhuman race
+go back to africa
+lynch them
+hang all blacks
+kill all blacks
+white is right
+
+# Anti-Asian hate phrases
+chinese virus
+yellow peril
+go back to china
+go back to japan
+asian invasion
+
+# Xenophobia
+go back to your country
+foreign invader
+illegal vermin
+immigrant vermin
+deport them all
+invading foreigners
+parasite immigrants
+ethnic cleansing
+
+# Homophobia
+faggot
+faggots
+fag
+fags
+dyke
+dykes
+homo
+homos
+tranny
+trannies
+sodomite
+sodomites
+fudgepacker
+poof
+poofter
+queer bait
+
+# Transphobia
+tranny freak
+gender freak
+transvestite freak
+mentally ill transgender
+fake woman
+fake man
+biological freak
+
+# Religious hatred
+muslim scum
+islamic vermin
+christian scum
+christian vermin
+jewish scum
+heathen filth
+infidel dogs
+kill all muslims
+kill all christians
+kill all jews
+death to islam
+death to christianity
+death to hinduism
+
+# Disability-related slurs
+retard
+retards
+retarded
+cripple
+cripples
+mongoloid
+spastic
+window licker
+imbecile
+
+# General supremacist terminology
+white genocide
+race mixing
+racial degeneracy
+racial contamination
+racial inferiority
+ethnic cleansing
+subhuman
+untermensch
+lebensunwertes leben
+blood and soil
+white nationalism
+racial separatism
+race war
+14 words
+1488
+kkk
+ku klux klan
+nazi scum
+nazi bastard
+heil hitler

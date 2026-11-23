@@ -1,6 +1,6 @@
 import math
 
-from utility.constants import CORRECTION_RATE
+from config.constants import CORRECTION_RATE
 
 
 class WorldObject:

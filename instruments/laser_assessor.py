@@ -1,7 +1,7 @@
 import math
 
 from instruments.instrument import Instrument
-from utility.constants import LASER_RANGE, LASER_STEP, GRID_SIZE, WORLD_WIDTH, WORLD_HEIGHT
+from config.constants import LASER_RANGE, LASER_STEP, GRID_SIZE, WORLD_WIDTH, WORLD_HEIGHT
 
 
 class LaserAssessor(Instrument):

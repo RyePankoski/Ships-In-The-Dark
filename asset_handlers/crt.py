@@ -3,7 +3,7 @@ import random
 
 import pygame
 
-from utility import theme
+from config import theme
 
 
 class CRTFilter:
@@ -18,7 +18,7 @@ class CRTFilter:
     5. Grain: animated static, tiled from a few small precomputed noise tiles.
     6. Flicker: the odd frame where the whole tube sags.
 
-    Applied once per frame in utility.util.end_blit, so every screen gets it.
+    Applied once per frame in Core.run (core/root.py), so every screen gets it.
     """
 
     GRAIN_TILE = 256

@@ -1,8 +1,7 @@
 import math
 
 from instruments.instrument import Instrument
-from utility.constants import LASER_RANGE
-from asset_handlers.audio_manager import AudioManager
+from config.constants import LASER_RANGE
 
 SCAN_TIME_NEAR = 0.2   # seconds for something right under the ship
 SCAN_TIME_FAR = 8   # seconds for something at the laser's full range

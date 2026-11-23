@@ -4,8 +4,8 @@ import random
 import pygame
 
 from objects.bullet import Bullet
-from utility.constants import *
-from utility.common import squared_distance, sqrt_distance
+from config.constants import *
+from utility.geometry import squared_distance
 
 
 from objects.base import WorldObject
@@ -97,7 +97,7 @@ class MiningVessel(WorldObject):
             ship_x = ship.pos_x if hasattr(ship, 'pos_x') else ship.rect.center[0]
             ship_y = ship.pos_y if hasattr(ship, 'pos_y') else ship.rect.center[1]
 
-            distance, in_range = squared_distance((ship_x, ship_y), (self.pos_x, self.pos_y), 800)
+            in_range = squared_distance((ship_x, ship_y), (self.pos_x, self.pos_y)) < 800 ** 2
 
             if in_range:
                 ship.mining_vessel_sees_you = True
@@ -136,8 +136,8 @@ class MiningVessel(WorldObject):
             print("done resting")
 
     def move_to_target(self, dt):
-        distance, in_range = sqrt_distance((self.pos_x, self.pos_y), (self.target[0], self.target[1]), 50)
-        if in_range:
+        distance = math.dist((self.pos_x, self.pos_y), (self.target[0], self.target[1]))
+        if distance < 50:
             print("target reached")
             self.target = None
             self.resting = True

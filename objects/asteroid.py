@@ -1,7 +1,7 @@
 import math
 import random
 
-from utility.constants import *
+from config.constants import *
 
 
 def make_outline(x, y, size):

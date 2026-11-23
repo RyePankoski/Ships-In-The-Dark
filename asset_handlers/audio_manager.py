@@ -166,6 +166,12 @@ class AudioManager:
         self.current_ambience = name
         self.ambience_channel.play(self.sounds[name], loops=loops)
 
+    def play_menu_audio(self):
+        """Cut everything, then play the startup sting and menu ambience."""
+        self.stop_all()
+        self.play_sfx('startup')
+        self.play_ambience('ambience')
+
     def stop_ambience(self):
         self.ambience_channel.stop()
         self.current_ambience = None

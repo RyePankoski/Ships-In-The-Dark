@@ -12,7 +12,7 @@ world holds right now is what you get.
 """
 import math
 
-from utility.constants import GRID_SIZE
+from config.constants import GRID_SIZE
 
 
 class Contacts:

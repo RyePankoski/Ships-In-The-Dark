@@ -7,10 +7,10 @@ ship movement still runs.
 """
 import pygame
 
-from utility import theme
+from config import theme
 from asset_handlers import fonts
 from asset_handlers.buttons import draw_blank_underlay
-from utility.manual import *
+from config.manual import *
 
 
 def _put(screen, surf, **where):
@@ -124,7 +124,7 @@ class PauseMenu:
         """Act on this frame's clicks and key presses while the menu is open.
 
         Args:
-            inputs: The frame's key states (see utility.common.collect_inputs).
+            inputs: The frame's key states (see utility.input.collect_inputs).
             clicks: Actions of the menu buttons clicked this frame.
             keys_live: False while the input cooldown is running; keys are ignored then.
 
@@ -165,7 +165,7 @@ class PauseMenu:
     def draw(self, screen, buttons, underlay=True):
         """Draw the current screen over the game, and register its buttons.
 
-        Draw the game frame first, then call this, then end_blit(). Nothing
+        Draw the game frame first, then call this. Nothing
         drawn underneath stays clickable. underlay=False skips the blanked
         feed, for when the caller has already blacked the screen out.
         """

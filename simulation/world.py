@@ -8,8 +8,8 @@ from objects.mining_vessel import MiningVessel
 from objects.missile import Missile
 from objects.ship import Ship
 from simulation.contacts import Contacts
-from utility.constants import *
-from utility.common import squared_distance
+from config.constants import *
+from utility.geometry import squared_distance
 
 # The only keys the simulation cares about for flying a ship.
 MOVE_KEYS = ('left', 'right', 'up', 'down', 'left_shift', 'tab')
@@ -144,6 +144,12 @@ class World:
         self.ships.append(ship)
         return ship
 
+    def setup_single_player(self, callsign, player_id=1, enemy_id=2, enemy_callsign="UNKNOWN"):
+        """The single-player scenario: the player and one AI opponent near each other."""
+        self.spawn_ship(player_id, x=SINGLE_PLAYER_SPAWN[0], y=SINGLE_PLAYER_SPAWN[1])
+        self.spawn_ship(enemy_id, is_ai=True, x=SINGLE_PLAYER_ENEMY_SPAWN[0], y=SINGLE_PLAYER_ENEMY_SPAWN[1])
+        self.callsigns = {player_id: callsign or f"PILOT-{player_id}", enemy_id: enemy_callsign}
+
     def remove_ship(self, player_id):
         """A player left: their ship and callsign go with them."""
         self.ships = [ship for ship in self.ships if ship.player_id != player_id]
@@ -172,8 +178,7 @@ class World:
     def is_empty_space(self, x, y):
         cell = (int(x // GRID_SIZE), int(y // GRID_SIZE))
         for asteroid in self.asteroids.get(cell, []):
-            distance, in_range = squared_distance((x, y), (asteroid.pos_x, asteroid.pos_y), asteroid.size + 50)
-            if in_range:
+            if squared_distance((x, y), (asteroid.pos_x, asteroid.pos_y)) < (asteroid.size + 50) ** 2:
                 return False
         return True
 
@@ -282,8 +287,7 @@ class World:
     def _die_on_asteroids(self, ship, announce=False):
         cell = (int(ship.rect.center[0] // GRID_SIZE), int(ship.rect.center[1] // GRID_SIZE))
         for asteroid in self.asteroids.get(cell, []):
-            distance, in_range = squared_distance(ship.rect.center, (asteroid.pos_x, asteroid.pos_y), asteroid.size)
-            if in_range:
+            if squared_distance(ship.rect.center, (asteroid.pos_x, asteroid.pos_y)) < asteroid.size ** 2:
                 if ship.speed > 100:
                     ship.alive = False
                     ship.took_damage = True
@@ -443,8 +447,7 @@ class World:
             bullet.run(dt)
 
             for ship in self.ships:
-                distance, in_range = squared_distance(ship.rect.center, (bullet.pos_x, bullet.pos_y), 25)
-                if in_range:
+                if squared_distance(ship.rect.center, (bullet.pos_x, bullet.pos_y)) < 25 ** 2:
                     ship.health -= 2
                     ship.took_damage = True
                     self.events.append(('bullet_damage', ship.player_id))
@@ -454,8 +457,7 @@ class World:
 
             for cell in self.asteroids.values():
                 for asteroid in cell:
-                    distance, in_range = squared_distance((bullet.pos_x, bullet.pos_y), (asteroid.pos_x, asteroid.pos_y), asteroid.size)
-                    if in_range:
+                    if squared_distance((bullet.pos_x, bullet.pos_y), (asteroid.pos_x, asteroid.pos_y)) < asteroid.size ** 2:
                         bullets_to_remove.append(bullet)
 
         for bullet in bullets_to_remove:

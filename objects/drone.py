@@ -1,7 +1,6 @@
 import math
 import random
-from utility.constants import *
-from utility.common import sqrt_distance
+from config.constants import *
 from objects.base import WorldObject
 
 
@@ -54,9 +53,9 @@ class Drone(WorldObject):
         dx = self.target.pos_x - self.pos_x
         dy = self.target.pos_y - self.pos_y
 
-        distance, in_range = sqrt_distance((self.pos_x, self.pos_y), (self.target.pos_x, self.target.pos_y), 50)
+        distance = math.dist((self.pos_x, self.pos_y), (self.target.pos_x, self.target.pos_y))
 
-        if in_range:
+        if distance < 50:
             self.target = None
             self.am_mining = True
             return

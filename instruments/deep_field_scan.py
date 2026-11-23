@@ -1,6 +1,7 @@
+import math
 from instruments.instrument import Instrument
-from utility.constants import CORRIDOR_WIDTH, CORRIDOR_DEPTH
-from utility.common import in_quadrant, dfs_sqrt_distance
+from config.constants import CORRIDOR_WIDTH, CORRIDOR_DEPTH
+from utility.geometry import in_sector
 
 # What the DFS makes of each kind of contact: (label it reports, confidence).
 # Drones read as 'unknown': this scanner can't tell them apart from anything else.
@@ -86,9 +87,11 @@ class DeepFieldScan(Instrument):
 
         for contact in self.contacts.all(exclude=self.ship):
             position = contact.center
-            if in_quadrant(player_x, player_y, direction_deg, position):
+            # cardinals scan a half-plane, diagonals a quadrant
+            half_width = 90 if direction_deg % 90 == 0 else 45
+            if in_sector(player_x, player_y, direction_deg, position, half_width):
                 kind, confidence = DFS_CLASSES.get(contact.kind, DEFAULT_CLASS)
-                found.append((dfs_sqrt_distance(player_x, player_y, position),
+                found.append((math.dist((player_x, player_y), position),
                               kind, contact.moving, confidence, contact))
 
         return sorted(found, key=lambda c: c[0])

@@ -13,7 +13,7 @@ sweep the laser).
 """
 import pygame
 
-from utility import theme
+from config import theme
 from asset_handlers import fonts
 
 

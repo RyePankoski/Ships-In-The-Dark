@@ -1,5 +1,5 @@
 from instruments.instrument import Instrument
-from utility.constants import CLOSE_RANGE_SCAN_RANGE
+from config.constants import CLOSE_RANGE_SCAN_RANGE
 
 
 class CloseRangeScan(Instrument):

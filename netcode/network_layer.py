@@ -1,7 +1,19 @@
 import json
 import socket
 
-from utility.constants import *
+from config.constants import *
+
+
+def local_ip():
+    """This machine's LAN address, to tell the other player. Sends nothing."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("10.255.255.255", 1))
+        return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        s.close()
 
 
 class NetworkLayer:

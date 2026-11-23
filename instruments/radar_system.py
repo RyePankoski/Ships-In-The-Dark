@@ -1,12 +1,12 @@
 import math
 
 from instruments.instrument import Instrument
-from utility import theme
-from utility.constants import (
+from config import theme
+from config.constants import (
     WORLD_WIDTH, WORLD_HEIGHT,
     RADAR_PULSE_RANGE, RADAR_PULSE_SPEED,
 )
-from utility.precomputed_angles import RADAR_DIRECTIONS
+from config.precomputed_angles import RADAR_DIRECTIONS
 
 PAINTED_COLOR = theme.AMBER_BRIGHT   # a return off something you've painted with your laser
 RETURN_COLOR = theme.GREEN           # an ordinary radar return

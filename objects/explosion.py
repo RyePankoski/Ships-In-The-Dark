@@ -1,7 +1,7 @@
 import math
 import random
 
-from utility import theme
+from config import theme
 
 # Per hit type: (phosphor colour, debris speed in px/s).
 # Everything is drawn as plain vector lines in one colour, like a military display.

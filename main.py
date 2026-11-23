@@ -1,37 +1,36 @@
-import argparse
 import sys
 
 import pygame
 from core.root import Core
 from asset_handlers.crt import crt
-from utility import theme
-from utility.constants import REF_HZ
+from config import theme
+from config.constants import REF_HZ
 
-parser = argparse.ArgumentParser(description="Ships In The Dark")
-args = parser.parse_args()
 
-pygame.init()
-clock = pygame.time.Clock()
-FPS = REF_HZ
-
-# A fixed window, not the monitor's size: it fits a 1080p screen (with title bar and taskbar)
-# and doesn't depend on which display the OS lists first
-size = pygame.display.get_desktop_sizes()[0]
-screen = pygame.display.set_mode(size)
-core = Core(screen)
+def shutdown():
+    pygame.quit()
+    sys.exit()
 
 
 def main():
+    pygame.init()
+    clock = pygame.time.Clock()
+
+    size = pygame.display.get_desktop_sizes()[0]
+    screen = pygame.display.set_mode(size)
+    core = Core(screen)
+
     while True:
         events = pygame.event.get()
-        dt = clock.tick(FPS) / 1000
+        dt = clock.tick(REF_HZ) / 1000
         for event in events:
             if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
+                shutdown()
             if event.type == pygame.KEYDOWN and event.key == theme.CRT_TOGGLE_KEY:
                 crt.toggle()
         core.run(dt, events)
+        if core.exit_requested:
+            shutdown()
 
 
 if __name__ == "__main__":

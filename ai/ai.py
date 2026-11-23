@@ -1,8 +1,7 @@
 import math
 import random
 
-from utility.constants import *
-from utility.common import squared_distance, sqrt_distance
+from config.constants import *
 
 
 class AI:
@@ -17,8 +16,8 @@ class AI:
             self.move_to_destination()
 
     def move_to_destination(self):
-        distance, in_range = sqrt_distance((self.ship.pos_x, self.ship.pos_y), (self.destination[0], self.destination[1]), 50)
-        if in_range:
+        distance = math.dist((self.ship.pos_x, self.ship.pos_y), (self.destination[0], self.destination[1]))
+        if distance < 50:
             self.destination = None
             return
 

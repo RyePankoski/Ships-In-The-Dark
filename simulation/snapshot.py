@@ -18,7 +18,7 @@ from objects.decoy import Decoy
 from objects.missile import Missile
 from objects.ship import Ship
 
-from utility.constants import SNAP_DISTANCE, LOCAL_VELOCITY_BLEND
+from config.constants import SNAP_DISTANCE, LOCAL_VELOCITY_BLEND
 
 INT = 'int'
 BOOL = 'bool'

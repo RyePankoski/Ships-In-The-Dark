@@ -1,7 +1,7 @@
 import time
 
 from netcode.network_layer import NetworkLayer
-from utility.constants import *
+from config.constants import *
 
 HELLO_INTERVAL = 0.5
 TIMEOUT = 5.0

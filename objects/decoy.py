@@ -1,4 +1,4 @@
-from utility.constants import *
+from config.constants import *
 
 from objects.base import DirectionSteered
 

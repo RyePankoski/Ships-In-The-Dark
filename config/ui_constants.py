@@ -22,7 +22,7 @@ DFS_CONTACT_DISPLAY_LIMIT = 8
 MISSILE_VECTOR_LENGTH = 75
 MISSILE_LOCK_BOX_SIZE = 12
 
-# Colours live in utility/theme.py
+# Colours live in config/theme.py
 
 # Font Sizes
 FONT_SIZE_LARGE = 35

@@ -1,7 +1,7 @@
 import math
 
 from instruments.instrument import Instrument
-from utility.constants import MINING_RANGE, MINING_YIELD
+from config.constants import MINING_RANGE, MINING_YIELD
 
 
 class MiningLaser(Instrument):

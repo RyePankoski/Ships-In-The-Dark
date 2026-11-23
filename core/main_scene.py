@@ -12,7 +12,8 @@ from instruments.mining_laser import MiningLaser
 from instruments.material_assessor import MaterialAssessor
 from instruments.radar_system import RadarSystem
 from simulation.world import MOVE_KEYS, POWER_FLAGS, empty_command
-from utility.common import *
+from config.constants import BLINK_FUEL_THRESHOLD
+from utility.geometry import squared_distance
 
 
 
@@ -28,11 +29,11 @@ class MainScene:
 
     SHUTDOWN_WAIT = 2  # seconds of black screen so the shutdown sound can play
 
-    def __init__(self, screen, audio_manager, world, my_id, local=True):
+    def __init__(self, screen, audio_manager, world, my_id, local=True, draw_ui=None, is_host=False):
         # Classes
         self.audio_manager = audio_manager
         self.draw_game = DrawGame(screen)
-        self.draw_ui = DrawUI(screen)
+        self.draw_ui = draw_ui
 
         # World + who we are in it
         self.world = world
@@ -95,7 +96,7 @@ class MainScene:
         self.lock_inputs = False
         self.quit_requested = False  # set by QUIT TO MENU; the client acts on it
         self.lobby_requested = False  # set by BACK TO LOBBY on the game over screen (host only)
-        self.is_host = False  # set by the client: the host decides whether the match goes back to the lobby
+        self.is_host = is_host  # passed in by the client: the host decides whether the match goes back to the lobby
         self.spectate_id = None  # player_id of the pilot we're watching, once our own ship is gone
         self.shutdown_timer = None  # counts down after QUIT TO MENU, then quit_requested is set
         self._command_actions = []  # this frame's command['actions'], for perform()
@@ -251,12 +252,9 @@ class MainScene:
             self.quit_requested = True
             return
 
-        self.draw_game.start_blit()
-        self.draw_ui.screen.fill((0, 0, 0))
         self.draw_ui.buttons.begin_frame()
         self.pause.draw(self.draw_ui.screen, self.draw_ui.buttons, underlay=False)
         self.draw_ui.buttons.end_frame()
-        end_blit()
 
     # Key -> action, in the order they're checked. Console buttons produce the
     # same action names (see asset_handlers/buttons.py), so a click and a key
@@ -408,8 +406,7 @@ class MainScene:
             if missile.owner == self.my_id or missile.target is not self.player_ship:
                 continue
             cockpit.enemy_has_missile_solution = True
-            distance, in_range = squared_distance(self.player_ship.rect.center, (missile.pos_x, missile.pos_y), 800)
-            if in_range:
+            if squared_distance(self.player_ship.rect.center, (missile.pos_x, missile.pos_y)) < 800 ** 2:
                 cockpit.catastrophic_warning = True
 
         if cockpit.catastrophic_warning:
@@ -610,7 +607,6 @@ class MainScene:
 
     def draw_spectate(self, targets):
         world = self.world
-        self.draw_game.start_blit()
         self.draw_ui.buttons.begin_frame()
 
         camera_x, camera_y = self.find_camera()
@@ -625,13 +621,11 @@ class MainScene:
         self.draw_ui.draw_ship_destroyed(self.ship_destroyed_timer, self.ship_destroyed_duration, self.ship_destroyed_name)
 
         self.draw_ui.buttons.end_frame()
-        end_blit()
 
     def draw_scene(self):
         world = self.world
         cockpit = self.cockpit
 
-        self.draw_game.start_blit()
         self.draw_ui.buttons.begin_frame()
 
         camera_x, camera_y = self.find_camera()
@@ -684,7 +678,6 @@ class MainScene:
         self.pause.draw(self.draw_ui.screen, self.draw_ui.buttons)
 
         self.draw_ui.buttons.end_frame()
-        end_blit()
 
     def draw_world(self, camera_x, camera_y):
         """Everything in space, seen from the camera (no cockpit overlays)."""

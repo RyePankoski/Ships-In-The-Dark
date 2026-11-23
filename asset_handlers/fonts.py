@@ -1,6 +1,6 @@
 """The game's one font, and the stutter that makes its text flicker.
 
-Sizes and the flicker timing are set in utility/theme.py.
+Sizes and the flicker timing are set in config/theme.py.
 """
 import os
 import random
@@ -8,7 +8,7 @@ import random
 import pygame
 
 from utility.paths import asset_dir
-from utility.theme import FONT_FILE, FONT_SCALE, TEXT_FLICKER_DURATION_MS, TEXT_FLICKER_INTERVAL
+from config.theme import FONT_FILE, FONT_SCALE, TEXT_FLICKER_DURATION_MS, TEXT_FLICKER_INTERVAL
 
 
 _font_cache = {}

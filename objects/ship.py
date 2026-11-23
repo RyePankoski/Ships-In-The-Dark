@@ -2,7 +2,7 @@ import math
 from selectors import SelectSelector
 
 import pygame
-from utility.constants import *
+from config.constants import *
 from ai.ai import AI
 from objects.base import DirectionSteered
 

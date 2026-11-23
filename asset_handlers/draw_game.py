@@ -5,8 +5,8 @@ import time
 import pygame
 import sys
 import os
-from utility.constants import *
-from utility import theme
+from config.constants import *
+from config import theme
 from asset_handlers import fonts
 from objects.explosion import FLASH_COLOR, phosphor_color
 from pathlib import Path
@@ -96,9 +96,6 @@ class DrawGame:
 
         # Generate starfield
         self.stars = generate_stars(10000, WORLD_WIDTH, WORLD_HEIGHT)
-
-    def start_blit(self):
-        self.screen.fill((0, 0, 0))
 
     def draw_stars(self, camera_x, camera_y):
         """Draw starfield with camera offset"""
