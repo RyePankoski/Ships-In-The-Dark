@@ -6,6 +6,7 @@ from config.constants import *
 import pygame
 
 from objects.base import WorldObject
+from objects.ship import Ship
 
 
 class Missile(WorldObject):
@@ -67,7 +68,12 @@ class Missile(WorldObject):
 
             if hasattr(self.target, 'alive'):
                 print(type(self.target), self.target.alive)
-                self.target.alive = False
+
+                if isinstance(self.target, Ship):
+                    self.target.health -= 90
+                else:
+                    self.target.alive = False
+
                 self.exploded_on_type = type(self.target)
                 # Human pilots have ai set to None; AI ships and other targets don't count
                 self.exploded_on_player = getattr(self.target, 'ai', True) is None

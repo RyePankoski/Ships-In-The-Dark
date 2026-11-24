@@ -3,7 +3,8 @@ itself, handles input, and returns an action string (or None) for the Client to 
 import pygame
 
 from config.constants import CALLSIGN_MAX
-from utility.input import collect_inputs, key_pressed
+from simulation.settings import LAYOUT_NAMES
+from utility.input import collect_inputs
 from utility.text_input import blink_cursor, edit_text
 
 MAX_ROSTER_LINES = 10
@@ -107,7 +108,8 @@ class IpScreen(Screen):
 
 class LobbyScreen(Screen):
     """Contacting the server, then the lobby until the host launches.
-    Returns 'cancel' (we left), 'refused' (no slot) or 'started' (session.world is ready)."""
+    Returns 'cancel' (we left), 'refused' (no slot), 'settings' (host: open the world settings)
+    or 'started' (session.world is ready)."""
 
     def run(self, events, dt):
         session = self.session
@@ -118,13 +120,15 @@ class LobbyScreen(Screen):
             self.edit_callsign(events)
 
         for action in self.actions(events, {pygame.K_ESCAPE: 'cancel', pygame.K_RETURN: 'confirm',
-                                            pygame.K_F5: 'launch'}):
+                                            pygame.K_F5: 'launch', pygame.K_F6: 'settings'}):
             if action == 'cancel':
                 return 'cancel'
             if action == 'confirm':
                 session.commit_callsign()  # ENTER: the typed callsign goes out with our next hello
             if action == 'launch':
                 session.launch()  # commits the callsign first
+            if action == 'settings' and session.is_host:
+                return 'settings'
 
         if net.rejected:
             return 'refused'
@@ -154,13 +158,14 @@ class LobbyScreen(Screen):
             lines.append(f"{player_id:02d}  {callsign:<{CALLSIGN_MAX}}{you}")
         if len(roster) > MAX_ROSTER_LINES:
             lines.append(f"+{len(roster) - MAX_ROSTER_LINES} MORE")
-        lines.append("")
+        lines.append(session.settings.summary())
 
         buttons = []
         if session.is_host:
             lines.append(f"HOSTING ON {session.host_address}")
             ready = session.can_launch
             buttons.append(("LAUNCH", "F5", 'launch', ready))
+            buttons.append(("WORLD SETTINGS", "F6", 'settings'))
             if not ready:
                 lines.append("NEED 2 OR MORE PILOTS TO LAUNCH")
         else:
@@ -168,6 +173,35 @@ class LobbyScreen(Screen):
         buttons.append(("LEAVE", "ESC", 'cancel'))
         self.draw_ui.draw_text_screen("FLIGHT LOBBY", lines, buttons=buttons,
                                       header="ERGOT SYSTEMS // PRE-FLIGHT DIAGNOSTICS")
+
+
+class WorldSettingsScreen(Screen):
+    """Host only, from the lobby: the world's parameters. Each button moves one to its next option.
+    Returns 'back'."""
+    KEYS = {pygame.K_F1: 'size', pygame.K_F2: 'asteroids', pygame.K_F3: 'layout',
+            pygame.K_F4: 'drones', pygame.K_F5: 'pirates', pygame.K_ESCAPE: 'back'}
+
+    def run(self, events, dt):
+        session = self.session
+        if not session.is_host:  # only the host sets the world; anyone else goes straight back
+            return 'back'
+        for action in self.actions(events, self.KEYS):
+            if action == 'back':
+                return 'back'
+            session.change_setting(action)
+
+        s = session.settings
+        self.draw_ui.draw_text_screen(
+            "WORLD SETTINGS",
+            [s.summary(), "", "EVERY PILOT SEES THESE. THEY TAKE EFFECT FOR THE NEXT MATCH.", ""],
+            buttons=[(f"WORLD SIZE    {s.size} X {s.size}", "F1", 'size'),
+                     (f"ASTEROIDS     {s.asteroids}", "F2", 'asteroids'),
+                     (f"ASTEROID LAYOUT   {LAYOUT_NAMES[s.layout]}", "F3", 'layout'),
+                     (f"DRONES        {s.drones}", "F4", 'drones'),
+                     (f"PIRATES       {s.pirates}", "F5", 'pirates'),
+                     ("BACK", "ESC", 'back')],
+            header="ERGOT SYSTEMS // WORLD PARAMETERS")
+        return None
 
 
 class PlayScreen(Screen):
@@ -192,23 +226,25 @@ class PlayScreen(Screen):
             state = net.take_state()
             if state is not None:
                 session.sync_world(state)
-            scene.handle_world_events(net.take_events())
 
-        scene.run(collect_inputs(), dt, events)
+        live = scene.run(collect_inputs(), dt, events)
 
-        # Game over screen: the host can take everyone back to the lobby (ENTER or the button);
-        # everyone can go to the menu (ESC, the button, or ENTER for non-hosts)
-        game_over = scene.end_tripped
-        enter = key_pressed(events, pygame.K_RETURN)
-        escape = key_pressed(events, pygame.K_ESCAPE)
-        to_lobby = bool(net and session.is_host
-                        and (scene.lobby_requested or (game_over and enter)))
-        to_menu = scene.quit_requested or (game_over and (enter or escape))
-        if to_lobby or to_menu:
-            if to_lobby:
+        # The scene decides where the pilot goes (game over screen, pause console, or spectate)
+        if scene.outcome == 'lobby':
+            if net:
                 net.report_match_over()
-                return 'lobby'
+            return 'lobby'
+        if scene.outcome == 'menu':
             return 'menu'
+
+        # One place for both modes: the session steps the world (or predicts ours, online),
+        # and the events it produced, local or relayed by the server, go to the scene.
+        world_events = session.step(scene.command, dt) if live else []
+        if net:
+            world_events += net.take_events()
+        scene.handle_world_events(world_events)
+        if live:
+            scene.finish(dt)
 
         if net:
             net.send_command(scene.command)

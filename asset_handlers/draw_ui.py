@@ -7,8 +7,10 @@ from config.constants import *
 from config import theme
 from asset_handlers import fonts
 from asset_handlers.buttons import ButtonLayer, draw_button, draw_frame
+from asset_handlers.crt import crt
 from asset_handlers.grime import build_panel
 from utility.text_input import blink_cursor
+from simulation.settings import WorldSettings
 
 
 class DrawUI:
@@ -88,6 +90,7 @@ class DrawUI:
 
     def __init__(self, screen):
         self.screen = screen
+        self.world_width = self.world_height = WorldSettings().size  # set per match by set_world
         self.lock_blink_counter = 0
         self.buttons = ButtonLayer()
         self._telemetry_rect = None
@@ -720,7 +723,7 @@ class DrawUI:
         cols = 4 if bank_w >= 700 else (2 if bank_w >= 300 else 1)
 
         has_target = getattr(cockpit.target, 'net_id', None) is not None
-        can_fire = ship.can_fire() and has_target
+        can_fire = ship.can_fire_missile() and has_target
         helm = [
             (f"FIRE MSL {ship.total_missiles:02d}", 'fire_missile',
              dict(key="P", lit=cockpit.has_missile_solution, enabled=can_fire, lit_color=theme.AMBER_BRIGHT,
@@ -1226,9 +1229,9 @@ class DrawUI:
         scale = max_radius / self.RADAR_SCALE
         px, py = player_ship.rect.center
         w_left = center_x + (0 - px) * scale
-        w_right = center_x + (WORLD_WIDTH - px) * scale
+        w_right = center_x + (self.world_width - px) * scale
         w_top = center_y + (0 - py) * scale
-        w_bottom = center_y + (WORLD_HEIGHT - py) * scale
+        w_bottom = center_y + (self.world_height - py) * scale
         caution_red = (200, 30, 30)
         r = radar_rect
         strips = []
@@ -1639,11 +1642,14 @@ class DrawUI:
                     (end_x + perp_x, end_y + perp_y), 2
                 )
 
-    @staticmethod
-    def grid_ref(x, y):
+    def set_world(self, world):
+        """The world the scene is showing: its size is what the radar and map are drawn to."""
+        self.world_width, self.world_height = world.width, world.height
+
+    def grid_ref(self, x, y):
         """Grid cell containing a world position, as '<col>X <row>Y' (clamped to the world)."""
-        col = min(max(int(x // GRID_SIZE), 0), WORLD_WIDTH // GRID_SIZE - 1)
-        row = min(max(int(y // GRID_SIZE), 0), WORLD_HEIGHT // GRID_SIZE - 1)
+        col = min(max(int(x // GRID_SIZE), 0), self.world_width // GRID_SIZE - 1)
+        row = min(max(int(y // GRID_SIZE), 0), self.world_height // GRID_SIZE - 1)
         return f"{col}X {row}Y"
 
     MARKER_SHAPES = ("CIRCLE", "SQUARE", "TRIANGLE", "DIAMOND", "CROSS")
@@ -1668,6 +1674,39 @@ class DrawUI:
         center, scale, player_x, player_y = self._map_view
         return (player_x + (pos[0] - center[0]) / scale,
                 player_y + (pos[1] - center[1]) / scale)
+
+    def marker_from_click(self, marker_mode):
+        """(shape, world_x, world_y) for the latest map click, placed with marker_mode.
+
+        None when marker_mode is not a shape or no button-hit click has happened yet.
+        """
+        click = self.buttons.last_click_pos
+        if marker_mode not in self.MARKER_SHAPES or click is None:
+            return None
+        wx, wy = self.map_screen_to_world(click)
+        return (marker_mode, wx, wy)
+
+    # Hull hits: (seconds the picture takes to settle back, strength at the hit)
+    IMPACT_ASTEROID = (0.7, 0.5)
+    IMPACT_MISSILE = (3.5, 0.9)
+
+    def impact_asteroid(self):
+        crt.impact(*self.IMPACT_ASTEROID)
+
+    def impact_missile(self):
+        crt.impact(*self.IMPACT_MISSILE)
+
+    def set_hull_damage(self, health):
+        """The picture's tearing follows the hull: clean at full health, worst at zero."""
+        crt.set_damage(health)
+
+    def draw_pause_console(self, pause, underlay=True):
+        """The operator console over whatever the scene has drawn so far."""
+        pause.draw(self.screen, self.buttons, underlay=underlay)
+
+    def view_size(self):
+        """Size of the screen the world is drawn to, in pixels."""
+        return self.screen.get_size()
 
     def draw_tactical_map(self, active, player_ship, confirmed_contacts, scan_active=False, scan_range=1000, laser_active=False, laser_direction=0, laser_locked=False, locked_object=None, markers=(),
                           marker_mode=None):
@@ -1713,9 +1752,9 @@ class DrawUI:
         grid_color = theme.GREEN_FAINT
         view_margin = max_display_range * 1.5
         min_x = max(0, int((player_x - view_margin) // GRID_SIZE) * GRID_SIZE)
-        max_x = min(WORLD_WIDTH, int((player_x + view_margin) // GRID_SIZE + 1) * GRID_SIZE)
+        max_x = min(self.world_width, int((player_x + view_margin) // GRID_SIZE + 1) * GRID_SIZE)
         min_y = max(0, int((player_y - view_margin) // GRID_SIZE) * GRID_SIZE)
-        max_y = min(WORLD_HEIGHT, int((player_y + view_margin) // GRID_SIZE + 1) * GRID_SIZE)
+        max_y = min(self.world_height, int((player_y + view_margin) // GRID_SIZE + 1) * GRID_SIZE)
 
         for gx in range(min_x, max_x + 1, GRID_SIZE):
             p1 = world_to_screen(gx - player_x, min_y - player_y)
@@ -1730,9 +1769,9 @@ class DrawUI:
         # --- WORLD BOUNDARIES ---
         boundary_pts = [
             world_to_screen(0 - player_x, 0 - player_y),
-            world_to_screen(WORLD_WIDTH - player_x, 0 - player_y),
-            world_to_screen(WORLD_WIDTH - player_x, WORLD_HEIGHT - player_y),
-            world_to_screen(0 - player_x, WORLD_HEIGHT - player_y)
+            world_to_screen(self.world_width - player_x, 0 - player_y),
+            world_to_screen(self.world_width - player_x, self.world_height - player_y),
+            world_to_screen(0 - player_x, self.world_height - player_y)
         ]
         pygame.draw.polygon(self.screen, theme.AMBER_DIM, boundary_pts, 1)
 
@@ -2311,39 +2350,6 @@ class DrawUI:
             pygame.draw.rect(glitch, glitch_color, (glitch_x, glitch_y, glitch_width, glitch_height))
 
         self.screen.blit(glitch, (0, 0))
-
-    IMPACT_DURATION = 0.7  # seconds the flicker lasts after the last contact
-
-    def draw_impact_failure(self, strength, elapsed):
-        """Non-fatal hull hit: the signal flickers as if the link nearly dropped.
-
-        strength runs 1 -> 0 over IMPACT_DURATION. A few rapid dropouts toward dim,
-        with a faint tear now and then, then the picture settles back.
-        """
-        s = max(0.0, min(1.0, strength))
-        if s <= 0:
-            return
-        screen = self.screen
-        w, h = screen.get_size()
-
-        # Tearing: several thin bands jump sideways, more of them as strength rises
-        if random.random() < 0.9 * s:
-            y = random.randrange(h)
-            reach = int(8 + 14 * s)
-            for _ in range(random.randint(2, 2 + int(4 * s))):
-                bh = random.randint(2, 14)
-                rect = pygame.Rect(0, y, w, bh).clip(screen.get_rect())
-                if rect.height <= 0:
-                    break
-                strip = screen.subsurface(rect).copy()
-                screen.blit(strip, (random.randint(-reach, reach), rect.y))
-                y = (y + bh + random.randint(6, 60)) % h
-
-        # Dropouts: the picture blinks dim, a few times, faster than a blink
-        if random.random() < 0.6 * s:
-            dim = pygame.Surface((w, h), pygame.SRCALPHA)
-            dim.fill((0, 0, 0, int(140 * s)))
-            screen.blit(dim, (0, 0))
 
     def draw_out_of_fuel_warning(self, out_of_fuel):
         """Flashing red tag slotted over the fuel bar, only while the tank is empty."""

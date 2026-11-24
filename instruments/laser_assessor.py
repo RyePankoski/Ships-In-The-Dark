@@ -1,7 +1,7 @@
 import math
 
 from instruments.instrument import Instrument
-from config.constants import LASER_RANGE, LASER_STEP, GRID_SIZE, WORLD_WIDTH, WORLD_HEIGHT
+from config.constants import LASER_RANGE, LASER_STEP, GRID_SIZE
 
 
 class LaserAssessor(Instrument):
@@ -107,7 +107,7 @@ class LaserAssessor(Instrument):
         # Neighbour cells to look in, based on the laser's step size
         reach = math.ceil(LASER_STEP / GRID_SIZE)
 
-        while (0 < ray_x < WORLD_WIDTH and 0 < ray_y < WORLD_HEIGHT
+        while (0 < ray_x < self.world.width and 0 < ray_y < self.world.height
                and travelled < LASER_RANGE):
             travelled += LASER_STEP
             ray_x += dx * LASER_STEP

@@ -61,7 +61,7 @@ def is_visible_to_camera(obj, camera_x, camera_y, screen_width, screen_height):
 
 
 class DrawGame:
-    def __init__(self, screen):
+    def __init__(self, screen, world_width, world_height):
         self.screen = screen
         if getattr(sys, "frozen", False):
             base_path = Path(sys._MEIPASS)
@@ -95,7 +95,7 @@ class DrawGame:
         self.font_asteroid_name = fonts.font(14)
 
         # Generate starfield
-        self.stars = generate_stars(10000, WORLD_WIDTH, WORLD_HEIGHT)
+        self.stars = generate_stars(10000, world_width, world_height)
 
     def draw_stars(self, camera_x, camera_y):
         """Draw starfield with camera offset"""
@@ -207,7 +207,7 @@ class DrawGame:
 
         return self.ship_sprite
 
-    def draw_ships(self, ships, camera_x, camera_y):
+    def draw_ships(self, ships, camera_x, camera_y, my_id):
         for ship in ships:
             screen_x = ship.rect.center[0] - camera_x
             screen_y = ship.rect.center[1] - camera_y
@@ -218,7 +218,7 @@ class DrawGame:
                 self.screen.blit(sprite, rotated_rect)
                 continue
 
-            if ship.player:
+            if ship.player_id == my_id:
                 sprite = self.pick_player_sprite(ship)
                 rotated_sprite = pygame.transform.rotate(sprite, ship.heading)
                 rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))

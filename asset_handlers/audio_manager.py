@@ -87,6 +87,7 @@ class AudioManager:
             'death_screen': 'sounds/death_screen.wav',
             'low_fuel': 'sounds/low_fuel.wav',
             'blink_denied' : 'sounds/blink_denied.wav',
+            'player_hit_by_missile' : 'sounds/player_hit_by_missile.wav',
 
             # UI
             # "Glitch (Faulty Core) 9" by Dylan Kelk/SilverIllusionist for fuel acknowledge

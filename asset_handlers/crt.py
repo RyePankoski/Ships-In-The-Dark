@@ -4,6 +4,7 @@ import random
 import pygame
 
 from config import theme
+from config.constants import SHIP_MAX_HEALTH
 
 
 class CRTFilter:
@@ -24,6 +25,8 @@ class CRTFilter:
     GRAIN_TILE = 256
     GRAIN_FRAMES = 4
     HUM_HEIGHT = 180
+    FULL_HEALTH = SHIP_MAX_HEALTH         # ship.health starts here (objects/ship.py)
+    TEAR_CHANCE_AT_ZERO = 0.8  # tear chance per frame when the hull is gone
 
     def __init__(self):
         self.enabled = theme.CRT_ENABLED
@@ -32,13 +35,37 @@ class CRTFilter:
         self._hum = None
         self._grain = None
         self.tear_chance = theme.TEAR_CHANCE
+        self._burst_start = 0
+        self._burst_end = 0
+        self._burst_intensity = 0.0
 
     def toggle(self):
         self.enabled = not self.enabled
 
-    def set_damage(self, low_health):
-        """The scene reports ship state; the filter decides how much the picture tears."""
-        self.tear_chance = 0.2 if low_health else 0.05
+    def set_damage(self, health):
+        """Tearing scales with hull: clean at full health, worst at zero."""
+        damage = 1 - max(0.0, min(1.0, health / self.FULL_HEALTH))
+        self.tear_chance = theme.TEAR_CHANCE + (self.TEAR_CHANCE_AT_ZERO - theme.TEAR_CHANCE) * damage
+
+    def impact(self, duration, intensity):
+        """A hit: the picture tears hard at once, then settles back over `duration` seconds.
+
+        intensity (0-1) is the strength right at the hit: it sets how often the picture
+        tears and how big the tears are. The frame itself stays steady.
+        """
+        now = pygame.time.get_ticks()
+        self._burst_start = now
+        self._burst_end = now + duration * 1000
+        self._burst_intensity = intensity
+
+    def _burst(self):
+        """Current strength of the hit burst, 0-1, fading linearly to nothing."""
+        now = pygame.time.get_ticks()
+        if now >= self._burst_end:
+            return 0.0
+        span = self._burst_end - self._burst_start
+        fade = (self._burst_end - now) / span if span > 0 else 0.0
+        return self._burst_intensity * fade
 
     def apply(self, screen):
         if not self.enabled:
@@ -51,7 +78,7 @@ class CRTFilter:
         if self._grain is None:
             self._grain = self._build_grain()
 
-        self._tear(screen)
+        self._tear(screen, self._burst())
         self._glow(screen)
         self._hum_bar(screen)
         screen.blit(self._overlay, (0, 0))
@@ -64,19 +91,22 @@ class CRTFilter:
     # ------------------------------------------------------------------
     # Per-frame effects
     # ------------------------------------------------------------------
-    def _tear(self, screen):
-        if self.tear_chance <= 0 or random.random() >= self.tear_chance:
+    def _tear(self, screen, s=0.0):
+        # Health sets the baseline tear rate; a hit burst can push it much higher
+        chance = max(self.tear_chance, s)
+        if chance <= 0 or random.random() >= chance:
             return
         w, h = screen.get_size()
-        # A few adjacent strips slide by different amounts, like a sync hiccup
+        # A few adjacent strips slide by different amounts, like a sync hiccup.
+        # A strong hit means more strips, taller, and thrown further.
         y = random.randrange(h)
-        for _ in range(random.randint(1, 3)):
-            sh = random.randint(2, 24)
+        for _ in range(random.randint(1, 3 + int(6 * s))):
+            sh = random.randint(2, 24 + int(60 * s))
             rect = pygame.Rect(0, y, w, sh).clip(screen.get_rect())
             if rect.height <= 0:
                 break
             strip = screen.subsurface(rect).copy()
-            dx = random.choice((-1, 1)) * random.randint(3, 18)
+            dx = random.choice((-1, 1)) * random.randint(3, 18 + int(60 * s))
             screen.fill((0, 0, 0), rect)
             screen.blit(strip, (dx, rect.y))
             y += sh

@@ -9,9 +9,9 @@ class AI:
         self.destination = None
         self.ship = ship
 
-    def run(self):
+    def run(self, width, height):
         if self.destination is None:
-            self.destination = random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT)
+            self.destination = random.randint(0, width), random.randint(0, height)
         else:
             self.move_to_destination()
 

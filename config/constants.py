@@ -5,14 +5,15 @@ RETRO_THRUST_FRACTION = 0.5  # reverse burn (down key) as a fraction of forward 
 SHIP_TURN_RATE = 150  # top turn rate, degrees per second
 SHIP_TURN_ACCEL = 600  # how quickly the turn rate eases toward its target, degrees per second squared
 SHIP_TURN_SLOWDOWN = 0.4  # fraction of turn rate lost at full speed, so fast ships arc wider
-FLIGHT_ASSIST_DRAG = 0.9  # coasting bleed per second with the dampener on
+FLIGHT_ASSIST_DRAG = 0.4  # coasting bleed per second with the dampener on
 DRIFT_DRAG = 0.0  # coasting bleed per second with the dampener off (0 = pure drift, no speed loss)
-BRAKE_DRAG = 3.0  # per second while braking (tab)
+BRAKE_DRAG = 1.0  # per second while braking (tab)
 BOOST_THRUST_MULT = 2.0  # shift: thrust multiplier
 BOOST_SPEED_MULT = 1.5 # shift: raises the speed cap
 
 
 SHIP_MAX_FUEL = 401
+SHIP_MAX_HEALTH = 100
 LOW_FUEL_FRACTION = 5 # 20%
 HIGH_USE = 4
 THROTTLED_SPEED = 50
@@ -33,15 +34,8 @@ MISSILE_AVOID_CLEARANCE = 250  # berth given to a rock; tune to visible missile 
 MISSILE_AVOID_WEIGHT = 1.0  # 1.0 = up to ~45 deg deflection from straight-at-target
 MISSILE_AVOID_SMOOTH = 0.15  # 0.1 = heavy smoothing (gliding), 0.4 = snappier
 
-# WORLD_WIDTH = 10000
-# WORLD_HEIGHT = 10000
-WORLD_WIDTH = 5000
-WORLD_HEIGHT = 5000
+# World size, rock count, drones and pirates are per match: see simulation/settings.py
 GRID_SIZE = 500
-
-
-NUMBER_OF_ASTEROIDS = 100
-NUMBER_OF_DRONES = 10
 
 # Radar configuration
 RADAR_PULSE_RANGE = 4000
@@ -56,9 +50,10 @@ MINING_RANGE = 200  # centre to centre, world units
 MINING_TIME = 8.0  # seconds of beam on one rock
 MINING_DRAW = 1.5  # power draw while the mining beam is on (LaserAssessor draws 1)
 MINING_FUEL_YIELD = 100  # fuel from an icy rock
-MINING_MISSILE_YIELD = 1  # missiles from a metallic rock
+MINING_MISSILE_YIELD = 1 # missiles from a metallic rock
+MINING_HULL_YIELD = 100 # Hull rebuild from semi-metallic rock
 # What each mineable material pays out. Anything not listed can't be mined.
-MINING_YIELD = {'icy': 'fuel', 'metallic': 'missile'}
+MINING_YIELD = {'icy': 'fuel', 'metallic': 'missile', 'semi-metallic': 'hull'}
 
 # Deep field scan configuration
 CORRIDOR_DEPTH = 8000

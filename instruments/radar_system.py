@@ -3,7 +3,6 @@ import math
 from instruments.instrument import Instrument
 from config import theme
 from config.constants import (
-    WORLD_WIDTH, WORLD_HEIGHT,
     RADAR_PULSE_RANGE, RADAR_PULSE_SPEED,
 )
 from config.precomputed_angles import RADAR_DIRECTIONS
@@ -87,7 +86,7 @@ class RadarSystem(Instrument):
             ray_distance = 0
             ray_x, ray_y = origin_x, origin_y
 
-            while (0 < ray_x < WORLD_WIDTH and 0 < ray_y < WORLD_HEIGHT
+            while (0 < ray_x < self.world.width and 0 < ray_y < self.world.height
                    and ray_distance < RADAR_PULSE_RANGE):
                 ray_distance += RADAR_PULSE_SPEED
                 ray_x += dx * RADAR_PULSE_SPEED

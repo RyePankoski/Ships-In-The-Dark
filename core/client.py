@@ -1,5 +1,5 @@
 from .main_scene import MainScene
-from .screens import CallsignScreen, IpScreen, LobbyScreen, MenuScreen, PlayScreen
+from .screens import CallsignScreen, IpScreen, LobbyScreen, MenuScreen, PlayScreen, WorldSettingsScreen
 from .session import Session
 
 # Screens where the player types a callsign. Leaving any of them commits it once, here,
@@ -25,6 +25,7 @@ class Client:
         self.callsign_screen = CallsignScreen(*args)
         self.ip_screen = IpScreen(*args)
         self.lobby_screen = LobbyScreen(*args)
+        self.settings_screen = WorldSettingsScreen(*args)
         self.play_screen = None  # a PlayScreen, built per game
         self.active = self.menu_screen
 
@@ -34,6 +35,7 @@ class Client:
             CallsignScreen: self.after_callsign,
             IpScreen: self.after_ip,
             LobbyScreen: self.after_lobby,
+            WorldSettingsScreen: self.after_settings,
             PlayScreen: self.after_play,
         }
 
@@ -52,7 +54,7 @@ class Client:
         """Move on from `screen` given the action it returned."""
         if isinstance(screen, COMMIT_CALLSIGN_ON_EXIT):
             self.session.commit_callsign()  # every way out of these screens confirms the name
-        self.transitions[type(screen)](action)
+        self.transitions[type(screen)](action) # noqa
 
     def after_menu(self, action):
         session = self.session
@@ -82,8 +84,13 @@ class Client:
             self.start_game(self.session.config)
         elif action == 'refused':
             self.leave("LINK REFUSED: NO FREE SLOT")
+        elif action == 'settings':
+            self.active = self.settings_screen
         else:
             self.leave()
+
+    def after_settings(self, action):
+        self.active = self.lobby_screen
 
     def after_play(self, action):
         if action == 'lobby':

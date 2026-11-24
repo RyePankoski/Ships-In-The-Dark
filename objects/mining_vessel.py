@@ -41,7 +41,7 @@ class MiningVessel(WorldObject):
 
         self.asteroids_destroyed = 0
 
-    def run(self, ships, bullets, laser_list, asteroids, dt):
+    def run(self, ships, bullets, laser_list, asteroids, dt, width, height):
         if not self.alive:
             return
 
@@ -58,7 +58,7 @@ class MiningVessel(WorldObject):
 
         if self.target is None:
             print("finding new target")
-            self.target = (random.randint(0, WORLD_WIDTH), random.randint(0, WORLD_HEIGHT))
+            self.target = (random.randint(0, width), random.randint(0, height))
         else:
             self.move_to_target(dt)
 

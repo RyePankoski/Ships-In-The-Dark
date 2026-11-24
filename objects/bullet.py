@@ -19,13 +19,13 @@ class Bullet(DirectionSteered):
         self.max_lifetime = BULLET_LIFETIME
         self.alive = True
 
-    def run(self, dt):
+    def run(self, dt, width, height):
         self.move(dt)
         self.lifetime -= dt
         if self.lifetime <= 0:
             self.alive = False
 
-        if self.pos_x < 0 or self.pos_x > WORLD_WIDTH or self.pos_y < 0 or self.pos_y > WORLD_HEIGHT:
+        if self.pos_x < 0 or self.pos_x > width or self.pos_y < 0 or self.pos_y > height:
             self.alive = False
 
         ratio = max(0, self.lifetime / BULLET_LIFETIME) # noqa

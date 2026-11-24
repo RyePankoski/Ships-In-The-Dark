@@ -2,6 +2,7 @@ import time
 
 from netcode.network_layer import NetworkLayer
 from config.constants import *
+from simulation.settings import WorldSettings
 
 HELLO_INTERVAL = 0.5
 TIMEOUT = 5.0
@@ -24,6 +25,7 @@ class NetClient:
 
         self.player_id = None
         self.seed = None
+        self.settings = WorldSettings()  # the world's parameters, as the server last said them
         self.rejected = False
 
         self.latest_state = None
@@ -96,10 +98,18 @@ class NetClient:
         self.match_over_pending = True
         self.since_report = HELLO_INTERVAL
 
+    def set_settings(self, settings):
+        """Host only (the server ignores everyone else): ask for new world parameters in the lobby.
+        Shown straight away; the server's next state confirms or corrects it."""
+        self.settings = settings
+        self.send({'type': 'settings', 'settings': settings.to_wire()})
+
     def receive_state(self, message):
         match = message.get('match', 0)
         if match < self.match:
             return  # left over from a match that has already ended
+        if 'settings' in message:
+            self.settings = WorldSettings.from_wire(message['settings'])
         if match > self.match:
             # A new match: its world, tick and asteroid log all start again
             self.match = match

@@ -19,9 +19,8 @@ class Ship(DirectionSteered):
     kind = 'ship'
     material = 'metallic'
 
-    def __init__(self, x=None, y=None, is_player=False, player_id=None, is_ai=False):
+    def __init__(self, x=None, y=None, player_id=None, is_ai=False):
 
-        self.player = is_player
         self.pos_x = x
         self.pos_y = y
         self.dir_x = 0
@@ -46,7 +45,7 @@ class Ship(DirectionSteered):
         # multiplayer and sends it to every client. What a player has switched on
         # or detected lives in core/cockpit.py instead and never leaves the client.
         self.radar_cross_section = 100
-        self.health = 100
+        self.health = SHIP_MAX_HEALTH
 
         # Power related
         self.fuel = SHIP_MAX_FUEL
@@ -70,7 +69,8 @@ class Ship(DirectionSteered):
         self.total_missiles = TOTAL_MISSILES
         self.missile_cooling_down = False
         self.missile_cooldown_timer = 0
-        self.missile_cooldown = 1
+        self.missile_cooldown = 5
+
 
         self.mining_vessel_sees_you = False
         self.health_low = False
@@ -94,11 +94,6 @@ class Ship(DirectionSteered):
         self.took_damage = False
         self.damage_timer = 0
         self.damage_cooldown = 0.2
-
-        # Bumped on every non-fatal asteroid contact. The scene watches for changes
-        # and times the on-screen failure effect from there.
-        self.impact_count = 0
-
 
     @property
     def net_id(self):
@@ -148,7 +143,7 @@ class Ship(DirectionSteered):
         use = self.current_draw / 45 * dt * TICK_RATE
         self.fuel -= use
 
-    def run(self, dt):
+    def run(self, dt, width, height):
 
         self.calculate_draw_and_use_fuel(dt)
 
@@ -176,7 +171,7 @@ class Ship(DirectionSteered):
             return
 
         if self.ai is not None:
-            self.ai.run()
+            self.ai.run(width, height)
 
         self.move(dt)
         self.cooldowns(dt)
@@ -185,16 +180,16 @@ class Ship(DirectionSteered):
         if not self.thrusting:
             self.dampen(dt)
 
-        self.bounce()
+        self.bounce(width, height)
 
-    def coast(self, dt):
+    def coast(self, dt, width, height):
         self.move(dt)
         self.update_rect()
 
         if not self.thrusting:
             self.dampen(dt)
 
-        self.bounce()
+        self.bounce(width, height)
 
     def fire(self):
         if not self.missile_cooling_down:
@@ -203,7 +198,7 @@ class Ship(DirectionSteered):
             return True
         return False
 
-    def can_fire(self):
+    def can_fire_missile(self):
         if self.missile_cooling_down:
             return False
         if self.total_missiles == 0:
@@ -243,6 +238,9 @@ class Ship(DirectionSteered):
 
         translate = inputs['left_shift']
         speed_cap = self.max_speed
+
+        if self.health < 20:
+            speed_cap = THROTTLED_SPEED
 
         # Turning: left and right set a turn rate that eases toward its target,
         # so the nose swings up to speed and settles out smoothly. With shift held
@@ -323,10 +321,10 @@ class Ship(DirectionSteered):
             self.dir_x = 0
             self.dir_y = 0
 
-    def bounce(self):
-        if self.pos_x > WORLD_WIDTH or self.pos_x < 0:
+    def bounce(self, width, height):
+        if self.pos_x > width or self.pos_x < 0:
             self.dir_x *= -1
-        if self.pos_y > WORLD_HEIGHT or self.pos_y < 0:
+        if self.pos_y > height or self.pos_y < 0:
             self.dir_y *= -1
 
     def update_rect(self):

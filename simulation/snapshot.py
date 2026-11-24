@@ -15,10 +15,12 @@ field says how to pack it:
 import math
 
 from objects.decoy import Decoy
+from objects.drone import Drone
+from objects.mining_vessel import MiningVessel
 from objects.missile import Missile
 from objects.ship import Ship
 
-from config.constants import SNAP_DISTANCE, LOCAL_VELOCITY_BLEND
+from config.constants import SNAP_DISTANCE, LOCAL_VELOCITY_BLEND, GRID_SIZE
 
 INT = 'int'
 BOOL = 'bool'
@@ -40,6 +42,9 @@ MISSILE_FIELDS = (
     ('fuel', 1), ('owner', INT), ('alive', BOOL),
 )
 DECOY_FIELDS = (('pos_x', 1), ('pos_y', 1), ('dir_x', 3), ('dir_y', 3), ('speed', 1))
+# Drones and pirates are sent as positions only: they are slow, and the client just places them
+DRONE_FIELDS = (('pos_x', 1), ('pos_y', 1), ('am_mining', BOOL))
+PIRATE_FIELDS = (('pos_x', 1), ('pos_y', 1), ('heading', 1), ('resting', BOOL))
 
 
 def make_snapshot(world):
@@ -50,8 +55,13 @@ def make_snapshot(world):
             _pack(m, MISSILE_FIELDS, m.net_id) + [getattr(m.target, 'net_id', None)]
             for m in world.missiles
         ],
-        'decoys': [_pack(d, DECOY_FIELDS, d.net_id) for d in world.decoys],
+        'decoys': [_pack(d, DECOY_FIELDS, d.net_id) for d in world.decoys],        'drones': [_pack(d, DRONE_FIELDS, d.net_id) for d in _all(world.drones)],
+        'pirates': [_pack(p, PIRATE_FIELDS, p.net_id) for p in _all(world.pirates)],
     }
+
+
+def _all(grid):
+    return [obj for group in grid.values() for obj in group]
 
 
 def apply_snapshot(world, snapshot, age=0.0, my_id=None):
@@ -85,6 +95,30 @@ def apply_snapshot(world, snapshot, age=0.0, my_id=None):
                age=age)
     for missile in world.missiles:
         missile.target = world.find(targets[missile.net_id])
+
+    _sync_npcs(world.drones, snapshot.get('drones', []), DRONE_FIELDS, lambda d: Drone(d['pos_x'], d['pos_y']))
+    _sync_npcs(world.pirates, snapshot.get('pirates', []), PIRATE_FIELDS,
+               lambda d: MiningVessel(d['pos_x'], d['pos_y'], speed=40))
+
+
+def _sync_npcs(grid, rows, fields, create):
+    """Rebuild a grid-keyed group of drones or pirates from the server's list. These don't
+    ease between snapshots: they're slow, so placing them where the server says is close enough."""
+    existing = {obj.net_id: obj for obj in _all(grid)}
+    grid.clear()
+    for row in rows:
+        data = _unpack(row, fields)
+        obj = existing.get(data['id'])
+        if obj is None:
+            obj = create(data)
+            obj.net_id = data['id']
+        for name, _ in fields:
+            setattr(obj, name, data[name])
+        if hasattr(obj, 'update_rect'):
+            obj.update_rect()
+        cell = (int(obj.pos_x // GRID_SIZE), int(obj.pos_y // GRID_SIZE))
+        obj.cell = cell
+        grid.setdefault(cell, []).append(obj)
 
 
 def _pack(obj, fields, object_id):

@@ -4,6 +4,7 @@ import time
 from netcode.callsign import clean_callsign
 from netcode.network_layer import NetworkLayer
 from simulation.snapshot import make_snapshot
+from simulation.settings import WorldSettings
 from simulation.world import World
 from config.constants import *
 
@@ -74,8 +75,9 @@ class Server:
 
         self.max_players = max_players
         self.seed = random.randrange(2 ** 31)
-        self.world = World(self.seed, with_npcs=False)
+        self.settings = WorldSettings()  # the host's choices for the next match (see apply_settings)
         self.players = {}  # address -> PlayerSlot
+        self.world = self._new_world()
         self.roster_version = 1
 
         self.started = False
@@ -96,6 +98,26 @@ class Server:
             self.started = True
             print(f"[SERVER] Launching with {len(self.players)} players")
 
+    def _new_world(self, callsigns=None):
+        """A fresh world for the current seed and settings, with every pilot in it.
+        The server owns the drones and pirates, so it generates them."""
+        world = World(self.seed, with_npcs=True, settings=self.settings)
+        world.callsigns = dict(callsigns or {})
+        for slot in self.players.values():
+            world.spawn_ship(slot.player_id)
+        return world
+
+    def apply_settings(self, wire):
+        """The host changed the world's parameters. Only in the lobby; rebuilds the lobby world to match."""
+        if self.started:
+            return
+        settings = WorldSettings.from_wire(wire)
+        if settings == self.settings:
+            return
+        self.settings = settings
+        self.world = self._new_world(callsigns=self.world.callsigns)
+        print(f"[SERVER] Settings: {settings.summary()}")
+
     def return_to_lobby(self):
         """The match is over: fresh world and seed, same pilots, back to the lobby."""
         if not self.started:
@@ -103,14 +125,11 @@ class Server:
         self.started = False
         self.match += 1
         self.seed = random.randrange(2 ** 31)
-        callsigns = dict(self.world.callsigns)
-        self.world = World(self.seed, with_npcs=False)
-        self.world.callsigns = callsigns
+        self.world = self._new_world(callsigns=self.world.callsigns)
         self.tick = 0
         self.accumulator = 0.0
         self.recent_events = []
         for slot in self.players.values():
-            self.world.spawn_ship(slot.player_id)
             slot.move = None
             slot.laser_target = None
             slot.power = None
@@ -181,6 +200,11 @@ class Server:
             # Only the host (the game running on this machine, which joins via loopback) may send everyone back
             if address[0] == HOST_ADDRESS:
                 self.return_to_lobby()
+
+        elif kind == 'settings' and slot is not None:
+            self.heard_from(slot, message)
+            if address[0] == HOST_ADDRESS:  # only the host sets the world's parameters
+                self.apply_settings(message.get('settings'))
 
     def heard_from(self, slot, message):
         slot.last_heard = time.monotonic()
@@ -255,11 +279,13 @@ class Server:
                                  if audience is None or slot.player_id in audience]
             message.update({
                 'type': 'state',
+                'outcome': self.world.outcome_for(slot.player_id),
                 'tick': self.tick,
                 'started': self.started,
                 'ack': slot.last_action_id,
                 'match': self.match,
                 'seed': self.seed,
+                'settings': self.settings.to_wire(),
             })
             if slot.roster_version < self.roster_version:
                 message['roster'] = roster
