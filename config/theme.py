@@ -30,6 +30,7 @@ GREEN_FAINT = (10, 32, 16)
 
 RED = (255, 60, 50)
 RED_BRIGHT = (255, 120, 110)
+RANGE_BAND = (*RED_BRIGHT, 40)  # a radar distance band holding something that moves
 RED_DIM = (120, 28, 22)
 
 WHITE = (235, 240, 230)

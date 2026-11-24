@@ -32,7 +32,7 @@ THROTTLED_SPEED = 50
 HIGH_USE = 4  # power draw at or above this triggers the high-draw warning
 
 # Switches that change a ship's power draw. The owning player sets them; the server applies them.
-POWER_FLAGS = ('laser_on', 'prox_scan_on', 'blinking', 'deep_field_on', 'dampening', 'material_assessor_on', 'radar_scan_on', 'dfs_detector_on')
+POWER_FLAGS = ('laser_on', 'prox_scan_on', 'blinking', 'deep_field_on', 'dampening', 'material_assessor_on', 'radar_scan_on', 'dfs_detector_on', 'range_bands_on')
 
 
 # ---------------------------------------------------------------------------
@@ -70,7 +70,8 @@ LASER_RANGE = 5000
 # ---------------------------------------------------------------------------
 MINING_RANGE = 200  # centre to centre, world units
 MINING_TIME = 8.0  # seconds of beam on one rock
-MINING_DRAW = 1.5  # power draw while the mining beam is on (LaserAssessor draws 1)
+RANGE_BANDS_DRAW = 0.25  # power draw while the radar range bands are on
+MINING_DRAW = 1.5 # power draw while the mining beam is on (LaserAssessor draws 1)
 MINING_FUEL_YIELD = 100  # fuel from an icy rock
 MINING_MISSILE_YIELD = 1  # missiles from a metallic rock
 MINING_HULL_YIELD = 100  # hull rebuild from a semi-metallic rock

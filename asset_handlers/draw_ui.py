@@ -1404,14 +1404,39 @@ class DrawUI:
             self.screen.blit(warning_text, (world_right - warning_text.get_width() - 20,
                                             world_bottom - warning_text.get_height() - 20))
 
-    def draw_radar(self, player_ship, signatures, is_scanning=False, sweep_angle=None):
+    def _radar_geometry(self):
+        """(radar_rect, center_x, center_y, max_radius, grid_spacing) of the radar scope."""
         radar_x, radar_y, radar_size = self._get_radar_bounds()
         radar_rect = pygame.Rect(radar_x, radar_y, radar_size, radar_size)
-        center_x = radar_x + radar_size // 2
-        center_y = radar_y + radar_size // 2
-
-        # FIX: Max radius is half the bounding box, not the full bounding box
+        # Max radius is half the bounding box, not the full bounding box
         max_radius = radar_size // 2
+        return (radar_rect, radar_rect.centerx, radar_rect.centery,
+                max_radius, max_radius // self.RADAR_GRID_COUNT)
+
+    def draw_range_bands(self, hot):
+        """Tint each distance band (1 = innermost) in `hot` on the radar. Drawn after
+        draw_radar, over the grid; faint enough to leave the blips readable."""
+        if not hot:
+            return
+        radar_rect, center_x, center_y, _, spacing = self._radar_geometry()
+        layer = getattr(self, '_band_layer', None)
+        if layer is None or layer.get_size() != radar_rect.size:
+            layer = self._band_layer = pygame.Surface(radar_rect.size, pygame.SRCALPHA)
+        layer.fill((0, 0, 0, 0))
+        local_center = (center_x - radar_rect.x, center_y - radar_rect.y)
+        # Outermost first: each band's cut-out would otherwise erase the inner bands already drawn
+        for i in sorted(hot, reverse=True):
+            pygame.draw.circle(layer, theme.RANGE_BAND, local_center, spacing * i)
+            if i > 1:
+                pygame.draw.circle(layer, (0, 0, 0, 0), local_center, spacing * (i - 1))
+        old_clip = self.screen.get_clip()
+        self.screen.set_clip(radar_rect)
+        self.screen.blit(layer, radar_rect.topleft)
+        self.screen.set_clip(old_clip)
+
+    def draw_radar(self, player_ship, signatures, is_scanning=False, sweep_angle=None):
+        radar_rect, center_x, center_y, max_radius, grid_spacing = self._radar_geometry()
+        radar_x, radar_y, radar_size = radar_rect.x, radar_rect.y, radar_rect.width
 
         # --- CRT Phosphor Background & Scanlines ---
         pygame.draw.rect(self.screen, theme.BG_SENSOR, radar_rect)  # Deep murky green background
@@ -1428,7 +1453,6 @@ class DrawUI:
         self.screen.set_clip(radar_rect)
 
         grid_color = theme.GREEN_DIM  # Glowing dim green
-        grid_spacing = max_radius // self.RADAR_GRID_COUNT
 
         # Axis Crosshairs
         pygame.draw.line(self.screen, grid_color, (radar_x, center_y), (radar_x + radar_size, center_y), 1)

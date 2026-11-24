@@ -1,3 +1,5 @@
+import math
+
 import pygame
 
 from asset_handlers.draw_game import DrawGame
@@ -14,6 +16,7 @@ from instruments.laser_assessor import LaserAssessor
 from instruments.mining_laser import MiningLaser
 from instruments.material_assessor import MaterialAssessor
 from instruments.radar_system import RadarSystem
+from instruments.range_bands import RangeBands
 from simulation.world import MOVE_KEYS, POWER_FLAGS, empty_command
 from utility.geometry import squared_distance
 from utility.input import key_pressed
@@ -81,13 +84,14 @@ class MainScene:
             send_action=lambda action: self._outbox.append(action),
         )
         self.radar_system = RadarSystem(self.instrument_context)
+        self.range_bands = RangeBands(self.instrument_context)
         self.deep_field_scan = DeepFieldScan(self.instrument_context)
         self.laser_assessor = LaserAssessor(self.instrument_context)
         self.material_assessor = MaterialAssessor(self.instrument_context, self.laser_assessor)
         self.mining_laser = MiningLaser(self.instrument_context, self.laser_assessor)
         self.close_range_scan = CloseRangeScan(self.instrument_context)
         self.blink = BlinkDrive(self.instrument_context)
-        self.instruments = [self.radar_system, self.deep_field_scan, self.laser_assessor,
+        self.instruments = [self.radar_system, self.range_bands, self.deep_field_scan, self.laser_assessor,
                             self.material_assessor, self.mining_laser, self.close_range_scan,
                             self.blink]
 
@@ -234,10 +238,16 @@ class MainScene:
         self.update_threats()
         self.timers(dt)
 
+        if cockpit_keys:
+            self.aim_laser_at_mouse()
+
         for instrument in self.instruments:
             instrument.update(dt, inputs)
 
         self.update_ship_power_use()
+        # The command was built before the instruments updated; send the switches as they stand now,
+        # or the World would apply last frame's values over the ones just set.
+        self.command['power'] = {name: getattr(self.player_ship, name) for name in POWER_FLAGS}
         self.handle_general_sound_effects()
         return self.command
 
@@ -256,6 +266,22 @@ class MainScene:
         else:
             self.draw_scene()
 
+    def aim_laser_at_mouse(self):
+        """Holding left click on the main window (not on a button) snaps the laser to that heading.
+        The ship is drawn at the screen centre, so the heading is the mouse's angle from there."""
+        laser = self.laser_assessor
+        if not laser.on or not pygame.mouse.get_focused() or not pygame.mouse.get_pressed()[0]:
+            return
+        pos = pygame.mouse.get_pos()
+        if self.draw_ui.buttons._top_at(pos) is not None:
+            return
+        width, height = self.draw_ui.view_size()
+        dx, dy = pos[0] - width / 2, pos[1] - height / 2
+        if dx == 0 and dy == 0:
+            return
+        laser.set_direction(math.degrees(math.atan2(dy, dx)) % 360)
+        laser.laser_locked = False
+
     def update_explosions(self, dt):
         for explosion in self.explosions:
             explosion.update(dt)
@@ -269,6 +295,7 @@ class MainScene:
         self.player_ship.radar_scan_on = self.radar_system.scanning
         self.player_ship.material_assessor_on = self.material_assessor.scanning is not None
         self.player_ship.dfs_detector_on = self.deep_field_scan.alert_on
+        self.player_ship.range_bands_on = self.range_bands.on
 
     def start_input_cooldown(self):
         self.input_cooling_down = True

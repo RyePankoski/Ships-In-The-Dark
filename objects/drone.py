@@ -26,6 +26,12 @@ class Drone(WorldObject):
 
         self.alive = True
 
+    @property
+    def moving(self):
+        # vel is never sent to clients and is never zeroed on arrival, so go by am_mining
+        # (synced). A drone still choosing a target counts as moving: a short, rare state.
+        return not self.am_mining
+
     def run_drone(self, asteroids, dt):
 
         if self.am_mining:
