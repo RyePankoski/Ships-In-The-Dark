@@ -5,6 +5,7 @@ import random
 import pygame
 from config.constants import *
 from config import theme
+from config import ui_constants
 from asset_handlers import fonts
 from asset_handlers.buttons import ButtonLayer, draw_button, draw_frame
 from asset_handlers.crt import crt
@@ -19,9 +20,9 @@ class DrawUI:
     THIN_HEIGHT = 200
 
     # Radar Configuration
-    RADAR_PADDING = 20
-    RADAR_SCALE = 4000.0  # World units (±2000 in each direction)
-    RADAR_GRID_COUNT = 2
+    RADAR_PADDING = ui_constants.RADAR_PADDING
+    RADAR_SCALE = ui_constants.RADAR_SCALE  # World units across the radar
+    RADAR_GRID_COUNT = ui_constants.RADAR_GRID_COUNT  # Distance rings
 
     # Corridor Dimensions
     CORRIDOR_WIDTH = CORRIDOR_WIDTH
@@ -32,8 +33,6 @@ class DrawUI:
     DFS_PANEL_MARGIN = 20
     DFS_CONTACT_DISPLAY_LIMIT = 8
 
-    # Missile Vector Display
-    MISSILE_VECTOR_LENGTH = 75
 
     # Colour palette: see config/theme.py for what each colour means
     COLOR_PANEL_BG = theme.BG
@@ -64,7 +63,6 @@ class DrawUI:
     # Threat/Warning Colors
     COLOR_THREAT_RED = theme.RED
     COLOR_THREAT_DIM = theme.RED_DIM
-    COLOR_MISSILE_VECTOR = theme.RED_BRIGHT
     COLOR_MISSILE_LOCK = theme.RED
 
     # Corridor Display
@@ -650,6 +648,216 @@ class DrawUI:
 
         self.buttons.end_frame()
 
+    def _titled_box(self, rect, title, color=theme.AMBER_DIM, text=theme.AMBER):
+        """A framed box whose title sits in a gap cut into its top border. Returns the
+        y where the box's contents can start."""
+        self._frame(rect, color, fill=None, tick=8, width=1)
+        surf = fonts.font(20).render(title, True, text)
+        tab = pygame.Rect(rect.left + 20, rect.top - surf.get_height() // 2, surf.get_width() + 16, surf.get_height())
+        pygame.draw.rect(self.screen, theme.BG, tab)
+        self.screen.blit(surf, (tab.left + 8, tab.top))
+        return rect.top + surf.get_height() // 2 + 16
+
+    def draw_lobby_screen(self, callsign, your_id, roster, settings_lines, status_lines, buttons):
+        """The flight lobby, laid out over the whole screen in framed boxes: the pilot
+        record and the pilots on the net on top, the world parameters and the command
+        buttons below, status along the bottom. `roster` is [(player_id, callsign)] in
+        order; `buttons` is [(label, key hint, action, enabled)]. Each button is
+        registered in the same call that draws it."""
+        self.buttons.begin_frame()
+        w, h = self.screen.get_size()
+        flicker = 0.96 + math.sin(pygame.time.get_ticks() / 1000.0 * 35.0) * 0.02
+
+        def lit(col):
+            return tuple(int(v * flicker) for v in col)
+
+        HEAD = theme.AMBER_DIM
+        RULE = theme.AMBER_FAINT
+        TITLE = lit(theme.AMBER_BRIGHT)
+        LOG = lit(theme.GREEN)
+        LOG_HOT = lit(theme.GREEN_BRIGHT)
+
+        title_font = fonts.font(64)
+        field_font = fonts.font(30)
+        small_font = fonts.font(22)
+        btn_font = fonts.font(30)
+        key_font = fonts.font(20)
+        pad, gap = 28, 22
+
+        margin = 16
+        panel = pygame.Rect(margin, margin, w - 2 * margin, h - 2 * margin)
+        self._frame(panel, theme.AMBER, fill=theme.BG, tick=14, width=2)
+        x0, x1 = panel.left + pad, panel.right - pad
+        y = self._ident_strip(panel, x0, x1, fonts.font(20), HEAD, RULE)
+        title_surf = title_font.render("FLIGHT LOBBY", True, TITLE)
+        self.screen.blit(title_surf, (x0, y))
+        y += title_surf.get_height() + 26
+
+        # Status block pinned to the bottom of the frame
+        status_h = 150
+        status_box = pygame.Rect(x0, panel.bottom - pad - status_h, x1 - x0, status_h)
+
+        # Two rows of boxes fill the space above it; the left column is the narrower one
+        avail = status_box.top - gap - y
+        row1_h = int((avail - gap) * 0.56)
+        row2_h = avail - gap - row1_h
+        left_w = int((x1 - x0 - gap) * 0.42)
+        right_x = x0 + left_w + gap
+        right_w = x1 - right_x
+        y2 = y + row1_h + gap
+        record = pygame.Rect(x0, y, left_w, row1_h)
+        roster_box = pygame.Rect(right_x, y, right_w, row1_h)
+        world = pygame.Rect(x0, y2, left_w, row2_h)
+        command = pygame.Rect(right_x, y2, right_w, row2_h)
+
+        # Pilot record: callsign in a field, then slot and net count
+        top = self._titled_box(record, "PILOT RECORD")
+        row_h = field_font.get_height() + 18
+        value_x = record.left + pad + 200
+        field_rect = pygame.Rect(value_x - 14, top - 4, record.right - pad - value_x + 14, field_font.get_height() + 12)
+        self._frame(field_rect, theme.AMBER_DIM, fill=theme.BG, tick=6, width=1)
+        self.screen.blit(field_font.render("CALLSIGN", True, HEAD), (record.left + pad, top))
+        self.screen.blit(field_font.render(callsign + blink_cursor(), True, LOG_HOT), (value_x, top))
+        for i, (label, value) in enumerate((("SLOT", f"{your_id:02d}"), ("PILOTS", f"{len(roster)} ON NET"))):
+            yy = top + (i + 1) * row_h
+            self.screen.blit(field_font.render(label, True, HEAD), (record.left + pad, yy))
+            self.screen.blit(field_font.render(value, True, LOG), (value_x, yy))
+        hint = small_font.render("ENTER TO CONFIRM", True, HEAD)
+        self.screen.blit(hint, (record.left + pad, top + 3 * row_h + 6))
+
+        # Pilots on the net: one box per pilot, yours highlighted, overflow as a count
+        top = self._titled_box(roster_box, f"PILOTS ON NET  //  {len(roster)}")
+        step = small_font.get_height() + 22
+        capacity = max(0, (roster_box.bottom - pad - top) // step)
+        shown = roster if len(roster) <= capacity else roster[:max(0, capacity - 1)]
+        for i, (player_id, name) in enumerate(shown):
+            r = pygame.Rect(roster_box.left + pad, top + i * step, roster_box.width - 2 * pad, step - 8)
+            mine = player_id == your_id
+            self._frame(r, theme.GREEN if mine else theme.AMBER_FAINT, fill=None, tick=6, width=1)
+            pid = small_font.render(f"{player_id:02d}", True, HEAD)
+            self.screen.blit(pid, pid.get_rect(midleft=(r.left + 18, r.centery)))
+            name_surf = small_font.render(name, True, LOG_HOT if mine else LOG)
+            self.screen.blit(name_surf, name_surf.get_rect(midleft=(r.left + 84, r.centery)))
+            if mine:
+                tag = small_font.render("< YOU", True, LOG_HOT)
+                self.screen.blit(tag, tag.get_rect(midright=(r.right - 18, r.centery)))
+        if len(roster) > len(shown):
+            more = small_font.render(f"+{len(roster) - len(shown)} MORE", True, HEAD)
+            self.screen.blit(more, (roster_box.left + pad, top + len(shown) * step + 4))
+
+        # World parameters: one boxed field per setting
+        top = self._titled_box(world, "WORLD PARAMETERS")
+        step = field_font.get_height() + 22
+        for i, line in enumerate(settings_lines):
+            r = pygame.Rect(world.left + pad, top + i * step, world.width - 2 * pad, step - 10)
+            if r.bottom > world.bottom - pad:
+                break
+            self._frame(r, theme.AMBER_FAINT, fill=None, tick=6, width=1)
+            surf = field_font.render(line, True, LOG)
+            self.screen.blit(surf, surf.get_rect(midleft=(r.left + 18, r.centery)))
+
+        # Command: the buttons, stacked and full width
+        top = self._titled_box(command, "COMMAND")
+        bh, bgap = 66, 14
+        total = len(buttons) * bh + (len(buttons) - 1) * bgap
+        first = top + max(0, (command.bottom - pad - top - total) // 2)
+        for i, (label, key, action, *rest) in enumerate(buttons):
+            enabled = rest[0] if rest else True
+            rect = pygame.Rect(command.left + pad, first + i * (bh + bgap), command.width - 2 * pad, bh)
+            self._button(rect, label, action, key=key, enabled=enabled, font=btn_font, key_font=key_font)
+
+        # Status
+        top = self._titled_box(status_box, "STATUS", HEAD, theme.AMBER)
+        for i, line in enumerate(status_lines[:2]):
+            self.screen.blit(small_font.render(line, True, LOG_HOT), (status_box.left + pad, top + 4 + i * (small_font.get_height() + 10)))
+        hint = small_font.render("SELECT BY KEY OR CLICK", True, HEAD)
+        self.screen.blit(hint, hint.get_rect(topright=(status_box.right - pad, top + 4)))
+
+        self.buttons.end_frame()
+
+    def draw_settings_screen(self, settings_lines, parameters, back, notice_lines):
+        """The world parameters screen, in the same framed-box layout as the lobby.
+        settings_lines: the current world, one line per setting. parameters: [(label, key
+        hint, action)] that each change one setting. back: (label, key hint, action).
+        notice_lines: the status block along the bottom. Buttons register as they are drawn."""
+        self.buttons.begin_frame()
+        w, h = self.screen.get_size()
+        flicker = 0.96 + math.sin(pygame.time.get_ticks() / 1000.0 * 35.0) * 0.02
+
+        def lit(col):
+            return tuple(int(v * flicker) for v in col)
+
+        HEAD = theme.AMBER_DIM
+        RULE = theme.AMBER_FAINT
+        TITLE = lit(theme.AMBER_BRIGHT)
+        LOG = lit(theme.GREEN)
+        LOG_HOT = lit(theme.GREEN_BRIGHT)
+
+        title_font = fonts.font(64)
+        field_font = fonts.font(30)
+        small_font = fonts.font(22)
+        btn_font = fonts.font(30)
+        key_font = fonts.font(20)
+        pad, gap = 28, 22
+
+        margin = 16
+        panel = pygame.Rect(margin, margin, w - 2 * margin, h - 2 * margin)
+        self._frame(panel, theme.AMBER, fill=theme.BG, tick=14, width=2)
+        x0, x1 = panel.left + pad, panel.right - pad
+        y = self._ident_strip(panel, x0, x1, fonts.font(20), HEAD, RULE)
+        title_surf = title_font.render("WORLD SETTINGS", True, TITLE)
+        self.screen.blit(title_surf, (x0, y))
+        y += title_surf.get_height() + 26
+
+        # Notice block pinned to the bottom of the frame
+        status_h = 150
+        status_box = pygame.Rect(x0, panel.bottom - pad - status_h, x1 - x0, status_h)
+
+        # Left: the parameters to change. Right: the current world, then BACK.
+        avail = status_box.top - gap - y
+        left_w = int((x1 - x0 - gap) * 0.5)
+        right_x = x0 + left_w + gap
+        right_w = x1 - right_x
+        command_h = 150
+        world_h = avail - gap - command_h
+        params = pygame.Rect(x0, y, left_w, avail)
+        world = pygame.Rect(right_x, y, right_w, world_h)
+        command = pygame.Rect(right_x, y + world_h + gap, right_w, command_h)
+
+        # Parameters: one full-width button per setting
+        top = self._titled_box(params, "PARAMETERS")
+        bh, bgap = 74, 16
+        total = len(parameters) * bh + (len(parameters) - 1) * bgap
+        first = top + max(0, (params.bottom - pad - top - total) // 2)
+        for i, (label, key, action) in enumerate(parameters):
+            rect = pygame.Rect(params.left + pad, first + i * (bh + bgap), params.width - 2 * pad, bh)
+            self._button(rect, label, action, key=key, font=btn_font, key_font=key_font)
+
+        # Current world: one boxed field per setting
+        top = self._titled_box(world, "CURRENT WORLD")
+        step = field_font.get_height() + 22
+        for i, line in enumerate(settings_lines):
+            r = pygame.Rect(world.left + pad, top + i * step, world.width - 2 * pad, step - 10)
+            if r.bottom > world.bottom - pad:
+                break
+            self._frame(r, theme.AMBER_FAINT, fill=None, tick=6, width=1)
+            surf = field_font.render(line, True, LOG)
+            self.screen.blit(surf, surf.get_rect(midleft=(r.left + 18, r.centery)))
+
+        # Command: BACK
+        top = self._titled_box(command, "COMMAND")
+        label, key, action = back
+        rect = pygame.Rect(command.left + pad, top + max(0, (command.bottom - pad - top - 66) // 2),
+                           command.width - 2 * pad, 66)
+        self._button(rect, label, action, key=key, font=btn_font, key_font=key_font)
+
+        # Notice
+        top = self._titled_box(status_box, "NOTICE", HEAD, theme.AMBER)
+        for i, line in enumerate(notice_lines[:2]):
+            self.screen.blit(small_font.render(line, True, LOG_HOT), (status_box.left + pad, top + 4 + i * (small_font.get_height() + 10)))
+
+        self.buttons.end_frame()
+
     def _get_world_bounds(self):
         """Calculate world viewport bounds from screen dimensions.
 
@@ -760,11 +968,12 @@ class DrawUI:
 
         return radar_x, radar_y, radar_size
 
-    def draw_ship_info(self, ship, cockpit, instrument_lines=()):
+    def draw_ship_info(self, ship, cockpit, instrument_lines=(), dfs_warning='idle'):
         """Ship telemetry: three columns of readouts in the bottom panel, under the viewport.
 
         Column widths come from the text they hold, so nothing overlaps whatever
         the numbers are; the box grows to fit and stays centred under the viewport.
+        dfs_warning: 'active' while a DFS sweep is on us, 'idle', or 'off' (alert muted).
         """
         font = fonts.font(19)
         line_h = font.get_height() + 3
@@ -810,7 +1019,12 @@ class DrawUI:
             threat = ("TGT   LOCK ACQUIRED", CAUTION)
         else:
             threat = ("THREAT  NONE", LABEL)
-        tactical = [("TACTICAL", LABEL), threat, msl, (f"HULL  {health:03d}/100", hull_col)]
+        # Fixed row, so it never shifts the rows above; gray unless a sweep is on us
+        dfs_row = {
+            'active': ("THREAT  DFS SWEEP", THREAT),
+            'off': ("DFS SWEEP  OFF", LABEL),
+        }.get(dfs_warning, ("DFS SWEEP  CLEAR", LABEL))
+        tactical = [("TACTICAL", LABEL), threat, msl, (f"HULL  {health:03d}/100", hull_col), dfs_row]
 
         columns = [nav, subsystems, tactical]
         rendered = [[font.render(t, True, c) for t, c in col] for col in columns]
@@ -1015,7 +1229,7 @@ class DrawUI:
         self.screen.blit(fuel_val, fuel_val.get_rect(topright=(x_val, y)))
 
         self.screen.blit(font.render("DRAW", True, theme.AMBER_DIM), (x_lab, y + line_h))
-        draw_val = font.render(f"{ship.current_draw}", True, theme.GREEN)
+        draw_val = font.render(f"{ship.current_draw:.2f}", True, theme.GREEN)
         self.screen.blit(draw_val, draw_val.get_rect(topright=(x_val, y + line_h)))
 
         # Fault acknowledge: left of the readout, as tall as its two rows
@@ -1575,73 +1789,6 @@ class DrawUI:
             (1, "SCAN", 'material_scan', dict(key="N", enabled=can_scan)),
         ])
 
-    def draw_missile_vectors(self, player_id, missiles, camera_x, camera_y):
-        world_left, world_right, world_top, world_bottom = self._get_world_bounds()
-
-        # Viewport center (reference origin for edge projection)
-        center_x = (world_left + world_right) / 2
-        center_y = (world_top + world_bottom) / 2
-
-        enemy_missiles = [
-            m for m in missiles
-            if getattr(m.target, "net_id", None) == player_id
-        ]
-
-        for missile in enemy_missiles:
-            # Convert missile position to screen space
-            screen_x = missile.pos_x - camera_x
-            screen_y = missile.pos_y - camera_y
-
-            # Only draw edge indicators for off-screen threats
-            if not (world_left < screen_x < world_right and world_top < screen_y < world_bottom):
-
-                # Project Line of Sight to Viewport Edges
-                rel_x = screen_x - center_x
-                rel_y = screen_y - center_y
-
-                if rel_x == 0 and rel_y == 0:
-                    continue
-
-                # Find intersection scale factor against the viewport box
-                half_w = (world_right - world_left) / 2 - 15
-                half_h = (world_bottom - world_top) / 2 - 15
-
-                scale_x = abs(half_w / rel_x) if rel_x != 0 else float("inf")
-                scale_y = abs(half_h / rel_y) if rel_y != 0 else float("inf")
-                scale = min(scale_x, scale_y)
-
-                # Edge anchor coordinates
-                edge_x = center_x + rel_x * scale
-                edge_y = center_y + rel_y * scale
-
-                # Missile Velocity Vector Alignment
-                vel_mag = math.hypot(missile.vel_x, missile.vel_y)
-                if vel_mag > 0:
-                    dir_x = missile.vel_x / vel_mag
-                    dir_y = missile.vel_y / vel_mag
-                else:
-                    dir_x = -rel_x / math.hypot(rel_x, rel_y)
-                    dir_y = -rel_y / math.hypot(rel_x, rel_y)
-
-                # Vector Line Properties
-                end_x = edge_x + dir_x * self.MISSILE_VECTOR_LENGTH
-                end_y = edge_y + dir_y * self.MISSILE_VECTOR_LENGTH
-
-                # Draw Main Trajectory Line
-                pygame.draw.line(
-                    self.screen, self.COLOR_MISSILE_VECTOR,
-                    (edge_x, edge_y), (end_x, end_y), 3
-                )
-
-                # Draw Vector Tip (Small crossbar to accent movement direction)
-                perp_x = -dir_y * 4
-                perp_y = dir_x * 4
-                pygame.draw.line(
-                    self.screen, self.COLOR_MISSILE_VECTOR,
-                    (end_x - perp_x, end_y - perp_y),
-                    (end_x + perp_x, end_y + perp_y), 2
-                )
-
     def set_world(self, world):
         """The world the scene is showing: its size is what the radar and map are drawn to."""
         self.world_width, self.world_height = world.width, world.height
@@ -1966,47 +2113,36 @@ class DrawUI:
                              (world_left, world_top, world_right - world_left, world_bottom - world_top),
                              2)
 
-    def draw_dfs_warning(self, active, timer=0.0):
+    def draw_dfs_warning(self, active, on, timer=0.0):
         """Draw pulsing scan sweep when being swept by DFS.
 
         Args:
             active: Boolean indicating if warning should display
             timer: Current timer value (0-3 seconds). Caller handles incrementing.
+            :param on:
         """
         if not active:
             return
 
-        screen_width = self.screen.get_width()
-        screen_height = self.screen.get_height()
+        if not on:
+            return
 
         world_left, world_right, world_top, world_bottom = self._get_world_bounds()
-        center_x = (world_left + world_right) // 2
-        center_y = (world_top + world_bottom) // 2
 
-        # Pulse intensity based on time (0-1)
-        pulse = (timer % 1.0)
-        alpha = int(200 * (1.0 - pulse))  # Fade out as pulse completes
-
-        scan_color = (*theme.RED, alpha)
-
-        # Draw expanding concentric circles (scan sweep effect)
-        max_radius = 150
-        radius = int(max_radius * pulse)
-
-        scan_surface = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
-        pygame.draw.circle(scan_surface, scan_color, (center_x, center_y), radius, 2)
-        pygame.draw.circle(scan_surface, scan_color, (center_x, center_y), max(radius - 20, 0), 1)
-        self.screen.blit(scan_surface, (0, 0))
-
-        # Corner warning indicators
+        # Corner warning indicator (top right; the top left one is gone)
         indicator_color = theme.RED
         indicator_size = 8
-        pygame.draw.circle(self.screen, indicator_color, (world_left + 15, world_top + 15), indicator_size, 2)
         pygame.draw.circle(self.screen, indicator_color, (world_right - 15, world_top + 15), indicator_size, 2)
 
-        # Status line at a fixed position, left-aligned under the corner indicator
-        warning_text = self.font_scan_body.render("STATUS: DFS SWEEP DETECTED", True, theme.RED)
-        self.screen.blit(warning_text, (world_left + 32, world_top + 30))
+        # Plain text in a red box, fixed at the top-left of the viewport
+        warning_font = fonts.legacy_font(28)
+        warning_text = warning_font.render("STATUS: DFS SWEEP DETECTED", True, theme.RED)
+        pad = 10
+        box = pygame.Rect(world_left + 32, world_top + 30,
+                          warning_text.get_width() + pad * 2, warning_text.get_height() + pad * 2)
+        pygame.draw.rect(self.screen, theme.BG, box)
+        pygame.draw.rect(self.screen, theme.RED, box, 2)
+        self.screen.blit(warning_text, (box.left + pad, box.top + pad))
 
     def draw_missile_contact(self, time_left, duration=1.5):
         """Banner at the top of the viewport confirming a missile reached its contact.

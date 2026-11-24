@@ -1,3 +1,4 @@
+import math
 import random
 from dataclasses import dataclass
 
@@ -6,7 +7,7 @@ from netcode.network_layer import local_ip
 from netcode.server import Server
 from config.constants import SNAPSHOT_AGE, TICK_DT
 
-MAX_TICKS_PER_FRAME = 5  # single player: the most fixed steps one frame may run (as the server's cap)
+MAX_TICKS_PER_FRAME = 5  # single player: the most steps one frame may run (as the server's cap)
 from netcode.callsign import clean_callsign
 from simulation.settings import WorldSettings
 from simulation.snapshot import apply_snapshot
@@ -49,7 +50,6 @@ class Session:
         self.world = None
         self.match_joined = None  # the server's match number when our current game started
         self.config = None  # the MatchConfig of the game in progress
-        self._accumulator = 0.0  # single player: frame time not yet spent on a TICK_DT step
         self._queued_actions = []  # single player: one-off actions waiting for the next tick
 
     # ------------------------------------------------------------------
@@ -140,7 +140,6 @@ class Session:
     def start_match(self, mode, state=None):
         """Build our world for a new match and return its MatchConfig.
         mode 'single': simulate locally. mode 'online': mirror the server, from its first `state`."""
-        self._accumulator = 0.0
         self._queued_actions = []
         if mode == 'single':
             config = MatchConfig(local=True, my_id=1, is_host=False)
@@ -159,8 +158,11 @@ class Session:
     def step(self, command, dt):
         """Advance our copy of the match by one frame; return the events it produced for us.
 
-        Single player: the World is stepped at TICK_DT, the same rate as the server, so a
-        frame may step zero, one or several times. One-off actions go on the first tick only.
+        Single player: the World is stepped every frame by the frame's own time, so what is
+        drawn moves as smoothly as the frame rate. (Stepping at the server's TICK_RATE would
+        show each world state for several frames, which looks like a third of the frame rate.)
+        A long frame is split into steps no longer than TICK_DT, as the server would take them.
+        One-off actions go on the first step only.
         Multiplayer: the World only predicts our own ship's motion; the server sends the rest.
         """
         my_id = self.config.my_id
@@ -169,23 +171,21 @@ class Session:
             return []
 
         self._queued_actions.extend(command.get('actions', []))
-        self._accumulator += dt
+        if dt <= 0:
+            return []
+        steps = min(MAX_TICKS_PER_FRAME, max(1, math.ceil(dt / TICK_DT - 1e-9)))
+        step_dt = min(dt, MAX_TICKS_PER_FRAME * TICK_DT) / steps  # fell badly behind: don't catch up
         events = []
-        steps = 0
-        while self._accumulator >= TICK_DT and steps < MAX_TICKS_PER_FRAME:
+        for _ in range(steps):
             actions, self._queued_actions = self._queued_actions, []
-            self.world.step({my_id: {**command, 'actions': actions}}, TICK_DT)
+            self.world.step({my_id: {**command, 'actions': actions}}, step_dt)
             # No server here, so this world is the authority on how the match stands
             self.world.outcome = self.world.outcome_for(my_id)
             events += self.world.events
             events += [event for audience, event in self.world.private_events
                        if audience is None or my_id in audience]
-            self._accumulator -= TICK_DT
-            steps += 1
             if self.world.outcome != 'playing':
                 break
-        if steps == MAX_TICKS_PER_FRAME or self.world.outcome != 'playing':
-            self._accumulator = 0.0  # fell badly behind, or the match is over: don't catch up
         return events
 
     def poll_start(self):

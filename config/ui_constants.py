@@ -1,3 +1,5 @@
+from config.constants import RADAR_PULSE_RANGE
+
 # Panel Dimensions (locked, matches UI layout)
 PANEL_WIDTH = 600
 THIN_HEIGHT = 200
@@ -6,8 +8,8 @@ NOTCH_WIDTH = 3
 
 # Radar Configuration
 RADAR_PADDING = 20
-RADAR_SCALE = 4000.0  # World units (±2000 in each direction)
-RADAR_GRID_COUNT = 2
+RADAR_SCALE = RADAR_PULSE_RANGE  # World units (±2000 in each direction)
+RADAR_GRID_COUNT = 6
 
 # Corridor Dimensions
 CORRIDOR_WIDTH = 2000
@@ -18,8 +20,6 @@ DFS_MAX_RANGE = 5000
 DFS_PANEL_MARGIN = 20
 DFS_CONTACT_DISPLAY_LIMIT = 8
 
-# Missile Vector Display
-MISSILE_VECTOR_LENGTH = 75
 MISSILE_LOCK_BOX_SIZE = 12
 
 # Colours live in config/theme.py

@@ -131,6 +131,8 @@ class MainScene:
         # Where the pilot leaves this scene, or None while the match is still on screen.
         # 'menu' or 'lobby'. The client (PlayScreen) reads this and nothing else.
         self.outcome = None
+        self.view = 'play'  # what draw() shows: play, shutdown, spectate or end
+        self.end_message = None
         self.is_host = config.is_host  # the host decides whether the match goes back to the lobby
         self.spectate_id = None  # player_id of the pilot we're watching, once our own ship is gone
         self.shutdown_timer = None  # counts down after QUIT TO MENU, then outcome is set to 'menu'
@@ -172,16 +174,24 @@ class MainScene:
         else:
             self.input_cooldown.stop()
 
-    def run(self, inputs, dt, events=()):
+    def update(self, inputs, dt, events=()):
+        """Advance the cockpit by one frame. Returns the command for the world, or None
+        when the world should not be stepped this frame (console shutdown, game over, spectating).
 
+        Nothing here steps the world or draws; PlayScreen does that (session.step, then draw()).
+        """
         # A target that starts a blink breaks our lock on it (drop_lock is the server's to clear)
         target = self.laser_assessor.current_target
         if target is not None and target.drop_lock:
             self.laser_assessor.current_target = None
 
+        self.view = 'play'
         if self.shutdown_timer is not None:
-            self.run_shutdown(dt)
-            return
+            self.view = 'shutdown'
+            self.shutdown_timer -= dt
+            if self.shutdown_timer <= 0:
+                self.outcome = 'menu'
+            return None
 
         self.draw_ui.set_hull_damage(self.player_ship.health)
         buttons = self.draw_ui.buttons
@@ -201,33 +211,27 @@ class MainScene:
             # Others still flying: watch them instead of the debrief screen
             targets = self.spectate_targets()
             if not self.local and targets:
-                self.run_spectate(clicks, targets)
-                return
-            self.end_screen("SIGNAL LOST", "SYNCHRONIZATION LOST. DEBUG:42*1a2", 'death_screen', clicks, events)
-            return
+                self.view = 'spectate'
+                self.update_spectate(clicks, targets)
+            else:
+                self.view = 'end'
+                self.end_message = ("SIGNAL LOST", "SYNCHRONIZATION LOST. DEBUG:42*1a2", 'death_screen')
+                self.update_end(clicks, events)
+            return None
 
         if self.world.outcome == 'won':
-            self.end_screen("TARGET DESTROYED", "HOSTILE SIGNAL TERMINATED", 'retro_beep', clicks, events)
-            return
+            self.view = 'end'
+            self.end_message = ("TARGET DESTROYED", "HOSTILE SIGNAL TERMINATED", 'retro_beep')
+            self.update_end(clicks, events)
+            return None
 
         cockpit_keys = not self.pause.is_open
         if not cockpit_keys:
             clicks = self.handle_pause(inputs, clicks)
 
         self.command = self.handle_inputs(inputs, dt, clicks, cockpit_keys=cockpit_keys)
-        if self.local:
-            self.world.step({self.my_id: self.command}, dt)
-            # Private events are only for their audience; keep the ones addressed to us
-            mine = [event for audience, event in self.world.private_events
-                    if audience is None or self.my_id in audience]
-            self.handle_world_events(self.world.events + mine)
-            # No server here, so this world is the authority on how the match stands
-            self.world.outcome = self.world.outcome_for(self.my_id)
-        else:
-            self.world.predict(self.my_id, self.command, dt)
 
         self.update_threats()
-
         self.timers(dt)
 
         for instrument in self.instruments:
@@ -235,7 +239,22 @@ class MainScene:
 
         self.update_ship_power_use()
         self.handle_general_sound_effects()
-        self.draw_scene()
+        return self.command
+
+    def draw(self):
+        """Draw this frame's state, after the world has been stepped."""
+        if self.view == 'shutdown':
+            # Black screen behind the console while the shutdown sound plays
+            self.draw_ui.buttons.begin_frame()
+            self.draw_ui.draw_pause_console(self.pause, underlay=False)
+            self.draw_ui.buttons.end_frame()
+        elif self.view == 'spectate':
+            self.draw_spectate(self.spectate_targets())
+        elif self.view == 'end':
+            message, subtitle, _ = self.end_message
+            self.draw_ui.draw_debrief_screen(message, subtitle, self.end_options())
+        else:
+            self.draw_scene()
 
     def update_explosions(self, dt):
         for explosion in self.explosions:
@@ -249,6 +268,7 @@ class MainScene:
         self.player_ship.deep_field_on = self.deep_field_scan.on
         self.player_ship.radar_scan_on = self.radar_system.scanning
         self.player_ship.material_assessor_on = self.material_assessor.scanning is not None
+        self.player_ship.dfs_detector_on = self.deep_field_scan.alert_on
 
     def start_input_cooldown(self):
         self.input_cooling_down = True
@@ -277,17 +297,6 @@ class MainScene:
             self.shutdown_timer = self.SHUTDOWN_WAIT
 
         return ()
-
-    def run_shutdown(self, dt):
-        """Black screen behind the console while the shutdown sound plays, then leave."""
-        self.shutdown_timer -= dt
-        if self.shutdown_timer <= 0:
-            self.outcome = 'menu'
-            return
-
-        self.draw_ui.buttons.begin_frame()
-        self.draw_ui.draw_pause_console(self.pause, underlay=False)
-        self.draw_ui.buttons.end_frame()
 
     def handle_inputs(self, inputs, dt, clicks=(), cockpit_keys=True):
         """Turn this frame's keys and clicks into cockpit changes + a command for the world."""
@@ -438,7 +447,6 @@ class MainScene:
             ('enemy_missile_lock', cockpit.enemy_has_missile_solution, 0, True),
             ('catastrophic_warning', cockpit.catastrophic_warning, 0, True),
             ('laser_warning', ship.painted, 0, True),
-            ('dfs_scan_warning', self.deep_field_scan.scanned, 0, True),
             ('pirate_warning', ship.mining_vessel_sees_you, 0, True),
             ('low_health', ship.health_low and ship.alive, 0, True),
             ('low_fuel', ship.low_fuel and not ship.fuel_acknowledge, 0, False),
@@ -448,6 +456,8 @@ class MainScene:
 
     def handle_general_sound_effects(self):
         for name, active, loops, stop_when_off in self.sound_states():
+            if name is None:  # a sound slot not filled in yet
+                continue
             if active:
                 self.audio_manager.play_sfx(name, loops=loops)
             elif stop_when_off:
@@ -460,8 +470,6 @@ class MainScene:
         Multiplayer: relayed from the server by the client (see NetClient.take_events).
         """
         for kind, *data in events:
-            print('Handling events')
-            print(kind, data)
             if kind == 'bullet_damage':
                 if data[0] == self.my_id:
                     self.audio_manager.play_sfx('damage_taken')
@@ -489,6 +497,9 @@ class MainScene:
             elif kind == 'mined':
                 if data[0] == self.my_id:
                     self.audio_manager.play_sfx('material_scan_complete')
+            elif kind == 'dfs_scanned':
+                if data[0] == self.my_id:
+                    self.deep_field_scan.mark_scanned()
 
     def timers(self, dt):
         self.missile_contact.update(dt)
@@ -544,14 +555,13 @@ class MainScene:
         elif key_pressed(events, pygame.K_ESCAPE):
             self.outcome = 'menu'
 
-    def end_screen(self, message, subtitle, sound, clicks=(), events=()):
+    def update_end(self, clicks=(), events=()):
         self.apply_end_clicks(clicks)
         if self.outcome is None:
             self.apply_end_keys(events)
-        self.draw_ui.draw_debrief_screen(message, subtitle, self.end_options())
         if not self._end_sound_played:
             self.audio_manager.stop_all()
-            self.audio_manager.play_sfx(sound)
+            self.audio_manager.play_sfx(self.end_message[2])
             self._end_sound_played = True
 
     def spectate_targets(self):
@@ -567,7 +577,7 @@ class MainScene:
                     return ship
         return self.player_ship
 
-    def run_spectate(self, clicks, targets):
+    def update_spectate(self, clicks, targets):
         """Our ship is gone: follow another living pilot, with PREV / NEXT to switch."""
         self.command = empty_command()
         ids = [ship.player_id for ship in targets]
@@ -578,7 +588,6 @@ class MainScene:
         elif 'spectate_prev' in clicks:
             self.spectate_id = ids[(ids.index(self.spectate_id) - 1) % len(ids)]
         self.apply_end_clicks(clicks)
-        self.draw_spectate(targets)
 
     def draw_spectate(self, targets):
         world = self.world
@@ -620,17 +629,19 @@ class MainScene:
         self.draw_ui.draw_power_readout(self.player_ship)
         self.draw_ui.draw_laser_painted_warning(self.player_ship.painted)
         self.draw_ui.draw_ship_info(self.player_ship, cockpit,
-                                    [line for line in (i.status_line() for i in self.instruments) if line])
+                                    [line for line in (i.status_line() for i in self.instruments) if line],
+                                    dfs_warning=self.deep_field_scan.warning_state())
         if self.vectors_on:
             self.draw_ui.draw_ship_vectors(self.player_ship, camera_x, camera_y)
         self.draw_ui.draw_control_banks(self.player_ship, cockpit, map_open=self.map.is_open, blink_busy=self.blink.busy, vectors_on=self.vectors_on,
                                         sensor_buttons=[b for i in self.instruments for b in i.console_buttons()])
         self.draw_ui.draw_missile_lock_warning(cockpit.enemy_has_missile_solution)
-        self.draw_ui.draw_missile_vectors(self.my_id, world.missiles, camera_x, camera_y)
         for instrument in self.instruments:
             instrument.draw_panel(self.draw_ui)
         self.draw_ui.draw_catastrophe_warning(cockpit.catastrophic_warning)
-        self.draw_ui.draw_dfs_warning(self.deep_field_scan.scanned, self.deep_field_scan.warning.elapsed)
+
+        self.draw_ui.draw_dfs_warning(self.deep_field_scan.scanned, self.deep_field_scan.alert_on, self.deep_field_scan.warning.elapsed)
+
         self.draw_ui.draw_missile_contact(self.missile_contact.remaining, self.missile_contact.duration)
         self.draw_ui.draw_ship_destroyed(self.ship_destroyed.remaining, self.ship_destroyed.duration, self.ship_destroyed_name)
         for instrument in self.instruments:

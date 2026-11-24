@@ -4,8 +4,7 @@ LASER_ASSESSOR_MANUAL = ("The Laser assessor is your main instrument to interact
                         " either hit the [LOCK] button in the panel, or hit the space bar")
 MISSILE_MANUAL = ("Missiles are your main weapon. They automatically avoid asteroids and cannot be defeated except by another missile. To use the missile, first you must acquire a lock with the "
                   "laser assessor. You must also not be moving faster than 3U. To fire the missile, either click on the button labeled [FIRE MSL] or hit 'p' on your keyboard."
-                  " If you are locked by an enemy and they fire a missile at you, your screen will flash red and a vector indicating the "
-                  "current heading of the missile will appear on the edge of your window. To defeat the missile, you must acquire a lock on the missile with your laser assessor and fire at it. The "
+                  " If you are locked by an enemy and they fire a missile at you, your screen will flash red. To defeat the missile, you must acquire a lock on the missile with your laser assessor and fire at it. The "
                   "radar is exceptionally useful for this.")
 DECOY_MANUAL = ("Decoys are a deployable dummy drone that can be used to defeat enemy instruments. If you suspect that an enemy is about to discover you, you can deploy a decoy to throw them off of"
                 " your trail. To use a decoy, press the button labeled [DECOY] or hit 'left-alt' on your keyboard. THey have a limited lifespan of about 60 seconds before they disappear.")

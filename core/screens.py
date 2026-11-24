@@ -7,9 +7,6 @@ from simulation.settings import LAYOUT_NAMES
 from utility.input import collect_inputs
 from utility.text_input import blink_cursor, edit_text
 
-MAX_ROSTER_LINES = 10
-
-
 class Screen:
     def __init__(self, session, draw_ui, audio):
         self.session = session
@@ -150,29 +147,23 @@ class LobbyScreen(Screen):
     def _draw_lobby(self):
         session = self.session
         net = session.net
-        lines = [f"CALLSIGN  {session.callsign}{blink_cursor()}  (ENTER TO CONFIRM)", "",
-                 f"PILOTS ON NET: {len(net.roster)}"]
         roster = sorted(net.roster.items())
-        for player_id, callsign in roster[:MAX_ROSTER_LINES]:
-            you = "  < YOU" if player_id == net.player_id else "       "
-            lines.append(f"{player_id:02d}  {callsign:<{CALLSIGN_MAX}}{you}")
-        if len(roster) > MAX_ROSTER_LINES:
-            lines.append(f"+{len(roster) - MAX_ROSTER_LINES} MORE")
-        lines.append(session.settings.summary())
+        settings_lines = session.settings.summary().split("  //  ")
 
+        status = []
         buttons = []
         if session.is_host:
-            lines.append(f"HOSTING ON {session.host_address}")
             ready = session.can_launch
+            status.append(f"HOSTING ON {session.host_address}")
+            if not ready:
+                status.append("NEED 2 OR MORE PILOTS TO LAUNCH")
             buttons.append(("LAUNCH", "F5", 'launch', ready))
             buttons.append(("WORLD SETTINGS", "F6", 'settings'))
-            if not ready:
-                lines.append("NEED 2 OR MORE PILOTS TO LAUNCH")
         else:
-            lines.append("AWAITING HOST LAUNCH")
+            status.append("AWAITING HOST LAUNCH")
         buttons.append(("LEAVE", "ESC", 'cancel'))
-        self.draw_ui.draw_text_screen("FLIGHT LOBBY", lines, buttons=buttons,
-                                      header="ERGOT SYSTEMS // PRE-FLIGHT DIAGNOSTICS")
+        self.draw_ui.draw_lobby_screen(session.callsign, net.player_id, roster, settings_lines,
+                                       status, buttons)
 
 
 class WorldSettingsScreen(Screen):
@@ -191,16 +182,15 @@ class WorldSettingsScreen(Screen):
             session.change_setting(action)
 
         s = session.settings
-        self.draw_ui.draw_text_screen(
-            "WORLD SETTINGS",
-            [s.summary(), "", "EVERY PILOT SEES THESE. THEY TAKE EFFECT FOR THE NEXT MATCH.", ""],
-            buttons=[(f"WORLD SIZE    {s.size} X {s.size}", "F1", 'size'),
-                     (f"ASTEROIDS     {s.asteroids}", "F2", 'asteroids'),
-                     (f"ASTEROID LAYOUT   {LAYOUT_NAMES[s.layout]}", "F3", 'layout'),
-                     (f"DRONES        {s.drones}", "F4", 'drones'),
-                     (f"PIRATES       {s.pirates}", "F5", 'pirates'),
-                     ("BACK", "ESC", 'back')],
-            header="ERGOT SYSTEMS // WORLD PARAMETERS")
+        self.draw_ui.draw_settings_screen(
+            s.summary().split("  //  "),
+            parameters=[(f"WORLD SIZE    {s.size} X {s.size}", "F1", 'size'),
+                        (f"ASTEROIDS     {s.asteroids}", "F2", 'asteroids'),
+                        (f"ASTEROID LAYOUT   {LAYOUT_NAMES[s.layout]}", "F3", 'layout'),
+                        (f"DRONES        {s.drones}", "F4", 'drones'),
+                        (f"PIRATES       {s.pirates}", "F5", 'pirates')],
+            back=("BACK", "ESC", 'back'),
+            notice_lines=["EVERY PILOT SEES THESE. THEY TAKE EFFECT FOR THE NEXT MATCH."])
         return None
 
 
@@ -227,7 +217,7 @@ class PlayScreen(Screen):
             if state is not None:
                 session.sync_world(state)
 
-        live = scene.run(collect_inputs(), dt, events)
+        command = scene.update(collect_inputs(), dt, events)
 
         # The scene decides where the pilot goes (game over screen, pause console, or spectate)
         if scene.outcome == 'lobby':
@@ -239,12 +229,11 @@ class PlayScreen(Screen):
 
         # One place for both modes: the session steps the world (or predicts ours, online),
         # and the events it produced, local or relayed by the server, go to the scene.
-        world_events = session.step(scene.command, dt) if live else []
+        world_events = session.step(command, dt) if command is not None else []
         if net:
             world_events += net.take_events()
         scene.handle_world_events(world_events)
-        if live:
-            scene.finish(dt)
+        scene.draw()
 
         if net:
             net.send_command(scene.command)

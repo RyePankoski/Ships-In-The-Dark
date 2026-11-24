@@ -113,23 +113,21 @@ class DrawGame:
                 pygame.draw.circle(self.screen, color, (screen_x, screen_y), size)
 
     def draw_asteroids(self, asteroids, camera_x, camera_y):
-        for asteroid_list in asteroids.values():
-            for asteroid in asteroid_list:
+        for asteroid in asteroids:
+            if not is_visible_to_camera(asteroid, camera_x, camera_y, self.screen.get_width(), self.screen.get_height()):
+                continue
 
-                if not is_visible_to_camera(asteroid, camera_x, camera_y, self.screen.get_width(), self.screen.get_height()):
-                    continue
+            screen_x = asteroid.pos_x - camera_x
+            screen_y = asteroid.pos_y - camera_y
+            outline_color, fill_color = ASTEROID_COLORS.get(
+                asteroid.material, (theme.ASTEROID, theme.ASTEROID_FILL))
+            points = [(screen_x + ox, screen_y + oy) for ox, oy in asteroid.outline]
+            pygame.draw.polygon(self.screen, fill_color, points)
+            pygame.draw.polygon(self.screen, outline_color, points, 2)
 
-                screen_x = asteroid.pos_x - camera_x
-                screen_y = asteroid.pos_y - camera_y
-                outline_color, fill_color = ASTEROID_COLORS.get(
-                    asteroid.material, (theme.ASTEROID, theme.ASTEROID_FILL))
-                points = [(screen_x + ox, screen_y + oy) for ox, oy in asteroid.outline]
-                pygame.draw.polygon(self.screen, fill_color, points)
-                pygame.draw.polygon(self.screen, outline_color, points, 2)
-
-                if asteroid.id_for_ui is not None:
-                    name_surf = self.font_asteroid_name.render(str(asteroid.id_for_ui), True, outline_color)
-                    self.screen.blit(name_surf, name_surf.get_rect(center=(screen_x, screen_y)))
+            if asteroid.id_for_ui is not None:
+                name_surf = self.font_asteroid_name.render(str(asteroid.id_for_ui), True, outline_color)
+                self.screen.blit(name_surf, name_surf.get_rect(center=(screen_x, screen_y)))
 
     def draw_explosions(self, explosions, camera_x, camera_y):
         """Vector-style explosions: a flash, expanding rings and debris lines, in one phosphor colour."""
@@ -157,10 +155,8 @@ class DrawGame:
             self.screen.blit(rotated_sprite, rotated_rect)
 
     def draw_drones(self, drones, camera_x, camera_y):
-        for cell in drones.values():
-            for drone in cell:
-                if not is_visible_to_camera(drone, camera_x, camera_y, self.screen.get_width(), self.screen.get_height()):
-                    continue
+        for drone in drones:
+            if is_visible_to_camera(drone, camera_x, camera_y, self.screen.get_width(), self.screen.get_height()):
                 screen_x = drone.pos_x - camera_x
                 screen_y = drone.pos_y - camera_y
 
@@ -229,19 +225,18 @@ class DrawGame:
                 self.screen.blit(rotated_sprite, rotated_rect)
 
     def draw_pirates(self, pirates, camera_x, camera_y):
-        for cell in pirates.values():
-            for pirate in cell:
-                screen_x = pirate.rect.center[0] - camera_x
-                screen_y = pirate.rect.center[1] - camera_y
+        for pirate in pirates:
+            screen_x = pirate.rect.center[0] - camera_x
+            screen_y = pirate.rect.center[1] - camera_y
 
-                if pirate.resting:
-                    rotated_sprite = pygame.transform.rotate(self.pirate_ambushing_sprite, pirate.heading)
-                    rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
-                    self.screen.blit(rotated_sprite, rotated_rect)
-                else:
-                    rotated_sprite = pygame.transform.rotate(self.pirate_sprite, pirate.heading)
-                    rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
-                    self.screen.blit(rotated_sprite, rotated_rect)
+            if pirate.resting:
+                rotated_sprite = pygame.transform.rotate(self.pirate_ambushing_sprite, pirate.heading)
+                rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
+                self.screen.blit(rotated_sprite, rotated_rect)
+            else:
+                rotated_sprite = pygame.transform.rotate(self.pirate_sprite, pirate.heading)
+                rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
+                self.screen.blit(rotated_sprite, rotated_rect)
 
     def draw_bullets(self, bullets, camera_x, camera_y):
         for bullet in bullets:
@@ -713,9 +708,8 @@ class DrawGame:
         LASER_GLOW_INNER = theme.RED_BRIGHT
         LASER_GLOW_OUTER = theme.RED_DIM
 
-        for start, end, t, target in lasers:
-
-            ship = start
+        for laser in lasers:
+            ship, end, t = laser.vessel, laser.end, laser.time_left
 
             sx = int(ship.rect.center[0] - camera_x)
             sy = int(ship.rect.center[1] - camera_y)
