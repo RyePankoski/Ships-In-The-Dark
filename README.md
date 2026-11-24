@@ -1,5 +1,7 @@
 This is a python project built with pygame and the socket library. 
 
+<img width="2559" height="1436" alt="Screenshot 2026-11-24 154615" src="https://github.com/user-attachments/assets/106ffb5a-a820-4ff8-af7a-44b7e50d503d" />
+
 This is Ships in the Dark. It is functionally a submarine hunting game. You and your friends are remote piloting drones, and are hunting each-other. Your drones are equipped with various equipment and systems, like radar, long range scanners, mining lasers, material scanners, and more. The idea is that you are trying to find your opponent before they find you, then launch a missile at them to destroy them. 
 
 However, taking damage or running low on fuel isn't the end. You can fly around the map and mine asteroids to repair your hull, refill your fuel, or resupply on missiles. 
@@ -21,6 +23,9 @@ The game works in multiplayer and all current functionality is multiplayer compl
 - Pilots can join a match already in progress
 - Host-adjustable world settings:
 
+<img width="2559" height="1438" alt="Screenshot 2026-11-24 154629" src="https://github.com/user-attachments/assets/507e19f3-581b-43e6-81dc-be2a72dfbd17" />
+
+
 | Setting | Options (default in bold) |
 |---|---|
 | World size | 1000, 3000, 5000, **8000**, 10000, 12000, 20000 |
@@ -38,6 +43,9 @@ The game works in multiplayer and all current functionality is multiplayer compl
 - **Blink drive:** after a 5.5 second charge, jumps you to a random point in the world. Breaks laser locks, needs more than 50 fuel, and burns a lot of it.
 - Navigation readout (position, grid square, velocity, speed, heading) and optional on-screen heading/velocity arrows
 
+<img width="2555" height="1438" alt="Screenshot 2026-11-24 154651" src="https://github.com/user-attachments/assets/59509274-6fdd-41af-baa6-b7002e48610e" />
+
+
 ### Sensors and instruments
 - **Radar:** a 360° sweep that plots solid objects. It cannot see behind them, and returns from your laser target are highlighted.
 - **Range bands:** radar rings that light up where ships, missiles, drones or pirates are moving, showing distance but not direction
@@ -53,6 +61,9 @@ The game works in multiplayer and all current functionality is multiplayer compl
 - A missile hit takes 90 of your 100 hull and destroys most other things
 - **Missile interception:** shoot down an incoming missile by targeting it with your laser and firing your own
 - **Decoys:** drifting dummies lasting 30 seconds that can fool radar and the DFS. The material assessor shows them only as metallic.
+
+
+
 
 ### Fuel, power and stealth
 - Every active system draws power, and draw burns fuel
@@ -76,6 +87,9 @@ The game works in multiplayer and all current functionality is multiplayer compl
 ### Mining
 Switch on the mining laser near a suitable asteroid. It takes 8 seconds to consume the rock.
 
+<img width="2557" height="1439" alt="Screenshot 2026-11-24 154939" src="https://github.com/user-attachments/assets/aa204d9c-5bbd-43d1-ac94-0c6937b11db5" />
+
+
 | Asteroid | Reward |
 |---|---|
 | Icy | 100 fuel (tank holds 401) |
@@ -95,12 +109,20 @@ Switch on the mining laser near a suitable asteroid. It takes 8 seconds to consu
 - Hit confirmation and ship destruction notices
 - Fault acknowledge button to silence the low fuel alarm
 
+<img width="2549" height="1437" alt="Screenshot 2026-11-24 154725" src="https://github.com/user-attachments/assets/5e7d1008-0225-435d-b647-26074afa2f08" />
+
 ### Audio and visuals
 - Sound effects for instruments, weapons, warnings, damage and menus, plus background ambience
 - Retro CRT cockpit: scanlines, glow, static and flicker, with screen tearing as your hull takes damage (F9 toggles)
 - Worn instrument panels, explosions and weapon effects
 
+
+
 ### Controls
+
+<img width="2559" height="1439" alt="Screenshot 2026-11-24 154856" src="https://github.com/user-attachments/assets/77f687b9-7f4e-40a0-9808-41dfccb23a58" />
+
+
 | Key | Action |
 |---|---|
 | W / S | Thrust / reverse |
