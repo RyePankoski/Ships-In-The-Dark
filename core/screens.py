@@ -46,10 +46,11 @@ class Screen:
 
 
 class MenuScreen(Screen):
-    """Returns 'single', 'host', 'join', 'callsign' or 'quit'."""
-    KEYS = {pygame.K_s: 'single', pygame.K_h: 'host', pygame.K_j: 'join', pygame.K_c: 'callsign',
-            pygame.K_q: 'quit'}
+    """Returns 'single', 'tutorial', 'host', 'join', 'callsign' or 'quit'."""
+    KEYS = {pygame.K_s: 'single', pygame.K_t: 'tutorial', pygame.K_h: 'host', pygame.K_j: 'join',
+            pygame.K_c: 'callsign', pygame.K_q: 'quit'}
     BUTTONS = [("SINGLE PLAYER", "S", 'single'),
+               ("TUTORIAL", "T", 'tutorial'),
                ("HOST GAME", "H", 'host'),
                ("JOIN GAME", "J", 'join'),
                ("CHANGE CALLSIGN", "C", 'callsign'),
@@ -198,9 +199,10 @@ class PlayScreen(Screen):
     """A game in progress. Returns 'lobby' (back to the lobby, connection kept),
     'menu' (leave) or 'lost' (the server stopped answering)."""
 
-    def __init__(self, session, draw_ui, audio, scene):
+    def __init__(self, session, draw_ui, audio, scene, tutorial=None):
         super().__init__(session, draw_ui, audio)
         self.scene = scene
+        self.tutorial = tutorial
 
     def run(self, events, dt):
         session = self.session
@@ -234,6 +236,9 @@ class PlayScreen(Screen):
             world_events += net.take_events()
         scene.handle_world_events(world_events)
         scene.draw()
+
+        if self.tutorial:
+            self.tutorial.run()
 
         if net:
             net.send_command(scene.command)

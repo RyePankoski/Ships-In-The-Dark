@@ -204,6 +204,12 @@ class World:
         self.spawn_ship(enemy_id, is_ai=True, x=ex, y=ey)
         self.callsigns = {player_id: callsign or f"PILOT-{player_id}", enemy_id: enemy_callsign}
 
+    def setup_tutorial(self, callsign, player_id=1):
+        """The tutorial scenario: just the player, no opponent."""
+        px, py = self._clear_spot(SINGLE_PLAYER_SPAWN)
+        self.spawn_ship(player_id, x=px, y=py)
+        self.callsigns = {player_id: callsign}
+
     def _clear_spot(self, spot):
         """`spot` if no rock is on it, otherwise a random empty point."""
         if self.is_empty_space(*spot):

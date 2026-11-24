@@ -45,6 +45,7 @@ class MainScene:
         ('right_alt', 'decoy'),
         ('p', 'fire_missile'),
         ('x', 'debug_enemy_fire'),
+        ('slash', 'debug_enemy_visibility'),
         ('m', 'toggle_map'),
         ('g', 'toggle_dampening'),
         ('h', 'toggle_vectors'),
@@ -88,7 +89,7 @@ class MainScene:
         self.deep_field_scan = DeepFieldScan(self.instrument_context)
         self.laser_assessor = LaserAssessor(self.instrument_context)
         self.material_assessor = MaterialAssessor(self.instrument_context, self.laser_assessor)
-        self.mining_laser = MiningLaser(self.instrument_context, self.laser_assessor)
+        self.mining_laser = MiningLaser(self.instrument_context)
         self.close_range_scan = CloseRangeScan(self.instrument_context)
         self.blink = BlinkDrive(self.instrument_context)
         self.instruments = [self.radar_system, self.range_bands, self.deep_field_scan, self.laser_assessor,
@@ -107,6 +108,7 @@ class MainScene:
             'decoy': self._decoy,
             'fire_missile': self._fire_missile,
             'debug_enemy_fire': self._debug_enemy_fire,
+            'debug_enemy_visibility': self._debug_enemy_visibility,
             'toggle_dampening': self._toggle_dampening,
             'fuel_acknowledge': self._fuel_acknowledge,
             'toggle_vectors': self._toggle_vectors,
@@ -396,6 +398,15 @@ class MainScene:
             self.world.fire_missile(enemy, self.player_ship)
             self.input_cooling_down = True
 
+    def _debug_enemy_visibility(self):
+        if self.local and self.enemy_ships:
+            enemy = self.enemy_ships[0]
+            enemy.current_draw += 0.5
+            if enemy.current_draw > 5:
+                enemy.current_draw = 0
+            self.input_cooling_down = True
+
+
     def _toggle_dampening(self):
         self.player_ship.dampening = not self.player_ship.dampening
         self.audio_manager.play_sfx('inertial_dampener')
@@ -654,13 +665,14 @@ class MainScene:
         self.draw_ui.draw_callsign_plate(world.callsigns.get(self.my_id), self.my_id,
                                          len(world.callsigns), self.local)
         self.draw_ui.draw_power_readout(self.player_ship)
+        self.draw_ui.draw_navcom(self.player_ship)
         self.draw_ui.draw_laser_painted_warning(self.player_ship.painted)
         self.draw_ui.draw_ship_info(self.player_ship, cockpit,
                                     [line for line in (i.status_line() for i in self.instruments) if line],
                                     dfs_warning=self.deep_field_scan.warning_state())
         if self.vectors_on:
             self.draw_ui.draw_ship_vectors(self.player_ship, camera_x, camera_y)
-        self.draw_ui.draw_control_banks(self.player_ship, cockpit, map_open=self.map.is_open, blink_busy=self.blink.busy, vectors_on=self.vectors_on,
+        self.draw_ui.draw_control_banks(self.player_ship, cockpit, blink_busy=self.blink.busy, vectors_on=self.vectors_on,
                                         sensor_buttons=[b for i in self.instruments for b in i.console_buttons()])
         self.draw_ui.draw_missile_lock_warning(cockpit.enemy_has_missile_solution)
         for instrument in self.instruments:
@@ -695,7 +707,7 @@ class MainScene:
         else:
             self.draw_game.draw_stars(camera_x, camera_y)
             self.draw_game.draw_asteroids(world.asteroids, camera_x, camera_y)
-            self.draw_game.draw_ships(world.ships, camera_x, camera_y, self.my_id)
+            self.draw_game.draw_ships(world.ships, camera_x, camera_y, self.my_id, self.close_range_scan.on)
             self.draw_game.draw_drones(world.drones, camera_x, camera_y)
             self.draw_game.draw_pirates(world.pirates, camera_x, camera_y)
             self.draw_game.draw_decoys(world.decoys, camera_x, camera_y)

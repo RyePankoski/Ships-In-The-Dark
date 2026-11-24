@@ -51,7 +51,12 @@ class MaterialAssessor(Instrument):
 
         self.scan_left -= dt
         if self.scan_left <= 0:
-            self.result = (self.scanning, getattr(self.scanning, 'material', 'matter'))
+            if getattr(self.scanning, 'kind', None) == 'ship':
+                # A ship's hull isn't a material to report: just say what it is
+                found = "[ENEMY SHIP]"
+            else:
+                found = getattr(self.scanning, 'material', 'matter')
+            self.result = (self.scanning, found)
             self.scanning = None
             self.ctx.stop_sfx('material_scan')
             self.ctx.sfx('material_scan_complete')

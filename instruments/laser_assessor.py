@@ -56,9 +56,6 @@ class LaserAssessor(Instrument):
 
     def update(self, dt, inputs):
         cockpit = self.ctx.cockpit
-        if self.laser_locked:
-            cockpit.target = self.current_target
-        cockpit.has_missile_solution = self.laser_locked and cockpit.target is not None
 
         if self.on:
             if inputs['arrow_key_left'] or inputs['arrow_key_right']:
@@ -77,6 +74,11 @@ class LaserAssessor(Instrument):
         # Tell the world what our laser is touching, so the other player gets painted
         touching = self.on and self.target_type != "NOTHING"
         self.hit_id = getattr(self.current_target, 'net_id', None) if touching else None
+
+        # Missiles (and anything else that needs a target) follow what the beam is touching.
+        # The lock only keeps the beam on it; it is not required.
+        cockpit.target = self.current_target if touching and self.current_target is not None else None
+        cockpit.has_missile_solution = cockpit.target is not None
 
         if self.tracking_lost:
             self.ctx.sfx('laser_lock_lost')

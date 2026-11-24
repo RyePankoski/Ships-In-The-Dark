@@ -81,6 +81,7 @@ class DrawGame:
         self.ship_rotate_left_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship_rotate_left.png"))
         self.ship_translate_left = pygame.image.load(os.path.join(asset_path, "pngs/ship_translate_left.png"))
         self.ship_translate_right = pygame.image.load(os.path.join(asset_path, "pngs/ship_translate_right.png"))
+        self.ship_invisible_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship_invisible.png"))
 
         self.ship_debris = pygame.image.load(os.path.join(asset_path, "pngs/ship_debris.png"))
 
@@ -97,8 +98,10 @@ class DrawGame:
         # Generate starfield
         self.stars = generate_stars(10000, world_width, world_height)
 
-    def draw_stars(self, camera_x, camera_y):
+    def draw_stars(self, camera_x, camera_y, show=True):
         """Draw starfield with camera offset"""
+        if not show:
+            return
         screen_width = self.screen.get_width()
         screen_height = self.screen.get_height()
 
@@ -112,7 +115,9 @@ class DrawGame:
                 color = (brightness * tint[0] // 255, brightness * tint[1] // 255, brightness * tint[2] // 255)
                 pygame.draw.circle(self.screen, color, (screen_x, screen_y), size)
 
-    def draw_asteroids(self, asteroids, camera_x, camera_y):
+    def draw_asteroids(self, asteroids, camera_x, camera_y, show=True):
+        if not show:
+            return
         for asteroid in asteroids:
             if not is_visible_to_camera(asteroid, camera_x, camera_y, self.screen.get_width(), self.screen.get_height()):
                 continue
@@ -129,8 +134,10 @@ class DrawGame:
                 name_surf = self.font_asteroid_name.render(str(asteroid.id_for_ui), True, outline_color)
                 self.screen.blit(name_surf, name_surf.get_rect(center=(screen_x, screen_y)))
 
-    def draw_explosions(self, explosions, camera_x, camera_y):
+    def draw_explosions(self, explosions, camera_x, camera_y, show=True):
         """Vector-style explosions: a flash, expanding rings and debris lines, in one phosphor colour."""
+        if not show:
+            return
         for explosion in explosions:
             centre = (explosion.x - camera_x, explosion.y - camera_y)
             flash_radius = explosion.flash_radius()
@@ -146,7 +153,9 @@ class DrawGame:
                                  (tail_x - camera_x, tail_y - camera_y),
                                  (x - camera_x, y - camera_y))
 
-    def draw_missiles(self, missiles, camera_x, camera_y):
+    def draw_missiles(self, missiles, camera_x, camera_y, show=True):
+        if not show:
+            return
         for missile in missiles:
             screen_x = missile.pos_x - camera_x
             screen_y = missile.pos_y - camera_y
@@ -154,7 +163,9 @@ class DrawGame:
             rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
             self.screen.blit(rotated_sprite, rotated_rect)
 
-    def draw_drones(self, drones, camera_x, camera_y):
+    def draw_drones(self, drones, camera_x, camera_y, show=True):
+        if not show:
+            return
         for drone in drones:
             if is_visible_to_camera(drone, camera_x, camera_y, self.screen.get_width(), self.screen.get_height()):
                 screen_x = drone.pos_x - camera_x
@@ -165,7 +176,9 @@ class DrawGame:
                 else:
                     self.screen.blit(self.drone_sprite, (screen_x, screen_y))
 
-    def draw_decoys(self, decoys, camera_x, camera_y):
+    def draw_decoys(self, decoys, camera_x, camera_y, show=True):
+        if not show:
+            return
         for decoy in decoys:
             screen_x = decoy.pos_x - camera_x
             screen_y = decoy.pos_y - camera_y
@@ -174,6 +187,9 @@ class DrawGame:
     def pick_player_sprite(self, ship):
         """Choose the player's sprite from thrust direction, turn input and speed."""
         # Retro is checked first: ship.thrusting is also True during a reverse burn
+
+        if ship.visibility <= 0:
+            return self.ship_invisible_sprite
 
         if ship.translate_left:
             return self.ship_translate_left
@@ -203,28 +219,41 @@ class DrawGame:
 
         return self.ship_sprite
 
-    def draw_ships(self, ships, camera_x, camera_y, my_id):
+    def draw_ships(self, ships, camera_x, camera_y, my_id, prox_scan, show=True):
+        if not show:
+            return
         for ship in ships:
             screen_x = ship.rect.center[0] - camera_x
             screen_y = ship.rect.center[1] - camera_y
-
             if not ship.alive:
                 sprite = pygame.transform.rotate(self.ship_debris, ship.heading)
                 rotated_rect = sprite.get_rect(center=(screen_x, screen_y))
                 self.screen.blit(sprite, rotated_rect)
                 continue
-
             if ship.player_id == my_id:
-                sprite = self.pick_player_sprite(ship)
-                rotated_sprite = pygame.transform.rotate(sprite, ship.heading)
-                rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
-                self.screen.blit(rotated_sprite, rotated_rect)
-            else:
+                if ship.visibility <= 0:
+                    sprite = self.pick_player_sprite(ship)
+                    rotated_sprite = pygame.transform.rotate(sprite, ship.heading)
+                    rotated_sprite.set_alpha(ship.visibility + 80)
+                    rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
+                    self.screen.blit(rotated_sprite, rotated_rect)
+                else:
+                    sprite = self.pick_player_sprite(ship)
+                    rotated_sprite = pygame.transform.rotate(sprite, ship.heading)
+                    rotated_sprite.set_alpha(ship.visibility + 80)
+                    rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
+                    self.screen.blit(rotated_sprite, rotated_rect)
+            elif prox_scan:
                 rotated_sprite = pygame.transform.rotate(self.enemy_ship_sprite, ship.heading)
+                if ship.visibility <= 0:
+                    continue
+                rotated_sprite.set_alpha(ship.visibility)
                 rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
                 self.screen.blit(rotated_sprite, rotated_rect)
 
-    def draw_pirates(self, pirates, camera_x, camera_y):
+    def draw_pirates(self, pirates, camera_x, camera_y, show=True):
+        if not show:
+            return
         for pirate in pirates:
             screen_x = pirate.rect.center[0] - camera_x
             screen_y = pirate.rect.center[1] - camera_y
@@ -238,7 +267,9 @@ class DrawGame:
                 rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
                 self.screen.blit(rotated_sprite, rotated_rect)
 
-    def draw_bullets(self, bullets, camera_x, camera_y):
+    def draw_bullets(self, bullets, camera_x, camera_y, show=True):
+        if not show:
+            return
         for bullet in bullets:
             screen_x = bullet.pos_x - camera_x
             screen_y = bullet.pos_y - camera_y
@@ -258,8 +289,10 @@ class DrawGame:
                                      (screen_x + ux * far, screen_y + uy * far), 2)
             pygame.draw.circle(self.screen, bullet.color, (screen_x, screen_y), 2)
 
-    def draw_ftl_jump_tunnel(self, ftl_jumping):
+    def draw_ftl_jump_tunnel(self, ftl_jumping, show=True):
         """Draw a hyperspace warp effect implying FTL speed, with a retro UI."""
+        if not show:
+            return
         if not ftl_jumping:
             # Clear the particle system when FTL ends
             if hasattr(self, 'ftl_particles'):
@@ -340,8 +373,10 @@ class DrawGame:
             # Blit the text on top
             self.screen.blit(ftl_text, (text_x, text_y))
 
-    def draw_ftl_arrival(self, ship_position, arrival_timer, camera_x, camera_y, max_duration=1.0):
+    def draw_ftl_arrival(self, ship_position, arrival_timer, camera_x, camera_y, max_duration=1.0, show=True):
         """Draw a high-impact FTL arrival: rupture flash, spike burst, and stacked shockwaves."""
+        if not show:
+            return
         if arrival_timer <= 0.0 or arrival_timer >= max_duration:
             return
 
@@ -418,8 +453,10 @@ class DrawGame:
 
         self.screen.blit(surf, (sx - center[0], sy - center[1]))
 
-    def draw_blink_arrival(self, ship_position, arrival_timer, camera_x, camera_y, max_duration=1.0):
+    def draw_blink_arrival(self, ship_position, arrival_timer, camera_x, camera_y, max_duration=1.0, show=True):
         """Blink exit: a reticle closes on the ship, one ring pings out, and a readout confirms the lock."""
+        if not show:
+            return
         if arrival_timer <= 0.0 or arrival_timer >= max_duration:
             return
 
@@ -460,8 +497,10 @@ class DrawGame:
             text_surf.set_alpha(text_alpha)
             self.screen.blit(text_surf, text_surf.get_rect(midtop=(sx, sy + 100)))
 
-    def draw_ship_analysis(self, ship_position, arrival_timer, camera_x, camera_y, max_duration=1.0):
+    def draw_ship_analysis(self, ship_position, arrival_timer, camera_x, camera_y, max_duration=1.0, show=True):
         """Draw a diagnostic targeting sequence with a callout debug terminal."""
+        if not show:
+            return
         if arrival_timer <= 0.0 or arrival_timer >= max_duration:
             return
 
@@ -567,8 +606,10 @@ class DrawGame:
         # Blit to screen
         self.screen.blit(surf, (sx - center[0], sy - center[1]))
 
-    def draw_transfer_animation(self, ship_position, blink_timer, camera_x, camera_y, max_duration=120):
+    def draw_transfer_animation(self, ship_position, blink_timer, camera_x, camera_y, max_duration=120, show=True):
         """Draw low-tech 1980s CRT blink-space transit effect (2-second duration)."""
+        if not show:
+            return
         if blink_timer <= 0:
             return
 
@@ -669,7 +710,7 @@ class DrawGame:
 
         self.screen.blit(scanline_surface, (0, 0))
 
-    def draw_charge_animation(self, is_charging, charge_timer, max_charge_time=2.0):
+    def draw_charge_animation(self, is_charging, charge_timer, max_charge_time=2.0, show=True):
         """Draw blink drive charge-up as a plain text meter below the ship.
 
         Args:
@@ -678,6 +719,8 @@ class DrawGame:
             camera_x, camera_y (float): Kept for call-site consistency; unused
             max_charge_time (float): Time to reach full charge
         """
+        if not show:
+            return
         if not is_charging or charge_timer <= 0:
             return
 
@@ -699,8 +742,10 @@ class DrawGame:
         rect = surf.get_rect(midtop=(screen_x, screen_y + 90))
         self.screen.blit(surf, rect)
 
-    def draw_laser(self, lasers, camera):
+    def draw_laser(self, lasers, camera, show=True):
 
+        if not show:
+            return
         camera_x, camera_y = camera
 
         # Hotter color profile: white core, vibrant inner red, deep outer red glow

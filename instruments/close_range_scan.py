@@ -31,10 +31,7 @@ class CloseRangeScan(Instrument):
             self.scan()
 
     def console_buttons(self):
-        return [("PROX SCAN", 'toggle_prox_scan', dict(key="Q", lit=self.on))]
-
-    def status_line(self):
-        return f"PROX SCAN   [{'ON' if self.on else 'OFF'}] {len(self.confirmed_contacts)} SIG", self.on
+        return [("PROX SCAN", 'toggle_prox_scan', dict(key="Q", lit=self.on, sub="LOW-POWER NEARBY SCAN"))]
 
     # --- The scan -----------------------------------------------------------
     def scan(self):

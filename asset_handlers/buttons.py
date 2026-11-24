@@ -113,10 +113,12 @@ def draw_blank_underlay(screen):
 
 
 def draw_button(screen, rect, label, key=None, lit=None, enabled=True, font=None, key_font=None,
-                lit_color=theme.GREEN, align="left", states=("ON", "OFF")):
+                lit_color=theme.GREEN, align="left", states=("ON", "OFF"), sub=None, sub_font=None):
+    """sub: a second, smaller line under the label saying what the button does."""
     rect = pygame.Rect(rect)
     font = font or fonts.font(17)
     key_font = key_font or fonts.font(12)
+    sub_font = sub_font or fonts.font(13)
 
     # No hover state: a physical switch doesn't react to a cursor floating over it,
     # only to being pushed in.
@@ -137,22 +139,36 @@ def draw_button(screen, rect, label, key=None, lit=None, enabled=True, font=None
     screen.set_clip(rect.inflate(-2, -2))
 
     x = rect.left + 10
+    # With a description the label rides on the upper line and the description sits under it
+    label_y = rect.centery
+    sub_surf = None
+    if sub:
+        sub_surf = sub_font.render_steady(sub, True, theme.AMBER_DIM)
+        gap = 3
+        block = font.get_height() + gap + sub_surf.get_height()
+        top = rect.centery - block // 2
+        label_y = top + font.get_height() // 2
+        screen.blit(sub_surf, sub_surf.get_rect(topleft=(rect.left + 10, top + font.get_height() + gap)))
+
     if lit is not None:
         on = lit and enabled
         status = font.render_steady(f"[{states[0] if lit else states[1]}]", True,
                                     lit_color if on else theme.AMBER_DIM)
-        screen.blit(status, status.get_rect(midleft=(x, rect.centery)))
+        screen.blit(status, status.get_rect(midleft=(x, label_y)))
         x += status.get_width() + 8
 
     # render_steady: buttons are controls, they shouldn't stutter like readouts
     text = font.render_steady(label, True, text_color)
-    if align == "center" and lit is None:
+    if align == "center" and lit is None and not sub:
         screen.blit(text, text.get_rect(center=rect.center))
     else:
-        screen.blit(text, text.get_rect(midleft=(x, rect.centery)))
+        screen.blit(text, text.get_rect(midleft=(x, label_y)))
 
     if key:
         hint = key_font.render_steady(key, True, theme.AMBER_DIM)
-        screen.blit(hint, hint.get_rect(bottomright=(rect.right - 5, rect.bottom - 2)))
+        if sub:
+            screen.blit(hint, hint.get_rect(topright=(rect.right - 6, rect.top + 4)))
+        else:
+            screen.blit(hint, hint.get_rect(bottomright=(rect.right - 5, rect.bottom - 2)))
 
     screen.set_clip(clip)

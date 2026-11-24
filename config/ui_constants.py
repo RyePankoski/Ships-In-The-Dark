@@ -9,7 +9,7 @@ NOTCH_WIDTH = 3
 # Radar Configuration
 RADAR_PADDING = 20
 RADAR_SCALE = RADAR_PULSE_RANGE  # World units (±2000 in each direction)
-RADAR_GRID_COUNT = 6
+RANGE_BAND_COUNT = 16  # Rings drawn (and tinted) while the range bands are on
 
 # Corridor Dimensions
 CORRIDOR_WIDTH = 2000
@@ -21,8 +21,6 @@ DFS_PANEL_MARGIN = 20
 DFS_CONTACT_DISPLAY_LIMIT = 8
 
 MISSILE_LOCK_BOX_SIZE = 12
-
-# Colours live in config/theme.py
 
 # Font Sizes
 FONT_SIZE_LARGE = 35

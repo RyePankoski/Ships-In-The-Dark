@@ -5,6 +5,7 @@ from config import theme
 from config.constants import (
     RADAR_PULSE_RANGE, RADAR_PULSE_SPEED,
 )
+from config.ui_constants import RANGE_BAND_COUNT
 from config.precomputed_angles import RADAR_DIRECTIONS
 
 PAINTED_COLOR = theme.AMBER_BRIGHT   # a return off something you've painted with your laser
@@ -44,7 +45,9 @@ class RadarSystem(Instrument):
             self.signatures.extend(self.continue_scan())
 
     def draw_panel(self, ui):
-        ui.draw_radar(self.ship, self.signatures, self.scanning, self._sweep_angle())
+        # The distance rings only show while the range bands are on
+        rings = RANGE_BAND_COUNT if self.ship.range_bands_on else 0
+        ui.draw_radar(self.ship, self.signatures, self.scanning, self._sweep_angle(), rings)
 
     def _sweep_angle(self):
         """Direction of the ray being cast right now, or None when no sweep is running."""

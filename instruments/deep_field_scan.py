@@ -1,20 +1,14 @@
 import math
+import random
 from instruments.instrument import Instrument
 from config.constants import CORRIDOR_WIDTH, CORRIDOR_DEPTH
 from utility.geometry import in_sector
 from utility.timer import Timer
 
-# What the DFS makes of each kind of contact: (label it reports, confidence).
-# Drones read as 'unknown': this scanner can't tell them apart from anything else.
-DFS_CLASSES = {
-    'ship': ('ship', 0.8),
-    'decoy': ('decoy', 0.6),
-    'missile': ('missile', 0.7),
-    'asteroid': ('asteroid', 0.7),
-    'drone': ('unknown', 0.6),
-    'pirate': ('pirate', 0.65),
-}
-DEFAULT_CLASS = ('unknown', 0.5)
+# Contacts the DFS reports when moving: enemy ships and their decoys, nothing else
+REPORTED_KINDS = ('ship', 'decoy')
+# The reported range is off by up to this fraction of the true range, either way
+RANGE_ERROR = 0.4
 
 
 class DeepFieldScan(Instrument):
@@ -39,8 +33,10 @@ class DeepFieldScan(Instrument):
         self.corridor_width = CORRIDOR_WIDTH
         self.corridor_depth = CORRIDOR_DEPTH
 
-        # Last scan's results: (range, kind, is_moving, confidence, object), nearest first
-        self.detections = []
+        # Last scan's result: has_result once a scan has run, reported_range is the
+        # (fuzzed) distance to the nearest mover, or None if nothing moved
+        self.has_result = False
+        self.reported_range = None
         self._bearing_changed = False
 
         # Being swept: set by a 'dfs_scanned' event, cleared when the warning timer runs out
@@ -60,7 +56,7 @@ class DeepFieldScan(Instrument):
         }
 
     def console_buttons(self):
-        return [("DFS ALERT", 'toggle_dfs_alert', dict(lit=self.alert_on, states=("ON", "OFF")))]
+        return [("DFS ALERT", 'toggle_dfs_alert', dict(lit=self.alert_on, states=("ON", "OFF"), sub="WARN WHEN SWEPT BY A DFS"))]
 
     def toggle_alert(self):
         self.alert_on = not self.alert_on
@@ -85,15 +81,21 @@ class DeepFieldScan(Instrument):
         self.on = not self.on
         self.ctx.sfx('dfs_toggle')
         self.ctx.start_cooldown()
-        self.detections = []
+        self.clear_result()
+
+    def clear_result(self):
+        self.has_result = False
+        self.reported_range = None
 
     def scan(self):
         if self.on:
-            self.detections = self.run_scan()
+            in_sweep = self.contacts_in_sweep()
+            self.reported_range = self.nearest_mover_range(in_sweep)
+            self.has_result = True
             self.ctx.sfx('dfs_scan')
             self.ctx.start_cooldown()
             # Ships caught in the sweep are told they were scanned (the world routes it to them)
-            ships = [getattr(c[4], 'player_id', None) for c in self.detections if c[1] == 'ship']
+            ships = [getattr(c, 'player_id', None) for _, c in in_sweep if c.kind == 'ship']
             ships = [pid for pid in ships if pid is not None]
             if ships:
                 self.ctx.send_action({'type': 'dfs_scan', 'targets': ships})
@@ -103,7 +105,7 @@ class DeepFieldScan(Instrument):
             self.direction_index = (self.direction_index + step) % 8
             self._bearing_changed = True
             self.ctx.sfx('dfs_dir_change')
-            self.detections = []
+            self.clear_result()
             self.ctx.start_cooldown()
 
     def update(self, dt, inputs):
@@ -116,24 +118,28 @@ class DeepFieldScan(Instrument):
             self.scanned = False
 
     def draw_panel(self, ui):
-        ui.draw_deep_field_panel(self.detections, self.direction_index, self.on)
+        ui.draw_deep_field_panel(self.has_result, self.reported_range, self.direction_index, self.on)
 
     def draw_overlay(self, ui, camera_x, camera_y):
         ui.draw_dfs_corridor(self.ship, self.direction_index, camera_x, camera_y, self.on)
 
     # --- The scan -----------------------------------------------------------
-    def run_scan(self):
+    def contacts_in_sweep(self):
+        """(distance, contact) for everything in the pointed sector, nearest first."""
         direction_deg = self.directions[self.direction_index]
         player_x, player_y = self.ship.center
-        found = []
+        # cardinals scan a half-plane, diagonals a quadrant
+        half_width = 90 if direction_deg % 90 == 0 else 45
+        found = [(math.dist((player_x, player_y), c.center), c)
+                 for c in self.contacts.all(exclude=self.ship)
+                 if in_sector(player_x, player_y, direction_deg, c.center, half_width)]
+        return sorted(found, key=lambda f: f[0])
 
-        for contact in self.contacts.all(exclude=self.ship):
-            position = contact.center
-            # cardinals scan a half-plane, diagonals a quadrant
-            half_width = 90 if direction_deg % 90 == 0 else 45
-            if in_sector(player_x, player_y, direction_deg, position, half_width):
-                kind, confidence = DFS_CLASSES.get(contact.kind, DEFAULT_CLASS)
-                found.append((math.dist((player_x, player_y), position),
-                              kind, contact.moving, confidence, contact))
-
-        return sorted(found, key=lambda c: c[0])
+    @staticmethod
+    def nearest_mover_range(in_sweep):
+        """The distance to the nearest moving enemy or decoy, off by up to RANGE_ERROR
+        either way. None if nothing of that sort is moving."""
+        for distance, contact in in_sweep:
+            if contact.kind in REPORTED_KINDS and contact.moving:
+                return distance * (1 + random.uniform(-RANGE_ERROR, RANGE_ERROR))
+        return None

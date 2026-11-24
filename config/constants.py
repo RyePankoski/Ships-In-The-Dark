@@ -5,8 +5,8 @@
 # ---------------------------------------------------------------------------
 # Ship handling
 # ---------------------------------------------------------------------------
-SHIP_THRUST = 50  # acceleration along the nose while thrusting
-SHIP_MAX_SPEED = 200
+SHIP_THRUST = 20  # acceleration along the nose while thrusting
+SHIP_MAX_SPEED = 80
 RETRO_THRUST_FRACTION = 0.5  # reverse burn (down key) as a fraction of forward thrust
 BOOST_THRUST_MULT = 2.0  # shift: thrust multiplier
 BOOST_SPEED_MULT = 1.5  # shift: raises the speed cap
@@ -28,7 +28,7 @@ SHIP_MAX_FUEL = 401
 SHIP_MAX_HEALTH = 100
 LOW_FUEL_FRACTION = 5  # divisor: low-fuel warning at SHIP_MAX_FUEL / 5 (20% of the tank)
 BLINK_FUEL_THRESHOLD = 50
-THROTTLED_SPEED = 50
+THROTTLED_SPEED = 40
 HIGH_USE = 4  # power draw at or above this triggers the high-draw warning
 
 # Switches that change a ship's power draw. The owning player sets them; the server applies them.

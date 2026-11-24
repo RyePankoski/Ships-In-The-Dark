@@ -145,6 +145,10 @@ class Session:
             config = MatchConfig(local=True, my_id=1, is_host=False)
             self.world = World(random.randrange(2 ** 31), with_npcs=config.with_npcs)
             self.world.setup_single_player(self.callsign)
+        elif mode == 'tutorial':
+            config = MatchConfig(local=True, my_id=1, is_host=False)
+            self.world = World(random.randrange(2 ** 31), with_npcs=False)
+            self.world.setup_tutorial("NEWBIE")
         elif mode == 'online':
             config = MatchConfig(local=False, my_id=self.net.player_id, is_host=self.is_host)
             self.world = World(self.net.seed, with_npcs=config.with_npcs, settings=self.net.settings)

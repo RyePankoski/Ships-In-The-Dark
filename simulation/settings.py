@@ -22,7 +22,7 @@ LAYOUT_NAMES = {'scattered': 'SCATTERED', 'clustered': 'CLUSTERED'}
 @dataclass(frozen=True)
 class WorldSettings:
     size: int = OPTIONS['size'][3]
-    asteroids: int = OPTIONS['asteroids'][0]
+    asteroids: int = OPTIONS['asteroids'][2]
     layout: str = OPTIONS['layout'][0]
     drones: int = OPTIONS['drones'][2]
     pirates: int = OPTIONS['pirates'][0]

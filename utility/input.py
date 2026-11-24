@@ -28,6 +28,7 @@ def collect_inputs():
         'ctrl': keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL],
         'left_alt': keys[pygame.K_LALT],
         'right_alt': keys[pygame.K_RALT],
+        'slash': keys[pygame.K_SLASH],
 
         # Letters (your existing ones + common game keys)
         'q': keys[pygame.K_q],
@@ -48,6 +49,7 @@ def collect_inputs():
         'z': keys[pygame.K_z],
         't': keys[pygame.K_t],
         'n': keys[pygame.K_n],
+        'v' : keys[pygame.K_v],
 
         # Numbers
         '1': keys[pygame.K_1],

@@ -160,6 +160,11 @@ class MiningVessel(WorldObject):
         self.heading = angle
 
     @property
+    def moving(self):
+        # vel is never sent to clients and is never zeroed on arrival, so go by resting (synced)
+        return not self.resting
+
+    @property
     def center(self):
         return self.rect.center
 

@@ -1,4 +1,4 @@
-Radar Rings idea = Good
+Radar Rings idea = Good DONE
 Snail trail = weak to probably no
 Emissions directly correlate to visibility. Just make it so the more power a player draws, the more visible they are.
 If a player is not moving, they begin to accumulate space magic radiation. The longer they sit, the more it builds up and becomes extremely obvious to instrumentation.

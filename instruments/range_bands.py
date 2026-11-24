@@ -1,5 +1,5 @@
 from instruments.instrument import Instrument
-from config.ui_constants import RADAR_GRID_COUNT, RADAR_SCALE
+from config.ui_constants import RANGE_BAND_COUNT, RADAR_SCALE
 
 # Contacts worth lighting a band for, when they are moving
 WATCHED_KINDS = ('ship', 'missile', 'pirate', 'drone')
@@ -22,7 +22,7 @@ class RangeBands(Instrument):
     def __init__(self, ctx):
         super().__init__(ctx)
         self.on = False
-        self.hot = set()  # band numbers (1..RADAR_GRID_COUNT) with a mover in them
+        self.hot = set()  # band numbers (1..RANGE_BAND_COUNT) with a mover in them
 
     # --- Instrument ---------------------------------------------------------
     def actions(self):
@@ -43,17 +43,17 @@ class RangeBands(Instrument):
             if contact.kind not in WATCHED_KINDS or not contact.moving:
                 continue
             cx, cy = contact.center
-            band = band_index(((cx - x) ** 2 + (cy - y) ** 2) ** 0.5, RADAR_GRID_COUNT, RADAR_SCALE)
+            band = band_index(((cx - x) ** 2 + (cy - y) ** 2) ** 0.5, RANGE_BAND_COUNT, RADAR_SCALE)
             if band is not None:
                 hot.add(band)
         self.hot = hot
 
     def console_buttons(self):
-        return [("RANGE BANDS", 'toggle_range_bands', dict(key="L", lit=self.on, states=("ON", "OFF")))]
+        return [("RANGE BANDS", 'toggle_range_bands', dict(key="L", lit=self.on, states=("ON", "OFF"), sub="DISTANCE RINGS ON RADAR"))]
 
     def status_line(self):
         return f"RANGE BANDS [{'ON' if self.on else 'OFF'}]", self.on
 
     def draw_panel(self, ui):
         if self.on:
-            ui.draw_range_bands(self.hot)
+            ui.draw_range_bands(self.hot, RANGE_BAND_COUNT)

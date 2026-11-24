@@ -1,6 +1,7 @@
 from .main_scene import MainScene
 from .screens import CallsignScreen, IpScreen, LobbyScreen, MenuScreen, PlayScreen, WorldSettingsScreen
 from .session import Session
+from core.tutorial import Tutorial
 
 # Screens where the player types a callsign. Leaving any of them commits it once, here,
 # so a new exit path cannot skip the commit.
@@ -26,8 +27,10 @@ class Client:
         self.ip_screen = IpScreen(*args)
         self.lobby_screen = LobbyScreen(*args)
         self.settings_screen = WorldSettingsScreen(*args)
+        self.tutorial_screen = None
         self.play_screen = None  # a PlayScreen, built per game
         self.active = self.menu_screen
+        self.tutorial = False
 
         # Which method handles the action a screen returns, keyed by screen type.
         self.transitions = {
@@ -66,6 +69,8 @@ class Client:
             self.active = self.ip_screen
         elif action == 'callsign':
             self.active = self.callsign_screen
+        elif action == 'tutorial':
+            self.start_game(session.start_match('tutorial'), tutorial=True)
         elif action == 'quit':
             self.exit_requested = True  # main.py owns the actual shutdown
 
@@ -105,10 +110,13 @@ class Client:
         # and nowhere else. play_menu_audio() stops whatever the game was playing first.
         self.audio.play_menu_audio()
 
-    def start_game(self, config):
+    def start_game(self, config, tutorial=False):
         scene = MainScene(self.screen, self.audio, self.session.world, config, self.draw_ui)
-        self.play_screen = PlayScreen(self.session, self.draw_ui, self.audio, scene)
+        lesson = Tutorial(self.audio, self.draw_ui, self.session, scene) if tutorial else None
+        self.play_screen = PlayScreen(self.session, self.draw_ui, self.audio, scene, lesson)
         self.active = self.play_screen
+
+
 
     def leave(self, status=""):
         self.play_screen = None

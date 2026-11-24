@@ -27,6 +27,8 @@ class Ship(DirectionSteered):
         self.dir_y = 0
         self.speed = 0
 
+
+
         self.player_id = player_id
 
         self.heading = 0
@@ -45,6 +47,7 @@ class Ship(DirectionSteered):
         # multiplayer and sends it to every client. What a player has switched on
         # or detected lives in core/cockpit.py instead and never leaves the client.
         self.radar_cross_section = 100
+        self.visibility = 0
         self.health = SHIP_MAX_HEALTH
 
         # Power related
@@ -73,7 +76,6 @@ class Ship(DirectionSteered):
         self.missile_cooldown_timer = 0
         self.missile_cooldown = 5
 
-
         self.mining_vessel_sees_you = False
         self.health_low = False
         self.thrusting = False
@@ -82,6 +84,7 @@ class Ship(DirectionSteered):
         self.rotate_right = False
         self.translate_left = False
         self.translate_right = False
+        self.go_silent = False
 
         self.braking = False  # tab held; drives the BRAKE readout (set from local input)
         self.dampening = True
@@ -115,6 +118,23 @@ class Ship(DirectionSteered):
         else:
             self.low_fuel = False
 
+        # AI ships don't burn fuel or sum up switches: their current_draw is set from outside
+        # (the debug key) and visibility just follows it
+        if not self.ai:
+            self._sum_draw_and_burn_fuel(dt)
+
+        if self.current_draw <= 0:
+            self.visibility = 0
+        elif self.current_draw < 1:
+            self.visibility = 15
+        elif self.current_draw < 2:
+            self.visibility = 30
+        elif self.current_draw < 3:
+            self.visibility = 100
+        else:
+            self.visibility = 255
+
+    def _sum_draw_and_burn_fuel(self, dt):
         self.current_draw = 0
 
         if self.thrusting:
@@ -128,7 +148,7 @@ class Ship(DirectionSteered):
         if self.laser_on:
             self.current_draw += 1
         if self.mining_on and self.mining_target is not None:
-            self.current_draw += MINING_DRAW
+            self.current_draw += 5
         if self.prox_scan_on:
             self.current_draw += 0.1
         if self.blinking:
@@ -149,7 +169,27 @@ class Ship(DirectionSteered):
         use = self.current_draw / 45 * dt * TICK_RATE
         self.fuel -= use
 
+    def set_to_silent(self):
+        self.laser_on = False
+        self.mining_on = False
+        self.prox_scan_on = False
+        self.blinking = False
+        self.deep_field_on = False
+        self.radar_scan_on = False
+        self.material_assessor_on = False
+        self.dfs_detector_on = False
+        self.range_bands_on = False
+        self.go_silent = False
+
     def run(self, dt, width, height):
+
+        if self.ai:
+            self.dir_x = 1
+            self.dir_y = 1
+            self.speed = 0.01
+
+        if self.go_silent:
+            self.set_to_silent()
 
         self.calculate_draw_and_use_fuel(dt)
 
@@ -207,11 +247,7 @@ class Ship(DirectionSteered):
     def can_fire_missile(self):
         if self.missile_cooling_down:
             return False
-        if self.total_missiles == 0:
-            return False
-        if self.speed > 10:
-            return False
-        return True
+        return self.total_missiles > 0
 
     def cooldowns(self, dt):
         if self.missile_cooling_down:
