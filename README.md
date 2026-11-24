@@ -147,5 +147,3 @@ Switch on the mining laser near a suitable asteroid. It takes 8 seconds to consu
 | H | Heading / velocity arrows |
 | F9 | CRT filter |
 | Esc | Close map / open console |
-
-<img width="2559" height="1439" alt="Screenshot 2026-08-01 191949" src="https://github.com/user-attachments/assets/5b72b209-31ac-4d2e-9ee0-6a5a08359d70" />
