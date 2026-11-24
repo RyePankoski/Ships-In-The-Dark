@@ -11,27 +11,29 @@ The game works in multiplayer and all current functionality is multiplayer compl
 ## Features
 
 ### Game modes
-- **Single player:** a practice hunt against one slow-drifting target that doesn't shoot back
+- **Single player:** a practice hunt against one slow-drifting target that doesn't shoot back. This will change. I will build an ai. Plan to spend a lot of time on this. I want it to be scary good. Not like a computer
+- but smart like a person. Very ambitious, who knows if I can do it!
 - **Multiplayer:** host or join by IP address, up to 16 pilots (UDP port 27015)
-- **Tutorial:** work in progress; currently an empty practice world with a welcome banner
-- **Spectating:** after your ship is destroyed in multiplayer, watch the surviving pilots
+- **Tutorial:** work in progress; currently an empty practice world with a welcome banner. The idea here is that it will be a guided walkthrough of the instruments and how to use them, culminating in blowing up a dummy
+- enemy ai.
+- **Spectating:** after your ship is destroyed in multiplayer, watch the surviving pilots.
 
 ### Menus and multiplayer lobby
-- Animated boot screen and main menu, usable by keyboard or mouse
+- Animated splash screen. Super cliche 80's pc startup affair.
 - Custom callsigns (up to 20 characters, profanity filtered), with a random one to start
-- Lobby with pilot roster; the host launches the match and can return everyone to the lobby
-- Pilots can join a match already in progress
+- Lobby with a list of connected players, displaying user names and more.
+- Oddly enough, you can join a game in progress do to the way I built the port. It was intended but its cool.
 - Host-adjustable world settings:
 
 <img width="2559" height="1438" alt="Screenshot 2026-11-24 154629" src="https://github.com/user-attachments/assets/507e19f3-581b-43e6-81dc-be2a72dfbd17" />
 
 
-| Setting | Options (default in bold) |
+| Setting | Options |
 |---|---|
-| World size | 1000, 3000, 5000, **8000**, 10000, 12000, 20000 |
+| World size | 1000, 3000, 5000, 8000, 10000, 12000, 20000 |
 | Asteroids | 0, 10, **50**, 100, 200, 500, 1000 |
-| Asteroid layout | **Scattered**, clustered |
-| Mining drones | 0, 2, **5**, 10, 20, 40 |
+| Asteroid layout | Scattered, clustered |
+| Mining drones | 0, 2, 5, 10, 20, 40 |
 | Pirates | **0**, 1, 2, 3, 4, 5 |
 
 - In-game operator console (Esc) with controls reference, manual and quit. It does not pause the game.
@@ -61,8 +63,6 @@ The game works in multiplayer and all current functionality is multiplayer compl
 - A missile hit takes 90 of your 100 hull and destroys most other things
 - **Missile interception:** shoot down an incoming missile by targeting it with your laser and firing your own
 - **Decoys:** drifting dummies lasting 30 seconds that can fool radar and the DFS. The material assessor shows them only as metallic.
-
-
 
 
 ### Fuel, power and stealth
@@ -99,7 +99,7 @@ Switch on the mining laser near a suitable asteroid. It takes 8 seconds to consu
 
 ### The world and its hazards
 - Randomly generated asteroid fields, each rock with its own shape and designation
-- Hitting an asteroid costs 50 hull
+- Bumping an asteroid while moving less than 50U costs 50 hull, otherwise you straight up die
 - **Mining drones:** harmless traffic that travels between asteroids and shows up on sensors
 - **Pirates:** armed mining vessels that open fire on any pilot who comes close
 - Below 20 hull your speed is limited while the hull slowly recovers to 20
@@ -115,7 +115,6 @@ Switch on the mining laser near a suitable asteroid. It takes 8 seconds to consu
 - Sound effects for instruments, weapons, warnings, damage and menus, plus background ambience
 - Retro CRT cockpit: scanlines, glow, static and flicker, with screen tearing as your hull takes damage (F9 toggles)
 - Worn instrument panels, explosions and weapon effects
-
 
 
 ### Controls
