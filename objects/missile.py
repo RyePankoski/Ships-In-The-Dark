@@ -114,9 +114,7 @@ class Missile(WorldObject):
             travelled += MISSILE_FEELER_STEP
             fx += tx * MISSILE_FEELER_STEP
             fy += ty * MISSILE_FEELER_STEP
-            cell = (int(fx // GRID_SIZE), int(fy // GRID_SIZE))
-
-            for rock in asteroids.get(cell, []):
+            for rock in asteroids.near(fx, fy):
                 rx, ry = rock.pos_x - fx, rock.pos_y - fy
                 if rx * rx + ry * ry < (rock.size + MISSILE_AVOID_CLEARANCE) ** 2:
                     cross = tx * ry - ty * rx  # which side is the rock on?

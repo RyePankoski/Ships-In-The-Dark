@@ -36,10 +36,6 @@ class Asteroid(WorldObject):
         self.alive = True
         self.health = 100
 
-        grid_x = int(x // GRID_SIZE)
-        grid_y = int(y // GRID_SIZE)
-        self.cell = (grid_x, grid_y)
-
         # rng is the world's seeded generator, so every client rolls the same material
         chance = rng.uniform(0, 1)
 

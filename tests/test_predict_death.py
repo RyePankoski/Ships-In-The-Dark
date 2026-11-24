@@ -14,12 +14,12 @@ pygame.display.init()  # Ship reads the desktop size on construction
 def _world_with_fast_ship_in_rock():
     """One player ship at speed, sitting inside an asteroid: a crash by any reckoning."""
     world = World(seed=1, with_npcs=False)
-    world.asteroids = {}  # drop the generated field so only the rock below can hit
+    world.asteroids.clear()  # drop the generated field so only the rock below can hit
     ship = Ship(500, 500, player_id=1)
     ship._set_velocity(150, 0)  # over the 100 crash threshold, under SHIP_MAX_SPEED
     world.ships.append(ship)
     rock = Asteroid(*ship.rect.center, 60)  # centred on the ship
-    world.asteroids.setdefault(rock.cell, []).append(rock)
+    world.asteroids.add(rock)
     return world, ship
 
 

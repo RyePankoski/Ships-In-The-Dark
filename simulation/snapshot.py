@@ -20,7 +20,7 @@ from objects.mining_vessel import MiningVessel
 from objects.missile import Missile
 from objects.ship import Ship
 
-from config.constants import SNAP_DISTANCE, LOCAL_VELOCITY_BLEND, GRID_SIZE
+from config.constants import SNAP_DISTANCE, LOCAL_VELOCITY_BLEND
 
 INT = 'int'
 BOOL = 'bool'
@@ -33,7 +33,7 @@ SHIP_FIELDS = (
     ('thrusting', BOOL), ('health', 1), ('health_low', BOOL), ('total_missiles', INT),
     ('missile_cooling_down', BOOL), ('missile_cooldown_timer', 2), ('alive', BOOL),
     ('painted', BOOL), ('took_damage', BOOL), ('mining_vessel_sees_you', BOOL),
-    ('fuel', 1), ('current_draw', 1), ('low_fuel', BOOL),
+    ('fuel', 1), ('current_draw', 2), ('low_fuel', BOOL),
     ('mining_on', BOOL), ('mining_target', INT), ('mining_progress', 2),
     ('drop_lock', BOOL),
 )
@@ -55,13 +55,10 @@ def make_snapshot(world):
             _pack(m, MISSILE_FIELDS, m.net_id) + [getattr(m.target, 'net_id', None)]
             for m in world.missiles
         ],
-        'decoys': [_pack(d, DECOY_FIELDS, d.net_id) for d in world.decoys],        'drones': [_pack(d, DRONE_FIELDS, d.net_id) for d in _all(world.drones)],
-        'pirates': [_pack(p, PIRATE_FIELDS, p.net_id) for p in _all(world.pirates)],
+        'decoys': [_pack(d, DECOY_FIELDS, d.net_id) for d in world.decoys],
+        'drones': [_pack(d, DRONE_FIELDS, d.net_id) for d in world.drones],
+        'pirates': [_pack(p, PIRATE_FIELDS, p.net_id) for p in world.pirates],
     }
-
-
-def _all(grid):
-    return [obj for group in grid.values() for obj in group]
 
 
 def apply_snapshot(world, snapshot, age=0.0, my_id=None):
@@ -104,7 +101,7 @@ def apply_snapshot(world, snapshot, age=0.0, my_id=None):
 def _sync_npcs(grid, rows, fields, create):
     """Rebuild a grid-keyed group of drones or pirates from the server's list. These don't
     ease between snapshots: they're slow, so placing them where the server says is close enough."""
-    existing = {obj.net_id: obj for obj in _all(grid)}
+    existing = {obj.net_id: obj for obj in grid}
     grid.clear()
     for row in rows:
         data = _unpack(row, fields)
@@ -116,9 +113,7 @@ def _sync_npcs(grid, rows, fields, create):
             setattr(obj, name, data[name])
         if hasattr(obj, 'update_rect'):
             obj.update_rect()
-        cell = (int(obj.pos_x // GRID_SIZE), int(obj.pos_y // GRID_SIZE))
-        obj.cell = cell
-        grid.setdefault(cell, []).append(obj)
+        grid.add(obj)
 
 
 def _pack(obj, fields, object_id):

@@ -27,6 +27,10 @@ class DeepFieldScan(Instrument):
         ('arrow_key_down', 'dfs_bearing_ccw'),
     )
 
+    # The sound played while we are being swept. None until one is added: put its name
+    # in audio_manager's sound list (or use an existing one, e.g. 'dfs_scan_warning').
+    SCANNED_WARNING_SECONDS = 2
+
     def __init__(self, ctx):
         super().__init__(ctx)
         self.on = False
@@ -39,9 +43,11 @@ class DeepFieldScan(Instrument):
         self.detections = []
         self._bearing_changed = False
 
-        # Set when this scanner has been used on us; the warning shows until the timer runs out
+        # Being swept: set by a 'dfs_scanned' event, cleared when the warning timer runs out
         self.scanned = False
-        self.warning = Timer(3)
+        self.warning = Timer(self.SCANNED_WARNING_SECONDS)
+        # The pilot's choice: off means no warning sound and a gray navcom element
+        self.alert_on = True
 
     # --- Instrument ---------------------------------------------------------
     def actions(self):
@@ -50,7 +56,30 @@ class DeepFieldScan(Instrument):
             'dfs_scan': self.scan,
             'dfs_bearing_cw': lambda: self.turn(1),
             'dfs_bearing_ccw': lambda: self.turn(-1),
+            'toggle_dfs_alert': self.toggle_alert,
         }
+
+    def console_buttons(self):
+        return [("DFS ALERT", 'toggle_dfs_alert', dict(lit=self.alert_on, states=("ON", "OFF")))]
+
+    def toggle_alert(self):
+        self.alert_on = not self.alert_on
+        self.ctx.sfx('keyboard_clack')
+        self.ctx.start_cooldown()
+
+    def warning_state(self):
+        """'off' if the pilot turned the alert off, 'active' while we are being swept, else 'idle'."""
+        if not self.alert_on:
+            return 'off'
+        return 'active' if self.scanned else 'idle'
+
+    def mark_scanned(self):
+        """We are being swept: show the warning for a while (a repeat scan restarts it).
+        The sound plays once per scan, and only while the alert is on."""
+        self.scanned = True
+        self.warning.start()
+        if self.alert_on:
+            self.ctx.sfx('dfs_scanned_warning', force=True)
 
     def toggle(self):
         self.on = not self.on
@@ -63,6 +92,11 @@ class DeepFieldScan(Instrument):
             self.detections = self.run_scan()
             self.ctx.sfx('dfs_scan')
             self.ctx.start_cooldown()
+            # Ships caught in the sweep are told they were scanned (the world routes it to them)
+            ships = [getattr(c[4], 'player_id', None) for c in self.detections if c[1] == 'ship']
+            ships = [pid for pid in ships if pid is not None]
+            if ships:
+                self.ctx.send_action({'type': 'dfs_scan', 'targets': ships})
 
     def turn(self, step):
         if self.on:
@@ -78,15 +112,8 @@ class DeepFieldScan(Instrument):
             self.ctx.stop_sfx('dfs_dir_change')
         self._bearing_changed = False
 
-        if self.scanned:
-            self.warning.arm()
-            if self.warning.update(dt):
-                self.scanned = False
-
-    def mark_scanned(self):
-        """Something has scanned us: show the warning for a few seconds."""
-        self.scanned = True
-        self.warning.arm()
+        if self.scanned and self.warning.update(dt):
+            self.scanned = False
 
     def draw_panel(self, ui):
         ui.draw_deep_field_panel(self.detections, self.direction_index, self.on)

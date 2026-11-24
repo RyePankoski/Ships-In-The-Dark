@@ -17,10 +17,6 @@ class Drone(WorldObject):
         self.speed = 50
         self.radar_cross_section = 60
 
-        grid_x = int(x // GRID_SIZE)
-        grid_y = int(y // GRID_SIZE)
-        self.cell = (grid_x, grid_y)
-
         self.mining_timer = 0
         self.mining_timer_cooldown = 10
         self.am_mining = False
@@ -37,7 +33,7 @@ class Drone(WorldObject):
             return
 
         if self.target is None:
-            all_asteroids = [a for cell in asteroids.values() for a in cell]
+            all_asteroids = list(asteroids)
             if all_asteroids:
                 self.target = random.choice(all_asteroids)
         else:

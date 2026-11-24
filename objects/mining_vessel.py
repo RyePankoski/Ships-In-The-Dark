@@ -1,5 +1,7 @@
 import math
 import random
+from dataclasses import dataclass
+from typing import Any
 
 import pygame
 
@@ -9,6 +11,15 @@ from utility.geometry import squared_distance
 
 
 from objects.base import WorldObject
+
+
+@dataclass
+class MiningLaser:
+    """A vessel's beam burning an asteroid away."""
+    vessel: Any
+    end: tuple
+    time_left: float
+    asteroid: Any = None
 
 
 class MiningVessel(WorldObject):
@@ -68,29 +79,18 @@ class MiningVessel(WorldObject):
         detect_radius = 300
         radius_sq = detect_radius ** 2
 
-        cell_x = int(self.pos_x // GRID_SIZE)
-        cell_y = int(self.pos_y // GRID_SIZE)
+        # Every rock in the cells the radius can reach
+        for asteroid in asteroids.near(self.pos_x, self.pos_y, asteroids.reach_for(detect_radius)):
+            dx = self.pos_x - asteroid.pos_x
+            dy = self.pos_y - asteroid.pos_y
+            distance_sq = dx ** 2 + dy ** 2
 
-        # How many cells the radius can reach past the ship's own cell.
-        reach = math.ceil(detect_radius / GRID_SIZE)
-
-        for gx in range(cell_x - reach, cell_x + reach + 1):
-            for gy in range(cell_y - reach, cell_y + reach + 1):
-                cell = (gx, gy)
-                if cell not in asteroids:
-                    continue
-
-                for asteroid in asteroids[cell]:
-                    dx = self.pos_x - asteroid.pos_x
-                    dy = self.pos_y - asteroid.pos_y
-                    distance_sq = dx ** 2 + dy ** 2
-
-                    if distance_sq < radius_sq:
-                        if not any(laser[3] is asteroid for laser in laser_list):
-                            self.asteroids_destroyed += 1
-                            laser_list.append(
-                                [self, (asteroid.pos_x, asteroid.pos_y), 1.5, asteroid]
-                            )
+            if distance_sq < radius_sq:
+                if not any(laser.asteroid is asteroid for laser in laser_list):
+                    self.asteroids_destroyed += 1
+                    laser_list.append(
+                        MiningLaser(self, (asteroid.pos_x, asteroid.pos_y), 1.5, asteroid)
+                    )
 
     def fire_at_enemies(self, ships, bullets):
         for ship in ships:

@@ -12,8 +12,6 @@ world holds right now is what you get.
 """
 import math
 
-from config.constants import GRID_SIZE
-
 
 class Contacts:
     def __init__(self, world):
@@ -32,8 +30,7 @@ class Contacts:
                 if obj is not exclude:
                     yield obj
         for grid in self._grids():
-            for cell in grid.values():
-                yield from cell
+            yield from grid
 
     def within(self, x, y, radius, exclude=None):
         """Contacts whose center is closer than `radius` to (x, y)."""
@@ -50,11 +47,8 @@ class Contacts:
             for obj in group:
                 if obj is not exclude:
                     yield obj
-        cx, cy = int(x // GRID_SIZE), int(y // GRID_SIZE)
         for grid in self._grids():
-            for gx in range(cx - cell_reach, cx + cell_reach + 1):
-                for gy in range(cy - cell_reach, cy + cell_reach + 1):
-                    yield from grid.get((gx, gy), ())
+            yield from grid.near(x, y, cell_reach)
 
     def find(self, net_id):
         for obj in self.all():

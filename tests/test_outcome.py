@@ -12,7 +12,7 @@ pygame.display.init()  # Ship reads the desktop size on construction
 
 def _world_with_pilots(*player_ids):
     world = World(seed=1, with_npcs=False)
-    world.asteroids = {}
+    world.asteroids.clear()
     for player_id in player_ids:
         world.ships.append(Ship(500, 500, player_id=player_id))
     return world

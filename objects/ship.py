@@ -63,6 +63,7 @@ class Ship(DirectionSteered):
         self.deep_field_on = False
         self.radar_scan_on = False
         self.material_assessor_on = False
+        self.dfs_detector_on = True
 
         self.max_speed = SHIP_MAX_SPEED
 
@@ -137,6 +138,8 @@ class Ship(DirectionSteered):
             self.current_draw += 0.25
         if self.material_assessor_on:
             self.current_draw += 0.5
+        if self.dfs_detector_on:
+            self.current_draw += 0.05
 
         # Per second of play, not per simulation step: singleplayer steps every frame and the
         # server steps TICK_RATE times a second, so a step-based drain would differ between them.

@@ -1,5 +1,7 @@
 import math
 import random
+import string
+from typing import TypedDict
 
 from objects.asteroid import Asteroid
 from objects.decoy import Decoy
@@ -8,21 +10,26 @@ from objects.mining_vessel import MiningVessel
 from objects.missile import Missile
 from objects.ship import Ship
 from simulation.contacts import Contacts
+from simulation.grid import Grid
 from simulation.settings import WorldSettings
-from config.constants import *
+from config.constants import (MINING_FUEL_YIELD, MINING_MISSILE_YIELD, MINING_RANGE, MINING_TIME, MINING_YIELD,
+                              SHIP_MAX_FUEL, SHIP_MAX_HEALTH, SINGLE_PLAYER_ENEMY_SPAWN, SINGLE_PLAYER_SPAWN,
+                              TOTAL_MISSILES)
 from utility.geometry import squared_distance
-
-# The only keys the simulation cares about for flying a ship.
-MOVE_KEYS = ('left', 'right', 'up', 'down', 'left_shift', 'tab')
-# Switches that change a ship's power draw. The owning player sets them; the server applies them.
-POWER_FLAGS = ('laser_on', 'prox_scan_on', 'blinking', 'deep_field_on', 'dampening', 'material_assessor_on', 'radar_scan_on')
-
-# Ids below this are player ships (1, 2, ...). Everything else the world creates
-# gets an id from FIRST_OBJECT_ID upwards.
-FIRST_OBJECT_ID = 1000
+from config.constants import *
 
 
-def empty_command():
+
+
+
+class Command(TypedDict):
+    move: object
+    actions: list
+    laser_target: object
+    power: object
+
+
+def empty_command() -> Command:
     """What a player sends the world each tick.
 
     move:         held movement keys, or None to leave the ship's steering alone
@@ -34,11 +41,36 @@ def empty_command():
     return {'move': None, 'actions': [], 'laser_target': None, 'power': None}
 
 
-def _grid_remove(grid, cell, obj):
-    """Take obj out of a grid-keyed dict, dropping the cell once it's empty."""
-    grid[cell].remove(obj)
-    if not grid[cell]:
-        del grid[cell]
+# What each kind of rock pays out: (does the ship have room for it, give it to the ship)
+def _has_fuel_room(ship):
+    return ship.fuel < SHIP_MAX_FUEL
+
+
+def _add_fuel(ship):
+    ship.fuel = min(SHIP_MAX_FUEL, ship.fuel + MINING_FUEL_YIELD)
+
+
+def _has_missile_room(ship):
+    return ship.total_missiles < TOTAL_MISSILES
+
+
+def _add_missiles(ship):
+    ship.total_missiles = min(TOTAL_MISSILES, ship.total_missiles + MINING_MISSILE_YIELD)
+
+
+def _needs_repair(ship):
+    return ship.health < SHIP_MAX_HEALTH
+
+
+def _repair_hull(ship):
+    ship.health = SHIP_MAX_HEALTH
+
+
+_MINING_HANDLERS = {
+    'fuel': (_has_fuel_room, _add_fuel),
+    'missile': (_has_missile_room, _add_missiles),
+    'hull': (_needs_repair, _repair_hull),
+}
 
 
 class World:
@@ -55,19 +87,14 @@ class World:
         self.settings = settings or WorldSettings()
         self.width = self.height = self.settings.size
 
-        self.alphabet = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"]
-
         self.ships = []
         self.missiles = []
         self.decoys = []
         self.bullets = []
-        self.lasers = []
-        # mining-vessel lasers: [vessel, (x, y), time_left, asteroid]
-
-        self.asteroids = {}
-        self.drones = {}
-        self.pirates = {}
-
+        self.lasers = []  # MiningLaser, fired by mining vessels
+        self.asteroids = Grid()
+        self.drones = Grid()
+        self.pirates = Grid()
 
         self.dead_asteroid_ids = set()
         # Same ids in the order they died. The server sends each client only the
@@ -93,6 +120,9 @@ class World:
         self.contacts = Contacts(self)
 
         self._next_id = FIRST_OBJECT_ID
+        # Gameplay randomness (spawn points, decoy drift, blink) has its own stream, apart
+        # from the one that generates the world, so a seeded match can be replayed in tests.
+        self.rng = random.Random(None if seed is None else f"{seed}:gameplay")
         self._generate(random.Random(seed))
 
     # ------------------------------------------------------------------
@@ -115,11 +145,11 @@ class World:
             else:
                 pos_x = rng.randint(0, self.width)
                 pos_y = rng.randint(0, self.height)
-            asteroid = Asteroid(pos_x, pos_y, rng.randint(50, 100), rng)
+            asteroid = Asteroid(pos_x, pos_y, rng.randint(MIN_ROCK_RADIUS, MAX_ROCK_RADIUS), rng)
             asteroid.net_id = self.new_id()
 
             asteroid.id_for_ui = self._generate_asteroid_names(rng)
-            self.asteroids.setdefault(asteroid.cell, []).append(asteroid)
+            self.asteroids.add(asteroid)
 
         if not self.with_npcs:
             return
@@ -129,13 +159,13 @@ class World:
             pos_y = rng.randint(0, self.height)
             drone = Drone(pos_x, pos_y)
             drone.net_id = self.new_id()
-            self.drones.setdefault(drone.cell, []).append(drone)
+            self.drones.add(drone)
 
         for _ in range(self.settings.pirates):
             x, y = self.random_empty_point()
             pirate = MiningVessel(x, y, speed=40)
             pirate.net_id = self.new_id()
-            self.pirates.setdefault((int(x // GRID_SIZE), int(y // GRID_SIZE)), []).append(pirate)
+            self.pirates.add(pirate)
 
     def _clustered_point(self, rng, centers):
         """A point in a belt: near one of the cluster centres, kept inside the world."""
@@ -149,7 +179,7 @@ class World:
         length = rng.randint(1, 3)
         name = ""
         for _ in range(length):
-            name += (rng.choice(self.alphabet))
+            name += (rng.choice(string.ascii_lowercase))
 
         length = rng.randint(1, 3)
 
@@ -167,9 +197,18 @@ class World:
 
     def setup_single_player(self, callsign, player_id=1, enemy_id=2, enemy_callsign="UNKNOWN"):
         """The single-player scenario: the player and one AI opponent near each other."""
-        self.spawn_ship(player_id, x=SINGLE_PLAYER_SPAWN[0], y=SINGLE_PLAYER_SPAWN[1])
-        self.spawn_ship(enemy_id, is_ai=True, x=SINGLE_PLAYER_ENEMY_SPAWN[0], y=SINGLE_PLAYER_ENEMY_SPAWN[1])
+        # The fixed spots are kept when a rock isn't on them; otherwise we'd start inside one.
+        px, py = self._clear_spot(SINGLE_PLAYER_SPAWN)
+        self.spawn_ship(player_id, x=px, y=py)
+        ex, ey = self._clear_spot(SINGLE_PLAYER_ENEMY_SPAWN)
+        self.spawn_ship(enemy_id, is_ai=True, x=ex, y=ey)
         self.callsigns = {player_id: callsign or f"PILOT-{player_id}", enemy_id: enemy_callsign}
+
+    def _clear_spot(self, spot):
+        """`spot` if no rock is on it, otherwise a random empty point."""
+        if self.is_empty_space(*spot):
+            return spot
+        return self.random_empty_point()
 
     def remove_ship(self, player_id):
         """A player left: their ship and callsign go with them."""
@@ -178,27 +217,35 @@ class World:
 
     def remove_asteroids(self, asteroid_ids):
         """Destroy asteroids by id (a client catching up with the server's world)."""
-        new = [i for i in asteroid_ids if i not in self.dead_asteroid_ids]
-        if not new:
+        gone = {i for i in asteroid_ids if i not in self.dead_asteroid_ids}
+        if not gone:
             return
-        self.dead_asteroid_ids.update(new)
-        self.dead_asteroid_log.extend(new)
-        gone = set(new)
-        for cell, rocks in list(self.asteroids.items()):
-            rocks[:] = [rock for rock in rocks if rock.net_id not in gone]
-            if not rocks:
-                del self.asteroids[cell]
+        for rock in self.asteroids:
+            if rock.net_id in gone:
+                self._bury_asteroid(rock)
+                gone.discard(rock.net_id)
+        # Ids for rocks this world never had still count as dead.
+        for net_id in gone:
+            self.dead_asteroid_ids.add(net_id)
+            self.dead_asteroid_log.append(net_id)
+
+    def _bury_asteroid(self, rock):
+        """The one place a destroyed asteroid is removed and recorded as dead."""
+        self.asteroids.remove(rock)
+        self.dead_asteroid_ids.add(rock.net_id)
+        self.dead_asteroid_log.append(rock.net_id)
 
     def random_empty_point(self):
         while True:
-            x = random.randint(0, self.width)
-            y = random.randint(0, self.height)
+            x = self.rng.randint(0, self.width)
+            y = self.rng.randint(0, self.height)
             if self.is_empty_space(x, y):
                 return x, y
 
     def is_empty_space(self, x, y):
-        cell = (int(x // GRID_SIZE), int(y // GRID_SIZE))
-        for asteroid in self.asteroids.get(cell, []):
+        # A rock's centre can be up to its radius plus the clearance away, and that can
+        # reach into the neighbouring cells, so look at those too.
+        for asteroid in self.asteroids.near(x, y, reach=self.asteroids.reach_for(MAX_ROCK_RADIUS + 50)):
             if squared_distance((x, y), (asteroid.pos_x, asteroid.pos_y)) < (asteroid.size + 50) ** 2:
                 return False
         return True
@@ -279,7 +326,7 @@ class World:
 
         elif kind == 'decoy':
             decoy = Decoy(ship.rect.center[0], ship.rect.center[1],
-                          random.randint(-1, 1), random.randint(-1, 1), random.randint(20, 25))
+                          self.rng.randint(-1, 1), self.rng.randint(-1, 1), self.rng.randint(20, 25))
             decoy.net_id = self.new_id()
             self.decoys.append(decoy)
 
@@ -287,6 +334,13 @@ class World:
             ship.pos_x, ship.pos_y = self.random_empty_point()
             ship.update_rect()
             ship.drop_lock = False  # they've jumped: locks on them can hold again
+
+        elif kind == 'dfs_scan':
+            # Only the pilot who was swept hears about it
+            for player_id in action.get('targets', []):
+                target = self.get_ship(player_id)
+                if target is not None and target is not ship and target.alive:
+                    self.private_events.append(({player_id}, ('dfs_scanned', player_id)))
 
         elif kind == 'mine':
             self._start_mining(ship, action.get('target'))
@@ -299,7 +353,6 @@ class World:
         missile.net_id = self.new_id()
         self.missiles.append(missile)
         return missile
-
 
     def _update_painted(self, commands):
         # A ship is painted while another player's laser is touching it.
@@ -318,8 +371,7 @@ class World:
             self._die_on_asteroids(ship, announce=True)
 
     def _die_on_asteroids(self, ship, announce=False):
-        cell = (int(ship.rect.center[0] // GRID_SIZE), int(ship.rect.center[1] // GRID_SIZE))
-        for asteroid in self.asteroids.get(cell, []):
+        for asteroid in self.asteroids.near(ship.rect.center[0], ship.rect.center[1]):
             if squared_distance(ship.rect.center, (asteroid.pos_x, asteroid.pos_y)) < asteroid.size ** 2:
                 if ship.speed > 100:
                     ship.alive = False
@@ -373,7 +425,6 @@ class World:
                                                            missile.exploded_on_player)))
                 self.missiles.remove(missile)
 
-
     def _step_decoys(self, dt):
         for decoy in list(self.decoys):
             decoy.run(dt)
@@ -420,72 +471,45 @@ class World:
         cx, cy = ship.center
         if math.hypot(rock.pos_x - cx, rock.pos_y - cy) > MINING_RANGE:
             return False
-        if MINING_YIELD[rock.material] == 'fuel':
-            return ship.fuel < SHIP_MAX_FUEL
-        if MINING_YIELD[rock.material] == 'missile':
-            return ship.total_missiles < TOTAL_MISSILES
-        if MINING_YIELD[rock.material] == 'hull':
-            return ship.health < 100
-
-        return ship.total_missiles < TOTAL_MISSILES
+        has_room, _ = _MINING_HANDLERS[MINING_YIELD[rock.material]]
+        return has_room(ship)
 
     def _finish_mining(self, ship, rock):
-        if MINING_YIELD[rock.material] == 'fuel':
-            ship.fuel = min(SHIP_MAX_FUEL, ship.fuel + MINING_FUEL_YIELD)
-        elif MINING_YIELD[rock.material] == 'missile':
-            ship.total_missiles = min(TOTAL_MISSILES, ship.total_missiles + MINING_MISSILE_YIELD)
-        elif MINING_YIELD[rock.material] == 'hull':
-            ship.health = 100
+        _, collect = _MINING_HANDLERS[MINING_YIELD[rock.material]]
+        collect(ship)
 
         rock.alive = False  # _step_asteroids removes it and tells the clients
         ship.mining_on = False  # the beam switches itself off once the rock is burned out
         self.events.append(('mined', ship.player_id, rock.material))
 
-
     def _step_asteroids(self):
-        for cell, rocks in list(self.asteroids.items()):
-            for asteroid in list(rocks):
-                if not asteroid.alive:
-                    rocks.remove(asteroid)
-                    self.dead_asteroid_ids.add(asteroid.net_id)
-                    self.dead_asteroid_log.append(asteroid.net_id)
-            if not rocks:
-                del self.asteroids[cell]
+        for asteroid in self.asteroids:
+            if not asteroid.alive:
+                self._bury_asteroid(asteroid)
 
     def _step_mining_lasers(self, dt):
         for laser in list(self.lasers):
-            laser[2] -= dt
-            if laser[2] < 0:
+            laser.time_left -= dt
+            if laser.time_left < 0:
                 self.lasers.remove(laser)
-                if laser[3] is not None:
-                    laser[3].alive = False
+                if laser.asteroid is not None:
+                    laser.asteroid.alive = False
 
-    # Drones and pirates are listed out before any of them move. Walking the grid
-    # cell by cell while moving them lets one that crosses into a cell still
-    # ahead in the loop be updated twice in a frame, and a drone that died would
-    # then be removed twice: a KeyError on its already-emptied cell.
+    # Grid iteration takes a snapshot list, so a drone or pirate that moves into
+    # another cell mid-loop is still visited exactly once this frame.
     def _step_drones(self, dt):
-        for drone in [d for group in self.drones.values() for d in group]:
+        for drone in self.drones:
             drone.run_drone(self.asteroids, dt)
 
             if drone.alive is False:
-                _grid_remove(self.drones, drone.cell, drone)
-                continue
-
-            new_cell = (int(drone.pos_x // GRID_SIZE), int(drone.pos_y // GRID_SIZE))
-            if new_cell != drone.cell:
-                _grid_remove(self.drones, drone.cell, drone)
-                self.drones.setdefault(new_cell, []).append(drone)
-                drone.cell = new_cell
+                self.drones.remove(drone)
+            else:
+                self.drones.move(drone)
 
     def _step_pirates(self, dt):
-        for cell, pirate in [(c, p) for c, group in self.pirates.items() for p in group]:
+        for pirate in self.pirates:
             pirate.run(self.ships, self.bullets, self.lasers, self.asteroids, dt, self.width, self.height)
-
-            new_cell = (int(pirate.pos_x // GRID_SIZE), int(pirate.pos_y // GRID_SIZE))
-            if new_cell != cell:
-                _grid_remove(self.pirates, cell, pirate)
-                self.pirates.setdefault(new_cell, []).append(pirate)
+            self.pirates.move(pirate)
 
     def _step_bullets(self, dt):
         bullets_to_remove = []
@@ -493,18 +517,19 @@ class World:
             bullet.run(dt, self.width, self.height)
 
             for ship in self.ships:
-                if squared_distance(ship.rect.center, (bullet.pos_x, bullet.pos_y)) < 25 ** 2:
-                    ship.health -= 2
+                if squared_distance(ship.rect.center, (bullet.pos_x, bullet.pos_y)) < BULLET_HIT_RADIUS ** 2:
+                    ship.health -= BULLET_DAMAGE
                     ship.took_damage = True
                     self.events.append(('bullet_damage', ship.player_id))
                     bullets_to_remove.append(bullet)
                 if bullet.alive is False:
                     bullets_to_remove.append(bullet)
 
-            for cell in self.asteroids.values():
-                for asteroid in cell:
-                    if squared_distance((bullet.pos_x, bullet.pos_y), (asteroid.pos_x, asteroid.pos_y)) < asteroid.size ** 2:
-                        bullets_to_remove.append(bullet)
+            # Rocks are at most 100 across and cells 500 wide, so the bullet's own cell
+            # plus its neighbours holds every rock it could touch.
+            for asteroid in self.asteroids.near(bullet.pos_x, bullet.pos_y, reach=1):
+                if squared_distance((bullet.pos_x, bullet.pos_y), (asteroid.pos_x, asteroid.pos_y)) < asteroid.size ** 2:
+                    bullets_to_remove.append(bullet)
 
         for bullet in bullets_to_remove:
             if bullet in self.bullets:
