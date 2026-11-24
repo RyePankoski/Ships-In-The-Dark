@@ -106,8 +106,7 @@ class Client:
         self.audio.play_menu_audio()
 
     def start_game(self, config):
-        scene = MainScene(self.screen, self.audio, self.session.world, my_id=config.my_id, local=config.local,
-                          draw_ui=self.draw_ui, is_host=config.is_host)
+        scene = MainScene(self.screen, self.audio, self.session.world, config, self.draw_ui)
         self.play_screen = PlayScreen(self.session, self.draw_ui, self.audio, scene)
         self.active = self.play_screen
 

@@ -3,7 +3,10 @@ import pygame
 from asset_handlers.draw_game import DrawGame
 from core.cockpit import Cockpit
 from core.pause_menu import PauseMenu
+from core.session import MatchConfig
+from core.tactical_map_state import TacticalMapState
 from objects.explosion import Explosion
+from instruments.blink_drive import BlinkDrive
 from instruments.close_range_scan import CloseRangeScan
 from instruments.deep_field_scan import DeepFieldScan
 from instruments.instrument import InstrumentContext
@@ -12,9 +15,9 @@ from instruments.mining_laser import MiningLaser
 from instruments.material_assessor import MaterialAssessor
 from instruments.radar_system import RadarSystem
 from simulation.world import MOVE_KEYS, POWER_FLAGS, empty_command
-from config.constants import BLINK_FUEL_THRESHOLD
 from utility.geometry import squared_distance
 from utility.input import key_pressed
+from utility.timer import Timer
 
 
 class MainScene:
@@ -33,26 +36,39 @@ class MainScene:
     Drawing goes through DrawUI; the scene never touches the screen or CRT.
     """
 
-    SHUTDOWN_WAIT = 2  # seconds of black screen so the shutdown sound can play
+    SHUTDOWN_WAIT = 2
 
-    def __init__(self, screen, audio_manager, world, my_id, local=True, draw_ui=None, is_host=False):
+    KEY_ACTIONS = (
+        ('right_alt', 'decoy'),
+        ('p', 'fire_missile'),
+        ('x', 'debug_enemy_fire'),
+        ('m', 'toggle_map'),
+        ('g', 'toggle_dampening'),
+        ('h', 'toggle_vectors'),
+        ('esc', 'escape'),
+    )
+
+    # seconds of black screen so the shutdown sound can play
+
+    def __init__(self, screen, audio_manager, world, config: MatchConfig, draw_ui):
         # Classes
         self.audio_manager = audio_manager
         self.draw_game = DrawGame(screen, world.width, world.height)
-        if draw_ui is not None:
-            draw_ui.set_world(world)
+        draw_ui.set_world(world)
         self.draw_ui = draw_ui
 
         # World + who we are in it
         self.world = world
-        self.my_id = my_id
-        self.local = local
-        self.player_ship = world.get_ship(my_id)
+        self.my_id = config.my_id
+        self.local = config.local
+        self.player_ship = world.get_ship(config.my_id)
         self.cockpit = Cockpit()
 
+        # Outgoing actions (blink, instruments, decoy, fire) all queue here. handle_inputs
+        # drains it into the command, so there is only one list to track.
+        self._outbox = []
         # What we asked the world to do this frame (the client sends it in multiplayer)
         self.command = empty_command()
-        self.pending_actions = []
 
         # Purely visual
         self.explosions = []
@@ -62,7 +78,7 @@ class MainScene:
         self.instrument_context = InstrumentContext(
             self.player_ship, world.contacts, self.cockpit, audio_manager,
             start_cooldown=self.start_input_cooldown, world=world,
-            send_action=lambda action: self._command_actions.append(action),
+            send_action=lambda action: self._outbox.append(action),
         )
         self.radar_system = RadarSystem(self.instrument_context)
         self.deep_field_scan = DeepFieldScan(self.instrument_context)
@@ -70,8 +86,10 @@ class MainScene:
         self.material_assessor = MaterialAssessor(self.instrument_context, self.laser_assessor)
         self.mining_laser = MiningLaser(self.instrument_context, self.laser_assessor)
         self.close_range_scan = CloseRangeScan(self.instrument_context)
+        self.blink = BlinkDrive(self.instrument_context)
         self.instruments = [self.radar_system, self.deep_field_scan, self.laser_assessor,
-                            self.material_assessor, self.mining_laser, self.close_range_scan]
+                            self.material_assessor, self.mining_laser, self.close_range_scan,
+                            self.blink]
 
         self.key_actions = self.KEY_ACTIONS + tuple(k for i in self.instruments for k in i.keys)
         self.instrument_actions = {}
@@ -80,34 +98,42 @@ class MainScene:
                 assert name not in self.instrument_actions, f"two instruments answer to {name!r}"
                 self.instrument_actions[name] = handler
 
+        # Cockpit actions the scene handles itself. Keys and console buttons send the same names.
+        self.scene_actions = {
+            'decoy': self._decoy,
+            'fire_missile': self._fire_missile,
+            'debug_enemy_fire': self._debug_enemy_fire,
+            'toggle_dampening': self._toggle_dampening,
+            'fuel_acknowledge': self._fuel_acknowledge,
+            'toggle_vectors': self._toggle_vectors,
+            'toggle_map': self._toggle_map,
+            'marker_add': self._marker_add,
+            'marker_place': self._marker_place,
+            'marker_cancel': self._marker_cancel,
+            'marker_clear': self._marker_clear,
+            'escape': self._escape,
+            'open_console': self.open_pause,
+            'return_to_menu': self._return_to_menu,
+        }
+
         # UI stuff
-        self.is_map_open = False
-        # Tactical-map markers: (shape, world_x, world_y). Local to this client,
-        # never sent to the server. marker_mode: None, 'PICK' (choosing a shape)
-        # or a shape name (next map click places it).
-        self.map_markers = []
-        self.marker_mode = None
+        self.map = TacticalMapState()
         self._end_sound_played = False  # the game over sound plays once, on the first end screen frame
         self.grid_on = True
         self.vectors_on = False  # heading / velocity overlay on the ship (H / VECTORS button)
         self.pause = PauseMenu()  # the operator console (Esc)
 
-        # input timer
-        self.input_timer_cooldown = 0.2
-        self.input_cooling_down = False
-        self.input_timer = 0
-        self.dfs_warning_cooldown = 3
-        self.dfs_warning_timer = 0
+        # input timer: after a key press, held keys wait this long before they repeat
+        self.input_cooldown = Timer(0.2)
 
         # Control
         self.lock_inputs = False
         # Where the pilot leaves this scene, or None while the match is still on screen.
         # 'menu' or 'lobby'. The client (PlayScreen) reads this and nothing else.
         self.outcome = None
-        self.is_host = is_host  # passed in by the client: the host decides whether the match goes back to the lobby
+        self.is_host = config.is_host  # the host decides whether the match goes back to the lobby
         self.spectate_id = None  # player_id of the pilot we're watching, once our own ship is gone
         self.shutdown_timer = None  # counts down after QUIT TO MENU, then outcome is set to 'menu'
-        self._command_actions = []  # this frame's command['actions'], for perform()
 
         # Fun cinematic type stuff
         self.ftl_traveling = False
@@ -118,34 +144,33 @@ class MainScene:
         self.ftl_arrival_timer = 0
         self.ftl_arrival_cooldown = 2
 
-        self.blink_arriving = False
-        self.blink_arrival_timer = 0
-        self.blink_arrival_cooldown = 2
-
         self.sys_analyzing = False
         self.sys_analyzing_timer = 0
         self.sys_analyzing_cooldown = 2
 
-        self.blinking = False
-        self.blinking_timer = 0
-        self.blinking_cooldown = 5.5  # charge time (was 3): 2.5 seconds longer
-        self.has_blinked = False
+        # Runs from the start, then stays off
+        self.asteroid_laser = Timer(4)
+        self.asteroid_laser.start()
 
-        self.asteroid_laser_on = True
-        self.asteroid_laser_timer = 0
-        self.asteroid_laser_cooldown = 4
-
-        # Counts down from missile_contact_duration after any missile hit
-        self.missile_contact_timer = 0
-        self.missile_contact_duration = 1.5
-        # Banner for another pilot's ship going down: counts down from duration
-        self.ship_destroyed_timer = 0
-        self.ship_destroyed_duration = 2.0
+        # Missile contact: starts on any missile hit. Ship destroyed: banner for another pilot's loss.
+        self.missile_contact = Timer(1.5)
+        self.ship_destroyed = Timer(2.0)
         self.ship_destroyed_name = ""
 
     @property
     def enemy_ships(self):
         return [ship for ship in self.world.ships if ship is not self.player_ship]
+
+    @property
+    def input_cooling_down(self):
+        return self.input_cooldown.running
+
+    @input_cooling_down.setter
+    def input_cooling_down(self, value):
+        if value:
+            self.input_cooldown.arm()
+        else:
+            self.input_cooldown.stop()
 
     def run(self, inputs, dt, events=()):
 
@@ -220,7 +245,7 @@ class MainScene:
     def update_ship_power_use(self):
         self.player_ship.laser_on = self.laser_assessor.on
         self.player_ship.prox_scan_on = self.close_range_scan.on
-        self.player_ship.blinking = self.blinking
+        self.player_ship.blinking = self.blink.charging
         self.player_ship.deep_field_on = self.deep_field_scan.on
         self.player_ship.radar_scan_on = self.radar_system.scanning
         self.player_ship.material_assessor_on = self.material_assessor.scanning is not None
@@ -264,30 +289,13 @@ class MainScene:
         self.draw_ui.draw_pause_console(self.pause, underlay=False)
         self.draw_ui.buttons.end_frame()
 
-    # Key -> action, in the order they're checked. Console buttons produce the
-    # same action names (see asset_handlers/buttons.py), so a click and a key
-    # press both go through perform().
-    # The instruments add their own keys to this (see Instrument.keys).
-    KEY_ACTIONS = (
-        ('right_alt', 'decoy'),
-        ('p', 'fire_missile'),
-        ('x', 'debug_enemy_fire'),
-        ('m', 'toggle_map'),
-        ('t', 'blink'),
-        ('g', 'toggle_dampening'),
-        ('h', 'toggle_vectors'),
-        ('esc', 'escape'),
-    )
-
     def handle_inputs(self, inputs, dt, clicks=(), cockpit_keys=True):
         """Turn this frame's keys and clicks into cockpit changes + a command for the world."""
         command = empty_command()
-        command['actions'] = self.pending_actions
         command['laser_target'] = self.laser_assessor.hit_id
-        self.pending_actions = []
-        self._command_actions = command['actions']
 
         if self.lock_inputs:
+            command['actions'] = self._drain_outbox()
             return command
 
         if inputs['up'] or inputs['left'] or inputs['down'] or inputs['right']:
@@ -311,97 +319,95 @@ class MainScene:
         for action in actions:
             self.perform(action)
 
+        command['actions'] = self._drain_outbox()
         # Read after the actions, so a switch flipped this frame (e.g. dampening) is the one sent
         command['power'] = {name: getattr(self.player_ship, name) for name in POWER_FLAGS}
         return command
 
+    def _drain_outbox(self):
+        """Hand over everything queued so far and start a fresh outbox."""
+        actions = self._outbox
+        self._outbox = []
+        return actions
+
     def perform(self, action):
         """Do one cockpit action, whether it came from a key or a button."""
-        cockpit = self.cockpit
-        sfx = self.audio_manager.play_sfx
-
-        instrument_action = self.instrument_actions.get(action)
-        if instrument_action is not None:
-            instrument_action()
-        elif action == 'decoy':
-            self._command_actions.append({'type': 'decoy'})
-            self.input_cooling_down = True
-            sfx('deploy_decoy')
-        elif action == 'fire_missile':
-            target_id = getattr(cockpit.target, 'net_id', None)
-            if self.player_ship.can_fire_missile() and target_id is not None and self.laser_assessor.on:
-                self.laser_assessor.on = False
-                self._command_actions.append({'type': 'fire', 'target': target_id})
-                self.input_cooling_down = True
-                sfx('fire_missile')
-
-        # The debug "enemy fires at me" key only exists in single-player
-        elif action == 'debug_enemy_fire':
-            if self.local and self.enemy_ships:
-                enemy = self.enemy_ships[0]
-                enemy.fire()
-                self.world.fire_missile(enemy, self.player_ship)
-                self.input_cooling_down = True
-        elif action == 'toggle_dampening':
-            self.player_ship.dampening = not self.player_ship.dampening
-            sfx('inertial_dampener')
-            self.input_cooling_down = True
-        elif action == 'fuel_acknowledge':
-            self.player_ship.fuel_acknowledge = not self.player_ship.fuel_acknowledge
-            sfx('fuel_fault_acknowledge')
-        elif action == 'toggle_vectors':
-            self.vectors_on = not self.vectors_on
-            sfx('map_open' if self.vectors_on else 'map_close')
-            self.input_cooling_down = True
-        elif action == 'toggle_map':
-            self.is_map_open = not self.is_map_open
-            self.marker_mode = None
-            self.input_cooling_down = True
-            sfx('map_open' if self.is_map_open else 'map_close')
-        elif action == 'marker_add':
-            self.marker_mode = 'PICK'
-            sfx('map_marker')
+        handler = self.instrument_actions.get(action) or self.scene_actions.get(action)
+        if handler is not None:
+            handler()
         elif action.startswith('marker_shape_'):
-            self.marker_mode = action[len('marker_shape_'):].upper()
-            sfx('map_marker')
-        elif action == 'marker_place':
-            marker = self.draw_ui.marker_from_click(self.marker_mode)
-            if marker is not None:
-                self.map_markers.append(marker)
-                self.marker_mode = None
-                sfx('map_marker_place')
-        elif action == 'marker_cancel':
-            self.marker_mode = None
-            sfx('cancel')
-        elif action == 'marker_clear':
-            self.map_markers.clear()
-            sfx('map_marker_delete')
-        elif action == 'blink':
-            if not self.blinking and self.player_ship.fuel > BLINK_FUEL_THRESHOLD:
-                self.blinking = True
-                self.player_ship.drop_lock = True
-                sfx('blink')
+            self.map.choose_shape(action[len('marker_shape_'):])
+            self.audio_manager.play_sfx('map_marker')
 
-            if self.player_ship.fuel <= BLINK_FUEL_THRESHOLD:
-                self.audio_manager.play_sfx('blink_denied')
+    def _decoy(self):
+        self._outbox.append({'type': 'decoy'})
+        self.input_cooling_down = True
+        self.audio_manager.play_sfx('deploy_decoy')
 
+    def _fire_missile(self):
+        target_id = getattr(self.cockpit.target, 'net_id', None)
+        if self.player_ship.can_fire_missile() and target_id is not None and self.laser_assessor.on:
+            self.laser_assessor.on = False
+            self._outbox.append({'type': 'fire', 'target': target_id})
+            self.input_cooling_down = True
+            self.audio_manager.play_sfx('fire_missile')
 
-        elif action == 'escape' and self.marker_mode is not None:
+    def _debug_enemy_fire(self):
+        # The debug "enemy fires at me" key only exists in single-player
+        if self.local and self.enemy_ships:
+            enemy = self.enemy_ships[0]
+            enemy.fire()
+            self.world.fire_missile(enemy, self.player_ship)
+            self.input_cooling_down = True
+
+    def _toggle_dampening(self):
+        self.player_ship.dampening = not self.player_ship.dampening
+        self.audio_manager.play_sfx('inertial_dampener')
+        self.input_cooling_down = True
+
+    def _fuel_acknowledge(self):
+        self.player_ship.fuel_acknowledge = not self.player_ship.fuel_acknowledge
+        self.audio_manager.play_sfx('fuel_fault_acknowledge')
+
+    def _toggle_vectors(self):
+        self.vectors_on = not self.vectors_on
+        self.audio_manager.play_sfx('map_open' if self.vectors_on else 'map_close')
+        self.input_cooling_down = True
+
+    def _toggle_map(self):
+        self.map.toggle()
+        self.input_cooling_down = True
+        self.audio_manager.play_sfx('map_open' if self.map.is_open else 'map_close')
+
+    def _marker_add(self):
+        self.map.start_marker()
+        self.audio_manager.play_sfx('map_marker')
+
+    def _marker_place(self):
+        if self.map.place(self.draw_ui.marker_from_click(self.map.marker_mode)):
+            self.audio_manager.play_sfx('map_marker_place')
+
+    def _marker_cancel(self):
+        self.map.cancel_marker()
+        self.audio_manager.play_sfx('cancel')
+
+    def _marker_clear(self):
+        self.map.clear_markers()
+        self.audio_manager.play_sfx('map_marker_delete')
+
+    def _escape(self):
+        self.input_cooling_down = True
+        if self.map.placing:
             # Esc backs out of marker placement before it closes anything
-            self.marker_mode = None
-            self.input_cooling_down = True
-
-        elif action == 'escape':
+            self.map.cancel_marker()
+        elif self.map.is_open:
             # Esc closes the map first; with the map shut it opens the console
-            if self.is_map_open:
-                self.is_map_open = False
-            else:
-                self.open_pause()
-            self.input_cooling_down = True
-        elif action == 'open_console':
+            self.map.close()
+        else:
             self.open_pause()
-        elif action == 'return_to_menu':
-            self.outcome = 'menu'
+
+    def _return_to_menu(self):
+        self.outcome = 'menu'
 
     def update_threats(self):
         """Work out the missile warnings from the missiles in the world."""
@@ -416,57 +422,36 @@ class MainScene:
             if squared_distance(self.player_ship.rect.center, (missile.pos_x, missile.pos_y)) < 800 ** 2:
                 cockpit.catastrophic_warning = True
 
-        if cockpit.catastrophic_warning:
-            self.audio_manager.play_sfx('catastrophic_warning')
-        else:
-            self.audio_manager.stop_sfx('catastrophic_warning')
+    def sound_states(self):
+        """Sounds that follow a state: (name, active, loops, stop_when_off).
+
+        While `active` is true the sound plays (play_sfx ignores it if it is already
+        going). When it goes false the sound stops, unless stop_when_off is False,
+        in which case it is left to finish.
+        """
+        ship = self.player_ship
+        cockpit = self.cockpit
+        return (
+            # The beam hums while it has a rock locked. The world drops the lock when the
+            # rock is mined out or the beam is switched off, so the hum stops with it.
+            ('mining_laser', ship.mining_target is not None, -1, True),
+            ('enemy_missile_lock', cockpit.enemy_has_missile_solution, 0, True),
+            ('catastrophic_warning', cockpit.catastrophic_warning, 0, True),
+            ('laser_warning', ship.painted, 0, True),
+            ('dfs_scan_warning', self.deep_field_scan.scanned, 0, True),
+            ('pirate_warning', ship.mining_vessel_sees_you, 0, True),
+            ('low_health', ship.health_low and ship.alive, 0, True),
+            ('low_fuel', ship.low_fuel and not ship.fuel_acknowledge, 0, False),
+            ('ftl_jumping', self.ftl_traveling, 0, True),
+            ('ftl_arrival', self.ftl_arriving, 0, True),
+        )
 
     def handle_general_sound_effects(self):
-        # The beam hums while it has a rock locked. The world drops the lock when the
-        # rock is mined out or the beam is switched off, so the hum stops with it.
-        if self.player_ship.mining_target is not None:
-            self.audio_manager.play_sfx('mining_laser', loops=-1)
-        else:
-            self.audio_manager.stop_sfx('mining_laser')
-
-        if self.cockpit.enemy_has_missile_solution:
-            self.audio_manager.play_sfx('enemy_missile_lock')
-        else:
-            self.audio_manager.stop_sfx('enemy_missile_lock')
-        if self.player_ship.painted:
-            self.audio_manager.play_sfx('laser_warning')
-        else:
-            self.audio_manager.stop_sfx('laser_warning')
-        if self.cockpit.dfs_scanned:
-            self.audio_manager.play_sfx('dfs_scan_warning')
-        else:
-            self.audio_manager.stop_sfx('dfs_scan_warning')
-        if self.player_ship.mining_vessel_sees_you:
-            self.audio_manager.play_sfx('pirate_warning')
-        else:
-            self.audio_manager.stop_sfx('pirate_warning')
-        if self.player_ship.health_low and self.player_ship.alive:
-            self.audio_manager.play_sfx('low_health')
-        else:
-            self.audio_manager.stop_sfx('low_health')
-
-        if self.player_ship.low_fuel and not self.player_ship.fuel_acknowledge:
-            self.audio_manager.play_sfx('low_fuel')
-
-        if self.ftl_traveling:
-            self.audio_manager.play_sfx('ftl_jumping')
-        else:
-            self.audio_manager.stop_sfx('ftl_jumping')
-
-        if self.ftl_arriving:
-            self.audio_manager.play_sfx('ftl_arrival')
-        else:
-            self.audio_manager.stop_sfx('ftl_arrival')
-
-        if self.blink_arriving:
-            self.audio_manager.play_sfx('blink_arrival')
-        else:
-            self.audio_manager.stop_sfx('blink_arrival')
+        for name, active, loops, stop_when_off in self.sound_states():
+            if active:
+                self.audio_manager.play_sfx(name, loops=loops)
+            elif stop_when_off:
+                self.audio_manager.stop_sfx(name)
 
     def handle_world_events(self, events):
         """React (sound/UI) to things the world reported.
@@ -491,13 +476,13 @@ class MainScene:
                 self.audio_manager.play_sfx('player_hit_by_missile')
             elif kind == 'missile_contact':
                 self.audio_manager.play_sfx('missile_contact', force=True)
-                self.missile_contact_timer = self.missile_contact_duration
+                self.missile_contact.start()
             elif kind == 'ship_destroyed':
                 self.audio_manager.play_sfx('enemy_ship_destroyed')
                 # Our own loss gets the debrief screen instead
                 if data[0] != self.my_id:
                     self.ship_destroyed_name = self.world.callsigns.get(data[0], f"PILOT-{data[0]}")
-                    self.ship_destroyed_timer = self.ship_destroyed_duration
+                    self.ship_destroyed.start()
             elif kind == 'missile_exploded':
                 x, y, hit_type, on_player = data
                 self.explosions.append(Explosion(x, y, kind=hit_type, big=on_player))
@@ -506,22 +491,9 @@ class MainScene:
                     self.audio_manager.play_sfx('material_scan_complete')
 
     def timers(self, dt):
-        if self.missile_contact_timer > 0:
-            self.missile_contact_timer = max(0, self.missile_contact_timer - dt)
-        if self.ship_destroyed_timer > 0:
-            self.ship_destroyed_timer = max(0, self.ship_destroyed_timer - dt)
-
-        if self.input_cooling_down:
-            self.input_timer += dt
-            if self.input_timer > self.input_timer_cooldown:
-                self.input_timer = 0
-                self.input_cooling_down = False
-
-        if self.cockpit.dfs_scanned:
-            self.dfs_warning_timer += dt
-            if self.dfs_warning_timer > self.dfs_warning_cooldown:
-                self.cockpit.dfs_scanned = False
-                self.dfs_warning_timer = 0
+        self.missile_contact.update(dt)
+        self.ship_destroyed.update(dt)
+        self.input_cooldown.update(dt)
 
         if self.ftl_traveling:
             self.lock_inputs = True
@@ -537,32 +509,13 @@ class MainScene:
                 self.ftl_arriving = False
                 self.ftl_arrival_timer = 0
 
-        if self.blinking:
-            self.blinking_timer += dt
-            if self.blinking_timer > self.blinking_cooldown:
-                self.blinking = False
-                self.blink_arriving = True
-                self.blinking_timer = 0
-                # The world does the actual jump (on the server, in multiplayer)
-                self.pending_actions.append({'type': 'blink'})
-
-        if self.blink_arriving:
-            self.blink_arrival_timer += dt
-            if self.blink_arrival_timer > self.blink_arrival_cooldown:
-                self.blink_arriving = False
-                self.blink_arrival_timer = 0
-
         if self.sys_analyzing:
             self.sys_analyzing_timer += dt
             if self.sys_analyzing_timer > self.sys_analyzing_cooldown:
                 self.sys_analyzing = False
                 self.sys_analyzing_timer = 0
 
-        if self.asteroid_laser_on:
-            self.asteroid_laser_timer += dt
-            if self.asteroid_laser_timer > self.asteroid_laser_cooldown:
-                self.asteroid_laser_on = False
-                self.asteroid_laser_timer = 0
+        self.asteroid_laser.update(dt)
 
     @property
     def lobby_allowed(self):
@@ -640,7 +593,7 @@ class MainScene:
         number = [ship.player_id for ship in targets].index(watched.player_id) + 1
         self.draw_ui.draw_spectate_hud(world.callsigns.get(self.my_id), name, number, len(targets),
                                        self.end_options(key_hints=False))
-        self.draw_ui.draw_ship_destroyed(self.ship_destroyed_timer, self.ship_destroyed_duration, self.ship_destroyed_name)
+        self.draw_ui.draw_ship_destroyed(self.ship_destroyed.remaining, self.ship_destroyed.duration, self.ship_destroyed_name)
 
         self.draw_ui.buttons.end_frame()
 
@@ -658,10 +611,7 @@ class MainScene:
             self.draw_game.draw_ftl_arrival(self.player_ship.rect.center, self.ftl_arrival_timer, camera_x, camera_y, self.ftl_arrival_cooldown)
         if self.sys_analyzing:
             self.draw_game.draw_ship_analysis((self.player_ship.rect.center[0], self.player_ship.rect.center[1]), self.sys_analyzing_timer, camera_x, camera_y, self.sys_analyzing_cooldown)
-        if self.blinking:
-            self.draw_game.draw_charge_animation(self.blinking, self.blinking_timer, self.blinking_cooldown)
-        if self.blink_arriving:
-            self.draw_game.draw_blink_arrival((self.player_ship.rect.center[0], self.player_ship.rect.center[1]), self.blink_arrival_timer, camera_x, camera_y, self.blink_arrival_cooldown)
+        self.blink.draw_effects(self.draw_game, camera_x, camera_y)
 
         self.draw_ui.draw_world_grid(camera_x, camera_y, self.grid_on)
         self.draw_ui.draw_ui_layout()
@@ -673,22 +623,22 @@ class MainScene:
                                     [line for line in (i.status_line() for i in self.instruments) if line])
         if self.vectors_on:
             self.draw_ui.draw_ship_vectors(self.player_ship, camera_x, camera_y)
-        self.draw_ui.draw_control_banks(self.player_ship, cockpit, map_open=self.is_map_open, blink_busy=self.blinking or self.blink_arriving, vectors_on=self.vectors_on,
+        self.draw_ui.draw_control_banks(self.player_ship, cockpit, map_open=self.map.is_open, blink_busy=self.blink.busy, vectors_on=self.vectors_on,
                                         sensor_buttons=[b for i in self.instruments for b in i.console_buttons()])
         self.draw_ui.draw_missile_lock_warning(cockpit.enemy_has_missile_solution)
         self.draw_ui.draw_missile_vectors(self.my_id, world.missiles, camera_x, camera_y)
         for instrument in self.instruments:
             instrument.draw_panel(self.draw_ui)
         self.draw_ui.draw_catastrophe_warning(cockpit.catastrophic_warning)
-        self.draw_ui.draw_dfs_warning(cockpit.dfs_scanned, self.dfs_warning_timer)
-        self.draw_ui.draw_missile_contact(self.missile_contact_timer, self.missile_contact_duration)
-        self.draw_ui.draw_ship_destroyed(self.ship_destroyed_timer, self.ship_destroyed_duration, self.ship_destroyed_name)
+        self.draw_ui.draw_dfs_warning(self.deep_field_scan.scanned, self.deep_field_scan.warning.elapsed)
+        self.draw_ui.draw_missile_contact(self.missile_contact.remaining, self.missile_contact.duration)
+        self.draw_ui.draw_ship_destroyed(self.ship_destroyed.remaining, self.ship_destroyed.duration, self.ship_destroyed_name)
         for instrument in self.instruments:
             instrument.draw_overlay(self.draw_ui, camera_x, camera_y)
         for instrument in self.instruments:
             instrument.draw_controls(self.draw_ui)
-        self.draw_ui.draw_tactical_map(self.is_map_open, self.player_ship, self.close_range_scan.get_contacts(),
-                                       markers=self.map_markers, marker_mode=self.marker_mode)
+        self.draw_ui.draw_tactical_map(self.map.is_open, self.player_ship, self.close_range_scan.get_contacts(),
+                                       markers=self.map.markers, marker_mode=self.map.marker_mode)
         self.draw_ui.draw_corpo_miner_fire_warning(self.player_ship.mining_vessel_sees_you)
         self.draw_ui.draw_bullet_damage_glitch(self.player_ship.took_damage)
         self.draw_ui.draw_low_health_warning(self.player_ship.health_low)

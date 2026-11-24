@@ -15,4 +15,3 @@ class Cockpit:
         # Threat warnings, worked out each frame from the world
         self.enemy_has_missile_solution = False
         self.catastrophic_warning = False
-        self.dfs_scanned = False

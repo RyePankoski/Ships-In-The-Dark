@@ -2,6 +2,7 @@ import math
 from instruments.instrument import Instrument
 from config.constants import CORRIDOR_WIDTH, CORRIDOR_DEPTH
 from utility.geometry import in_sector
+from utility.timer import Timer
 
 # What the DFS makes of each kind of contact: (label it reports, confidence).
 # Drones read as 'unknown': this scanner can't tell them apart from anything else.
@@ -38,6 +39,10 @@ class DeepFieldScan(Instrument):
         self.detections = []
         self._bearing_changed = False
 
+        # Set when this scanner has been used on us; the warning shows until the timer runs out
+        self.scanned = False
+        self.warning = Timer(3)
+
     # --- Instrument ---------------------------------------------------------
     def actions(self):
         return {
@@ -72,6 +77,16 @@ class DeepFieldScan(Instrument):
         if self.on and self.ctx.keys_live and not self._bearing_changed:
             self.ctx.stop_sfx('dfs_dir_change')
         self._bearing_changed = False
+
+        if self.scanned:
+            self.warning.arm()
+            if self.warning.update(dt):
+                self.scanned = False
+
+    def mark_scanned(self):
+        """Something has scanned us: show the warning for a few seconds."""
+        self.scanned = True
+        self.warning.arm()
 
     def draw_panel(self, ui):
         ui.draw_deep_field_panel(self.detections, self.direction_index, self.on)
