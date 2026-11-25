@@ -8,9 +8,6 @@
 SHIP_THRUST = 20  # acceleration along the nose while thrusting
 SHIP_MAX_SPEED = 80
 RETRO_THRUST_FRACTION = 0.5  # reverse burn (down key) as a fraction of forward thrust
-BOOST_THRUST_MULT = 2.0  # shift: thrust multiplier
-BOOST_SPEED_MULT = 1.5  # shift: raises the speed cap
-MOVE_KEYS = ('left', 'right', 'up', 'down', 'left_shift', 'tab')
 
 SHIP_TURN_RATE = 150  # top turn rate, degrees per second
 SHIP_TURN_ACCEL = 600  # how quickly the turn rate eases toward its target, degrees per second squared
@@ -21,24 +18,33 @@ DRIFT_DRAG = 0.0  # coasting bleed per second with the dampener off (0 = pure dr
 BRAKE_DRAG = 1.0  # per second while braking (tab)
 
 # ---------------------------------------------------------------------------
-# Ship fuel, health and power
+# Ship fuel and health
 # ---------------------------------------------------------------------------
 SHIP_MAX_FUEL = 401
 SHIP_MAX_HEALTH = 100
-LOW_FUEL_FRACTION = 10  # divisor: low-fuel warning at SHIP_MAX_FUEL / 5 (20% of the tank)
+THROTTLED_SPEED = 40  # top speed while the hull is badly damaged
+LOW_FUEL_FRACTION = 0.1  # low-fuel warning when the tank falls to this fraction of SHIP_MAX_FUEL
 BLINK_FUEL_THRESHOLD = 50
-THROTTLED_SPEED = 40
-HIGH_USE = 4  # power draw at or above this triggers the high-draw warning
+HIGH_USE = 4
 
+
+RADIATION_BUILDUP = 0.5
+RADIATION_BLEED = 3.0
+
+# ---------------------------------------------------------------------------
+# Power draw
+# ---------------------------------------------------------------------------
 # Switches that change a ship's power draw. The owning player sets them; the server applies them.
 POWER_FLAGS = ('laser_on', 'prox_scan_on', 'blinking', 'deep_field_on', 'dampening', 'material_assessor_on', 'radar_scan_on', 'dfs_detector_on', 'range_bands_on')
 
-# Ship systems draw
+# Ship systems
 THRUST_DRAW = 2
 BRAKING_DRAW = 2
 DAMPENING_DRAW = 0.75
 TURNING_DRAW = 0.25
+BLINKING_DRAW = 50
 
+# Instruments and mining
 LASER_DRAW = 1
 DEEP_FIELD_DRAW = 0.75
 PROXIMITY_SCAN_DRAW = 0.1
@@ -46,19 +52,15 @@ RADAR_SCAN_DRAW = 0.25
 DFS_DETECTOR_DRAW = 0.05
 RANGE_BANDS_DRAW = 0.8
 MATERIAL_ASSESSOR_DRAW = 0.25
-
-
 MINING_DRAW = 5
-BLINKING_DRAW = 50
 
 # ---------------------------------------------------------------------------
 # Weapons: missiles
 # ---------------------------------------------------------------------------
-MISSILE_THRUST = 200  # was 0.4
-MISSILE_MAX_SPEED = 500  # was 10
-MISSILE_FUEL = 15  # stays
-MISSILE_FUEL_USE_RATE = 3  # stays (or adjust)
-MISSILE_LIFETIME = 60
+MISSILE_THRUST = 200
+MISSILE_MAX_SPEED = 500
+MISSILE_FUEL = 15
+MISSILE_FUEL_USE_RATE = 3
 TOTAL_MISSILES = 5
 
 # Missile obstacle avoidance (single-feeler steering)
@@ -69,31 +71,25 @@ MISSILE_AVOID_WEIGHT = 1.0  # 1.0 = up to ~45 deg deflection from straight-at-ta
 MISSILE_AVOID_SMOOTH = 0.15  # 0.1 = heavy smoothing (gliding), 0.4 = snappier
 
 # ---------------------------------------------------------------------------
-# Weapons: bullets and laser
+# Weapons: bullets
 # ---------------------------------------------------------------------------
 BULLET_SPEED = 600
 BULLET_LIFETIME = 2
 BULLET_DAMAGE = 2
-BULLET_HIT_RADIUS = 25  # a pirate bullet hurts a ship it passes within this many pixels of its centre
-
-LASER_STEP = 2
-LASER_RANGE = 5000
+BULLET_HIT_RADIUS = 25  # a pirate bullet hurts a ship it passes within this many pixels of its center
 
 # ---------------------------------------------------------------------------
-# Mining laser: locks the nearest mineable rock in range and burns it away
+# Mining laser: locks the nearest mine able rock in range and burns it away
 # ---------------------------------------------------------------------------
-MINING_RANGE = 200  # centre to centre, world units
+MINING_RANGE = 200  # center to center, world units
 MINING_TIME = 8.0  # seconds of beam on one rock
-RANGE_BANDS_DRAW = 0.25  # power draw while the radar range bands are on
-MINING_DRAW = 1.5  # power draw while the mining beam is on (LaserAssessor draws 1)
 MINING_FUEL_YIELD = 100  # fuel from an icy rock
 MINING_MISSILE_YIELD = 1  # missiles from a metallic rock
-MINING_HULL_YIELD = 100  # hull rebuild from a semi-metallic rock
-# What each mineable material pays out. Anything not listed can't be mined.
+# What each mine able material pays out. Anything not listed can't be mined.
 MINING_YIELD = {'icy': 'fuel', 'metallic': 'missile', 'semi-metallic': 'hull'}
 
 # ---------------------------------------------------------------------------
-# Sensors, scanners and countermeasures
+# Sensors and countermeasures
 # ---------------------------------------------------------------------------
 RADAR_PULSE_RANGE = 4000
 RADAR_PULSE_SPEED = 2
@@ -102,6 +98,9 @@ CLOSE_RANGE_SCAN_RANGE = 1000
 
 CORRIDOR_DEPTH = 8000  # deep field scan configuration
 CORRIDOR_WIDTH = 2000
+
+LASER_RANGE = 5000  # laser assessor
+LASER_STEP = 2  # laser assessor sampling step
 
 DECOY_LIFETIME = 30
 
@@ -130,6 +129,7 @@ TICK_RATE = 20  # server simulation steps per second
 TICK_DT = 1 / TICK_RATE
 BROADCAST_RATE = 20  # server state snapshots sent per second (independent of the frame rate)
 REF_HZ = 60  # the frame rate the per-step ship handling constants were tuned at
+SHUTDOWN_WAIT = 2  # seconds the shutdown sequence runs before quitting (core/main_scene.py)
 
 # Client-side prediction (see simulation/snapshot.py)
 SNAPSHOT_AGE = 0.06  # how old a snapshot is on arrival: one tick plus a LAN trip, roughly
@@ -141,4 +141,7 @@ LOCAL_VELOCITY_BLEND = 0.25  # how far our own ship's heading/speed is pulled to
 # Players
 # ---------------------------------------------------------------------------
 CALLSIGN_MAX = 20
+
+# The least visible your own ship can be to you (alpha 0-255). Enemies see the true visibility.
+SELF_MIN_ALPHA = 25
 CALLSIGN_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-")

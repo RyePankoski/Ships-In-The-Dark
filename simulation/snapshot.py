@@ -35,7 +35,7 @@ SHIP_FIELDS = (
     ('painted', BOOL), ('took_damage', BOOL), ('mining_vessel_sees_you', BOOL),
     ('fuel', 1), ('current_draw', 2), ('low_fuel', BOOL),
     ('mining_on', BOOL), ('mining_target', INT), ('mining_progress', 2),
-    ('drop_lock', BOOL), ('visibility', INT),
+    ('drop_lock', BOOL), ('visibility', INT), ('cloaking_value', 1),
 )
 MISSILE_FIELDS = (
     ('pos_x', 1), ('pos_y', 1), ('vel_x', 3), ('vel_y', 3), ('heading', 1), ('speed', 1),

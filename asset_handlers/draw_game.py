@@ -1,12 +1,11 @@
 import math
 import random
-import time
-
 import pygame
 import sys
 import os
-from config.constants import *
+
 from config import theme
+from config.constants import SELF_MIN_ALPHA
 from asset_handlers import fonts
 from objects.explosion import FLASH_COLOR, phosphor_color
 from pathlib import Path
@@ -55,16 +54,20 @@ def is_visible_to_camera(obj, camera_x, camera_y, screen_width, screen_height):
     screen_x = obj_x - camera_x
     screen_y = obj_y - camera_y
 
-    # Check if within viewport
+    # Check if within the viewport
     return (world_left < screen_x < world_right and
             world_top < screen_y < world_bottom)
 
 
 class DrawGame:
     def __init__(self, screen, world_width, world_height):
+        self.font_blink = None
+        self.font_ftl = None
+        self.ftl_particles = None
+
         self.screen = screen
         if getattr(sys, "frozen", False):
-            base_path = Path(sys._MEIPASS)
+            base_path = Path(sys._MEIPASS)  # noqa
         else:
             base_path = Path(__file__).resolve().parent.parent
 
@@ -185,10 +188,10 @@ class DrawGame:
             self.screen.blit(self.decoy_sprite, (screen_x, screen_y))
 
     def pick_player_sprite(self, ship):
-        """Choose the player's sprite from thrust direction, turn input and speed."""
+        """Choose the player's sprite from a thrust direction, turn input and speed."""
         # Retro is checked first: ship.thrusting is also True during a reverse burn
 
-        if ship.visibility <= 0:
+        if ship.cloaking_value >= 5:
             return self.ship_invisible_sprite
 
         if ship.translate_left:
@@ -230,22 +233,18 @@ class DrawGame:
                 rotated_rect = sprite.get_rect(center=(screen_x, screen_y))
                 self.screen.blit(sprite, rotated_rect)
                 continue
+
             if ship.player_id == my_id:
-                if ship.visibility <= 0:
-                    sprite = self.pick_player_sprite(ship)
-                    rotated_sprite = pygame.transform.rotate(sprite, ship.heading)
-                    rotated_sprite.set_alpha(ship.visibility + 80)
-                    rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
-                    self.screen.blit(rotated_sprite, rotated_rect)
-                else:
-                    sprite = self.pick_player_sprite(ship)
-                    rotated_sprite = pygame.transform.rotate(sprite, ship.heading)
-                    rotated_sprite.set_alpha(ship.visibility + 80)
-                    rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
-                    self.screen.blit(rotated_sprite, rotated_rect)
+                # Never fainter than SELF_MIN_ALPHA, so you can always find your own ship
+                sprite = self.pick_player_sprite(ship)
+                rotated_sprite = pygame.transform.rotate(sprite, ship.heading)
+                rotated_sprite.set_alpha(max(ship.visibility, SELF_MIN_ALPHA))
+                rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
+                self.screen.blit(rotated_sprite, rotated_rect)
+
             elif prox_scan:
                 rotated_sprite = pygame.transform.rotate(self.enemy_ship_sprite, ship.heading)
-                if ship.visibility <= 0:
+                if ship.cloaking_value == 5:
                     continue
                 rotated_sprite.set_alpha(ship.visibility)
                 rotated_rect = rotated_sprite.get_rect(center=(screen_x, screen_y))
@@ -351,7 +350,7 @@ class DrawGame:
         if is_blink_on:
             ui_color = theme.GREEN
 
-            # Anti-aliasing set to False (the middle argument) for pixelated edges
+            # Antialiasing set to False (the middle argument) for pixelated edges
             ftl_text = self.font_ftl.render("JUMP SOLUTION: FIXED", True, ui_color)
 
             text_x = center_x - ftl_text.get_width() // 2
@@ -374,7 +373,7 @@ class DrawGame:
             self.screen.blit(ftl_text, (text_x, text_y))
 
     def draw_ftl_arrival(self, ship_position, arrival_timer, camera_x, camera_y, max_duration=1.0, show=True):
-        """Draw a high-impact FTL arrival: rupture flash, spike burst, and stacked shockwaves."""
+        """Draw a high-impact FTL arrival: rupture flash, spike burst, and stacked shock waves."""
         if not show:
             return
         if arrival_timer <= 0.0 or arrival_timer >= max_duration:
@@ -441,7 +440,7 @@ class DrawGame:
                 # Bright head dot at the leading tip
                 pygame.draw.circle(surf, (*theme.WHITE, line_alpha), (x2, y2), 2)
 
-        # --- 3. Stacked shockwaves: three rings released in sequence ---
+        # --- 3. Stacked shock waves: three rings released in sequence ---
         for wave in range(3):
             wave_delay = wave * 0.12
             wave_p = (progress - wave_delay) / (1.0 - wave_delay) if progress > wave_delay else -1.0
@@ -484,7 +483,7 @@ class DrawGame:
             pygame.draw.line(surf, (*theme.WHITE, alpha), (cx, cy), (cx + arm * -dx, cy), 2)
             pygame.draw.line(surf, (*theme.WHITE, alpha), (cx, cy), (cx, cy + arm * -dy), 2)
 
-        # 2. One thin ping ring expanding outward and fading
+        # 2. One thin ping ring expanding outwardly and fading
         ring_r = int(40 + progress * 150)
         pygame.draw.circle(surf, (*theme.GREEN, int(alpha * 0.6)), center, ring_r, width=1)
 
@@ -587,7 +586,7 @@ class DrawGame:
             analysis_font = fonts.font(13)
 
             # Generate rapidly scrambling hex values tied to the timer
-            # Updating the seed every ~0.08 seconds creates a harsh terminal flicker
+            # Updating the seed every ~0.08 second creates a harsh terminal flicker
             rng = random.Random(int(arrival_timer * 12))
             hex_chars = "0123456789ABCDEF"
 
@@ -703,7 +702,7 @@ class DrawGame:
 
         self.screen.blit(text_surf, (text_x, text_y))
 
-        # 4. CRT Horizontal Scanlines Overlay (Full screen pass)
+        # 4. CRT Horizontal Scanline's Overlay (Full screen pass)
         scanline_surface = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
         for y in range(0, screen_height, 3):
             pygame.draw.line(scanline_surface, (0, 0, 0, 120), (0, y), (screen_width, y), 1)
@@ -711,14 +710,6 @@ class DrawGame:
         self.screen.blit(scanline_surface, (0, 0))
 
     def draw_charge_animation(self, is_charging, charge_timer, max_charge_time=2.0, show=True):
-        """Draw blink drive charge-up as a plain text meter below the ship.
-
-        Args:
-            is_charging (bool): Whether actively charging
-            charge_timer (float): Current charge timer in seconds
-            camera_x, camera_y (float): Kept for call-site consistency; unused
-            max_charge_time (float): Time to reach full charge
-        """
         if not show:
             return
         if not is_charging or charge_timer <= 0:
@@ -738,7 +729,7 @@ class DrawGame:
         text = f"BLINK READY {bar}" if ready else f"CHARGING {bar} {int(progress * 100):3d}%"
 
         surf = fonts.font(16).render(text, True, accent)
-        # Well below the ship (which sits at screen centre), so nothing is drawn over it
+        # Well below the ship (which sits at a screen centre), so nothing is drawn over it
         rect = surf.get_rect(midtop=(screen_x, screen_y + 90))
         self.screen.blit(surf, rect)
 

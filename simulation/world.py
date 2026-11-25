@@ -336,6 +336,12 @@ class World:
             decoy.net_id = self.new_id()
             self.decoys.append(decoy)
 
+        elif kind == 'cloak_up':
+            ship.increase_cloaking()
+
+        elif kind == 'cloak_down':
+            ship.decrease_cloaking()
+
         elif kind == 'blink':
             ship.pos_x, ship.pos_y = self.random_empty_point()
             ship.update_rect()
@@ -373,7 +379,7 @@ class World:
         for ship in self.ships:
             if not ship.alive:
                 continue
-            ship.run(dt, self.width, self.height)
+            ship.run_ship(dt, self.width, self.height)
             self._die_on_asteroids(ship, announce=True)
 
     def _die_on_asteroids(self, ship, announce=False):

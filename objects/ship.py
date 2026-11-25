@@ -5,18 +5,10 @@ import pygame
 from config.constants import *
 from ai.ai import AI
 from objects.base import DirectionSteered
-from utility.geometry import map_to_percent
+from utility.geometry import map_to_range_linear, map_to_range_log
 
 
 class Ship(DirectionSteered):
-    """Newtonian ship: heading is an angle you turn, thrust pushes along it, and
-    velocity is its own vector that keeps going until drag or brakes slow it.
-
-    Velocity is stored as (dir_x, dir_y, speed) so that the rest of the game
-    (snapshots, AI, sensors) can keep reading it the same way. Heading is kept
-    separately in degrees (0 = up the screen, increasing counter-clockwise).
-    """
-
     kind = 'ship'
     material = 'metallic'
 
@@ -84,6 +76,9 @@ class Ship(DirectionSteered):
         self.translate_left = False
         self.translate_right = False
         self.go_silent = False
+        self.cloaking_value = 0.0
+        self.radiation_buildup = 0.0
+        self.time_not_moving = 0.0
 
         self.braking = False  # tab held; drives the BRAKE readout (set from local input)
         self.dampening = True
@@ -98,35 +93,67 @@ class Ship(DirectionSteered):
         self.took_damage = False
         self.damage_timer = 0
         self.damage_cooldown = 0.2
+        self.called_print = 0
 
-    @property
-    def net_id(self):
-        return self.player_id
+    def run_ship(self, dt, width, height):
 
-    @property
-    def center(self):
-        return self.rect.center
+        if self.ai:
+            self.ai.run(width, height)
 
-    def on_radar_ping(self, angle):
-        self.enemy_radar_ping_coordinates.append(angle)
+
+        self.calculate_draw_and_use_fuel(dt)
+        self.calculate_visibility()
+
+        if self.fuel <= 0:
+            self.max_speed = THROTTLED_SPEED
+            self.cloaking_value = 0.0
+        else:
+            self.max_speed = SHIP_MAX_SPEED
+
+        if self.took_damage:
+            self.damage_timer += dt
+            if self.damage_timer > self.damage_cooldown:
+                self.damage_timer = 0
+                self.took_damage = False
+                self.health -= 1
+
+        if self.health < 20:
+            self.health_low = True
+            self.health += 1 * dt
+        else:
+            self.health_low = False
+
+        if self.health <= 0:
+            self.alive = False
+            return
+
+        self.move(dt)
+        self.handle_radiation_buildup(dt)
+        self.cooldowns(dt)
+        self.update_rect()
+
+        if not self.thrusting:
+            self.dampen(dt)
+
+        self.bounce(width, height)
+
+    def calculate_visibility(self):
+        self.visibility = map_to_range_log(self.cloaking_value, 0, 5, 255, 0, 0.08)
 
     def calculate_draw_and_use_fuel(self, dt):
 
-        if self.fuel < SHIP_MAX_FUEL / LOW_FUEL_FRACTION:
+        if self.ai:
+            return
+
+        if self.fuel < SHIP_MAX_FUEL * LOW_FUEL_FRACTION:
             self.low_fuel = True
         else:
             self.low_fuel = False
 
-        # AI ships don't burn fuel or sum up switches: their current_draw is set from outside
-        # (the debug key) and visibility just follows it
-        if not self.ai:
-            self._sum_draw_and_burn_fuel(dt)
-
-        self.visibility = map_to_percent(self.current_draw, 0, 4, 0, 255)
-        print(self.visibility)
-
-    def _sum_draw_and_burn_fuel(self, dt):
         self.current_draw = 0
+
+        cloak_draw = map_to_range_linear(self.cloaking_value, 0, 5, 0, 10)
+        self.current_draw += cloak_draw
 
         if self.thrusting:
             self.current_draw += THRUST_DRAW
@@ -158,69 +185,20 @@ class Ship(DirectionSteered):
         if self.blinking:
             self.current_draw += BLINKING_DRAW
 
-        # Per second of play, not per simulation step: singleplayer steps every frame and the
-        # server steps TICK_RATE times a second, so a step-based drain would differ between them.
+
         use = self.current_draw / 45 * dt * TICK_RATE
         self.fuel -= use
 
-    def set_to_silent(self):
-        self.laser_on = False
-        self.mining_on = False
-        self.prox_scan_on = False
-        self.blinking = False
-        self.deep_field_on = False
-        self.radar_scan_on = False
-        self.material_assessor_on = False
-        self.dfs_detector_on = False
-        self.range_bands_on = False
-        self.go_silent = False
+    @property
+    def net_id(self):
+        return self.player_id
 
-    def run(self, dt, width, height):
+    @property
+    def center(self):
+        return self.rect.center
 
-        if self.ai:
-            self.dir_x = 1
-            self.dir_y = 1
-            self.speed = 0.01
-
-        if self.go_silent:
-            self.set_to_silent()
-
-        self.calculate_draw_and_use_fuel(dt)
-
-        if self.fuel <= 0:
-            self.max_speed = THROTTLED_SPEED
-        else:
-            self.max_speed = SHIP_MAX_SPEED
-
-        if self.took_damage:
-            self.damage_timer += dt
-            if self.damage_timer > self.damage_cooldown:
-                self.damage_timer = 0
-                self.took_damage = False
-                self.health -= 1
-
-        if self.health < 20:
-            self.health_low = True
-            self.health += 1 * dt
-
-        else:
-            self.health_low = False
-
-        if self.health <= 0:
-            self.alive = False
-            return
-
-        if self.ai is not None:
-            self.ai.run(width, height)
-
-        self.move(dt)
-        self.cooldowns(dt)
-        self.update_rect()
-
-        if not self.thrusting:
-            self.dampen(dt)
-
-        self.bounce(width, height)
+    def on_radar_ping(self, angle):
+        self.enemy_radar_ping_coordinates.append(angle)
 
     def coast(self, dt, width, height):
         self.move(dt)
@@ -249,6 +227,21 @@ class Ship(DirectionSteered):
             if self.missile_cooldown_timer > self.missile_cooldown:
                 self.missile_cooling_down = False
                 self.missile_cooldown_timer = 0
+
+    def handle_radiation_buildup(self, dt):
+        if self.speed < 1:
+            self.time_not_moving += dt
+            self.radiation_buildup += ((self.time_not_moving ** 2.0)/10000.0)
+            self.radiation_buildup = min(self.radiation_buildup, 500)
+        elif self.speed > 1:
+            self.radiation_buildup -= map_to_range_linear(self.speed, 0, 80, 0, 10) * dt
+            self.radiation_buildup = max(0, self.radiation_buildup)
+            self.time_not_moving = 0.0
+
+        if not self.ai:
+            print(f"{self.radiation_buildup} : {self.called_print}")
+            self.called_print += 1
+
 
     def move(self, dt):
         self.pos_x += self.vel_x * dt
@@ -366,3 +359,11 @@ class Ship(DirectionSteered):
     def update_rect(self):
         self.rect.x = self.pos_x
         self.rect.y = self.pos_y
+
+    def increase_cloaking(self):
+        self.cloaking_value += 1
+        self.cloaking_value = min(5.0, self.cloaking_value)
+
+    def decrease_cloaking(self):
+        self.cloaking_value -= 1
+        self.cloaking_value = max(0.0, self.cloaking_value)

@@ -1,11 +1,11 @@
 import math
-
 import pygame
 
 from asset_handlers.draw_game import DrawGame
 from core.cockpit import Cockpit
 from core.pause_menu import PauseMenu
 from core.session import MatchConfig
+from config.constants import SHUTDOWN_WAIT
 from core.tactical_map_state import TacticalMapState
 from objects.explosion import Explosion
 from instruments.blink_drive import BlinkDrive
@@ -24,24 +24,6 @@ from utility.timer import Timer
 
 
 class MainScene:
-    """One player's view of a World: instruments, UI, camera and sound.
-
-    local=True:  single-player. This scene owns the World and steps it.
-    local=False: multiplayer. The World is a copy kept up to date by the client
-                 from server snapshots; this scene only reads it and produces
-                 the command update() returns, which the client sends to the server.
-
-    The scene never moves world objects in multiplayer; it asks via a command.
-    Its direct writes to the player's ship (dampening, fuel_acknowledge,
-    drop_lock, laser/scan flags) are local prediction only: the next server
-    snapshot is the authority and overwrites them. Single-player, where this
-    scene owns the World, those writes are the simulation itself.
-    Drawing goes through DrawUI; the scene never touches the screen or CRT.
-    """
-
-    SHUTDOWN_WAIT = 2
-
-    # seconds of black screen so the shutdown sound can play
 
     def __init__(self, screen, audio_manager, world, config: MatchConfig, draw_ui):
         # Classes
@@ -99,6 +81,9 @@ class MainScene:
             'debug_enemy_fire': self._debug_enemy_fire,
             'debug_enemy_visibility': self._debug_enemy_visibility,
             'toggle_dampening': self._toggle_dampening,
+            'silent': self.set_to_silent,
+            'cloak_up': self._cloak_up,
+            'cloak_down': self._cloak_down,
             'fuel_acknowledge': self._fuel_acknowledge,
             'toggle_vectors': self._toggle_vectors,
             'toggle_map': self._toggle_map,
@@ -151,7 +136,6 @@ class MainScene:
         self.ship_destroyed = Timer(2.0)
         self.ship_destroyed_name = ""
 
-    @property
     def enemy_ships(self):
         return [ship for ship in self.world.ships if ship is not self.player_ship]
 
@@ -183,7 +167,7 @@ class MainScene:
 
         # The outcome is decided by the World (locally, or by the server's snapshot); here we only show it
         if self.world.outcome == 'dead':
-            # Nothing we send matters any more; stop repeating the last command
+            # Nothing we send matters anymore; stop repeating the last command
             self.last_command = empty_command()
             # Others still flying: watch them instead of the debrief screen
             targets = self.spectate_targets()
@@ -238,8 +222,6 @@ class MainScene:
             self.draw_scene()
 
     def aim_laser_at_mouse(self):
-        """Holding left click on the main window (not on a button) snaps the laser to that heading.
-        The ship is drawn at the screen centre, so the heading is the mouse's angle from there."""
         laser = self.laser_assessor
         if not laser.on or not pygame.mouse.get_focused() or not pygame.mouse.get_pressed()[0]:
             return
@@ -285,7 +267,7 @@ class MainScene:
             self.audio_manager.play_sfx('resume')
         elif outcome == 'quit':
             self.audio_manager.play_sfx('shutdown')
-            self.shutdown_timer = self.SHUTDOWN_WAIT
+            self.shutdown_timer = SHUTDOWN_WAIT
 
         return ()
 
@@ -302,6 +284,14 @@ class MainScene:
         # One press, one action. Keys only count while the cockpit has them (console closed).
         if cockpit_keys:
             # Scene
+            # Cloaking is a fact about the ship, so it is a request to the World (server in MP)
+            if key_pressed(events, pygame.K_MINUS):
+                self._cloak_down()
+            if key_pressed(events, pygame.K_EQUALS):
+                self._cloak_up()
+
+            if key_pressed(events, pygame.K_z):
+                self.set_to_silent()
             if key_pressed(events, pygame.K_RALT):
                 self._decoy()
             if key_pressed(events, pygame.K_SPACE):
@@ -348,6 +338,18 @@ class MainScene:
         for action in clicks:
             self.perform(action)
 
+    def set_to_silent(self):
+        self.laser_assessor.on = False
+        self.close_range_scan.on = False
+        self.blink.interrupt()
+        self.deep_field_scan.on = False
+        self.radar_system.scanning = False
+        self.range_bands.on = False
+        self.player_ship.dampening = False
+        self.deep_field_scan.alert_on = False
+        if self.mining_laser:
+            self.mining_laser.toggle()
+
     def make_command(self):
         """Gather this frame's results into the command for the world (and the server).
         This is the only place a command is built."""
@@ -370,12 +372,6 @@ class MainScene:
             self.audio_manager.stop_sfx('thrust')
         return move
 
-    def _drain_outbox(self):
-        """Hand over everything queued so far and start a fresh outbox."""
-        actions = self._outbox
-        self._outbox = []
-        return actions
-
     def perform(self, action):
         """Do one cockpit action, whether it came from a key or a button."""
         handler = self.instrument_actions.get(action) or self.scene_actions.get(action)
@@ -385,78 +381,7 @@ class MainScene:
             self.map.choose_shape(action[len('marker_shape_'):])
             self.audio_manager.play_sfx('map_marker')
 
-    def _decoy(self):
-        self._outbox.append({'type': 'decoy'})
-        self.audio_manager.play_sfx('deploy_decoy')
-
-    def _fire_missile(self):
-        target_id = getattr(self.cockpit.target, 'net_id', None)
-        if self.player_ship.can_fire_missile() and target_id is not None and self.laser_assessor.on:
-            self.laser_assessor.on = False
-            self._outbox.append({'type': 'fire', 'target': target_id})
-            self.audio_manager.play_sfx('fire_missile')
-
-    def _debug_enemy_fire(self):
-        # The debug "enemy fires at me" key only exists in single-player
-        if self.local and self.enemy_ships:
-            enemy = self.enemy_ships[0]
-            enemy.fire()
-            self.world.fire_missile(enemy, self.player_ship)
-
-    def _debug_enemy_visibility(self):
-        if self.local and self.enemy_ships:
-            enemy = self.enemy_ships[0]
-            enemy.current_draw += 0.5
-            if enemy.current_draw > 5:
-                enemy.current_draw = 0
-
-    def _toggle_dampening(self):
-        self.player_ship.dampening = not self.player_ship.dampening
-        self.audio_manager.play_sfx('inertial_dampener')
-
-    def _fuel_acknowledge(self):
-        self.player_ship.fuel_acknowledge = not self.player_ship.fuel_acknowledge
-        self.audio_manager.play_sfx('fuel_fault_acknowledge')
-
-    def _toggle_vectors(self):
-        self.vectors_on = not self.vectors_on
-        self.audio_manager.play_sfx('map_open' if self.vectors_on else 'map_close')
-
-    def _toggle_map(self):
-        self.map.toggle()
-        self.audio_manager.play_sfx('map_open' if self.map.is_open else 'map_close')
-
-    def _marker_add(self):
-        self.map.start_marker()
-        self.audio_manager.play_sfx('map_marker')
-
-    def _marker_place(self):
-        if self.map.place(self.draw_ui.marker_from_click(self.map.marker_mode)):
-            self.audio_manager.play_sfx('map_marker_place')
-
-    def _marker_cancel(self):
-        self.map.cancel_marker()
-        self.audio_manager.play_sfx('cancel')
-
-    def _marker_clear(self):
-        self.map.clear_markers()
-        self.audio_manager.play_sfx('map_marker_delete')
-
-    def _escape(self):
-        if self.map.placing:
-            # Esc backs out of marker placement before it closes anything
-            self.map.cancel_marker()
-        elif self.map.is_open:
-            # Esc closes the map first; with the map shut it opens the console
-            self.map.close()
-        else:
-            self.open_pause()
-
-    def _return_to_menu(self):
-        self.outcome = 'menu'
-
     def update_threats(self):
-        """Work out the missile warnings from the missiles in the world."""
         cockpit = self.cockpit
         cockpit.enemy_has_missile_solution = False
         cockpit.catastrophic_warning = False
@@ -469,12 +394,6 @@ class MainScene:
                 cockpit.catastrophic_warning = True
 
     def sound_states(self):
-        """Sounds that follow a state: (name, active, loops, stop_when_off).
-
-        While `active` is true the sound plays (play_sfx ignores it if it is already
-        going). When it goes false the sound stops, unless stop_when_off is False,
-        in which case it is left to finish.
-        """
         ship = self.player_ship
         cockpit = self.cockpit
         return (
@@ -501,11 +420,6 @@ class MainScene:
                 self.audio_manager.stop_sfx(name)
 
     def handle_world_events(self, events):
-        """React (sound/UI) to things the world reported.
-
-        Single-player: straight from world.events after each step.
-        Multiplayer: relayed from the server by the client (see NetClient.take_events).
-        """
         for kind, *data in events:
             if kind == 'bullet_damage':
                 if data[0] == self.my_id:
@@ -564,9 +478,7 @@ class MainScene:
 
         self.asteroid_laser.update(dt)
 
-    @property
     def lobby_allowed(self):
-        """Only the host of a networked match can take everyone back to the lobby."""
         return self.is_host and not self.local
 
     def end_options(self, key_hints=True):
@@ -664,6 +576,7 @@ class MainScene:
                                          len(world.callsigns), self.local)
         self.draw_ui.draw_power_readout(self.player_ship)
         self.draw_ui.draw_navcom(self.player_ship)
+        self.draw_ui.draw_cloaking_level(self.player_ship)
         self.draw_ui.draw_laser_painted_warning(self.player_ship.painted)
         self.draw_ui.draw_ship_info(self.player_ship, cockpit,
                                     [line for line in (i.status_line() for i in self.instruments) if line],
@@ -721,3 +634,85 @@ class MainScene:
         camera_x = focus[0] - view_width / 2
         camera_y = focus[1] - view_height / 2
         return camera_x, camera_y
+
+    # --- Private classes ---
+
+    def _cloak_up(self):
+        self._outbox.append({'type': 'cloak_up'})
+
+    def _cloak_down(self):
+        self._outbox.append({'type': 'cloak_down'})
+
+    def _decoy(self):
+        self._outbox.append({'type': 'decoy'})
+        self.audio_manager.play_sfx('deploy_decoy')
+
+    def _fire_missile(self):
+        target_id = getattr(self.cockpit.target, 'net_id', None)
+        if self.player_ship.can_fire_missile() and target_id is not None and self.laser_assessor.on:
+            self.laser_assessor.on = False
+            self._outbox.append({'type': 'fire', 'target': target_id})
+            self.audio_manager.play_sfx('fire_missile')
+
+    def _debug_enemy_fire(self):
+        # The debug "enemy fires at me" key only exists in single-player
+        if self.local and self.enemy_ships:
+            enemy = self.enemy_ships[0]
+            enemy.fire()
+            self.world.fire_missile(enemy, self.player_ship)
+
+    def _debug_enemy_visibility(self):
+        if self.local and self.enemy_ships:
+            enemy = self.enemy_ships[0]
+            enemy.current_draw += 0.5
+            if enemy.current_draw > 5:
+                enemy.current_draw = 0
+
+    def _toggle_dampening(self):
+        self.player_ship.dampening = not self.player_ship.dampening
+        self.audio_manager.play_sfx('inertial_dampener')
+
+    def _fuel_acknowledge(self):
+        self.player_ship.fuel_acknowledge = not self.player_ship.fuel_acknowledge
+        self.audio_manager.play_sfx('fuel_fault_acknowledge')
+
+    def _toggle_vectors(self):
+        self.vectors_on = not self.vectors_on
+        self.audio_manager.play_sfx('map_open' if self.vectors_on else 'map_close')
+
+    def _toggle_map(self):
+        self.map.toggle()
+        self.audio_manager.play_sfx('map_open' if self.map.is_open else 'map_close')
+
+    def _marker_add(self):
+        self.map.start_marker()
+        self.audio_manager.play_sfx('map_marker')
+
+    def _marker_place(self):
+        if self.map.place(self.draw_ui.marker_from_click(self.map.marker_mode)):
+            self.audio_manager.play_sfx('map_marker_place')
+
+    def _marker_cancel(self):
+        self.map.cancel_marker()
+        self.audio_manager.play_sfx('cancel')
+
+    def _marker_clear(self):
+        self.map.clear_markers()
+        self.audio_manager.play_sfx('map_marker_delete')
+
+    def _escape(self):
+        if self.map.placing:
+            self.map.cancel_marker()
+        elif self.map.is_open:
+            self.map.close()
+        else:
+            self.open_pause()
+
+    def _return_to_menu(self):
+        self.outcome = 'menu'
+
+    def _drain_outbox(self):
+        """Hand over everything queued so far and start a fresh outbox."""
+        actions = self._outbox
+        self._outbox = []
+        return actions

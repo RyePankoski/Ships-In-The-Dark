@@ -12,6 +12,7 @@ from asset_handlers.crt import crt
 from asset_handlers.grime import build_panel
 from utility.text_input import blink_cursor
 from simulation.settings import WorldSettings
+from utility.geometry import map_to_range_linear
 
 
 class DrawUI:
@@ -950,6 +951,7 @@ class DrawUI:
             ("BLINK", 'blink', dict(key="T", lit=blink_busy, enabled=not blink_busy, lit_color=theme.AMBER_BRIGHT,
                                     states=("BUSY", "RDY"), sub="RANDOM SHORT-RANGE JUMP")),
             ("INERT DAMP", 'toggle_dampening', dict(key="G", lit=ship.dampening, sub="AUTO-SLOW WHEN COASTING")),
+            ("SILENT", 'silent', dict(key="Z", sub="POWER DOWN ALL EMITTERS")),
         ]
         displays = [
             *sensor_buttons,
@@ -1070,13 +1072,30 @@ class DrawUI:
                              (x, y0 + line_h - 2), (x + w, y0 + line_h - 2))
             x += w + gap
 
+    NAVCOM_ROWS = 5
+    CLOAK_HEIGHT = 80
+    CLOAK_BUTTON_SIZE = 40
+    LEFT_STACK_GAP = 14
+
+    def _navcom_rect(self):
+        """NAV-COM: left panel, sized to its five rows and anchored to the bottom margin."""
+        scan = self._deep_field_rect()
+        line_h = fonts.font(26).get_height() + 10
+        height = 8 + self.BOX_HEAD + 8 + self.NAVCOM_ROWS * line_h + 12
+        bottom = self.screen.get_height() - self.THIN_HEIGHT - self.DFS_PANEL_MARGIN
+        return pygame.Rect(scan.left, bottom - height, scan.width, height)
+
+    def _cloak_rect(self):
+        """The cloaking box, stacked directly above NAV-COM."""
+        navcom = self._navcom_rect()
+        return pygame.Rect(navcom.left, navcom.top - self.LEFT_STACK_GAP - self.CLOAK_HEIGHT,
+                           navcom.width, self.CLOAK_HEIGHT)
+
     def draw_navcom(self, ship, show=True):
         """Navigation readout: left panel, directly beneath the deep field scan panel."""
         if not show:
             return
-        scan = self._deep_field_rect()
-        bottom = self.screen.get_height() - self.THIN_HEIGHT - self.DFS_PANEL_MARGIN
-        rect = pygame.Rect(scan.left, scan.bottom + 14, scan.width, bottom - scan.bottom - 14)
+        rect = self._navcom_rect()
         self._frame(rect)
         self._box_title(rect, "NAV-COM")
 
@@ -1295,7 +1314,7 @@ class DrawUI:
             return
 
         # Alerts on a row under the readout (clear of the out-of-fuel box, which ends 12px below the block)
-        LOW_FUEL = SHIP_MAX_FUEL / LOW_FUEL_FRACTION  # 20% of the tank
+        LOW_FUEL = SHIP_MAX_FUEL * LOW_FUEL_FRACTION  # 10% of the tank (matches LOW_FUEL_FRACTION)
         # current_draw at or above this is high
         # Each alert has a fixed slot so it never moves: LOW FUEL bottom-left, HIGH DRAW bottom-right.
         # A slot's box only appears while its alert is on; the words flash inside it.
@@ -1316,6 +1335,43 @@ class DrawUI:
             self._frame(box, theme.RED, fill=theme.BG, tick=8, width=2)
             if blink_on:
                 self.screen.blit(surf, surf.get_rect(center=box.center))
+
+    def draw_cloaking_level(self, ship, show=True):
+        """Cloaking panel above NAV-COM: how visible the ship is to others, as a percentage
+        (100 = fully visible, 0 = hidden), plus five cells filled up to the cloaking level.
+        Reads the true ship.visibility, not the self-view floor, so 0% means enemies cannot see you."""
+        if not show:
+            return
+        level = max(0, min(5, int(ship.cloaking_value)))
+        visible_percent = round(map_to_range_linear(ship.visibility, 0, 255, 0, 100))
+        rect = self._cloak_rect()
+        self._frame(rect)
+        self._box_title(rect, "CLOAKING")
+
+        value = fonts.font(15).render(f"VISIBILITY: {visible_percent}%", True, theme.GREEN if visible_percent else theme.AMBER_DIM)
+        self.screen.blit(value, value.get_rect(topright=(rect.right - 22, rect.top + 6)))
+
+        # One row: DECLOAK | five level cells | CLOAK. The buttons register their own clicks.
+        pad, gap = 22, 12
+        btn_w = btn_h = self.CLOAK_BUTTON_SIZE  # square
+        row_top = rect.top + 34
+        self._button(pygame.Rect(rect.left + pad, row_top, btn_w, btn_h), "-", "cloak_down",
+                     enabled=level > 0, font=fonts.font(26))
+        self._button(pygame.Rect(rect.right - pad - btn_w, row_top, btn_w, btn_h), "+", "cloak_up",
+                     enabled=level < 5, font=fonts.font(26))
+
+        cells_left = rect.left + pad + btn_w + gap
+        cells_right = rect.right - pad - btn_w - gap
+        cell_gap = 8
+        cell_w = (cells_right - cells_left - 4 * cell_gap) // 5
+        cell_h = 22
+        y = row_top + (btn_h - cell_h) // 2
+        for i in range(5):
+            cell = pygame.Rect(cells_left + i * (cell_w + cell_gap), y, cell_w, cell_h)
+            if i < level:
+                pygame.draw.rect(self.screen, theme.GREEN, cell)
+            else:
+                pygame.draw.rect(self.screen, theme.AMBER_DIM, cell, 2)
 
     def draw_ui_ftl_override(self, ftl_jumping, show=True):
         """Draw simple FTL JUMPING text boxes that fade out.

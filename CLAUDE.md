@@ -1,7 +1,9 @@
+- Avoid local-minimum type solutions. If you're stuck, ask for help. 
 - Readability matters more than optimality. Prefer simple, explicit code, even if it's slightly less efficient.
 - Keep the call chain traceable with Ctrl+click (Go to Definition). Avoid indirection that hides where a function is called from: heavy DI containers, dynamic dispatch, string-based lookups, or deep generic abstractions.
+- Files may import and call each other directly. What matters is that you can follow what a thread of execution is doing by reading the code
 - When suggesting architectural changes, weigh how easy it is to trace a thread through the code above performance or cleverness. Name the tradeoff if a change makes tracing harder.
-- CRITICAL: Avoid local-minimum type solutions. If you're stuck, ask for help. 
+- I will ask questions about how I think things should be done, if you think I am wrong, say so.
 
 ## Project layout                                                                                                                                                                                                                                                                                                 
   - `main.py`: entry point. pygame loop; calls `core/root.py` `Core.run()` each frame.                                                                                                                                                                                                                              

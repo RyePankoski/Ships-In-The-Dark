@@ -20,6 +20,12 @@ class BlinkDrive(Instrument):
     def charging(self):
         return self.charge.running
 
+    def interrupt(self):
+        if self.charging:
+            self.ctx.sfx('blink_denied')
+            self.ctx.stop_sfx('blink')
+            self.charge.stop()
+
     @property
     def arriving(self):
         return self.arrival.running
