@@ -16,3 +16,7 @@ def in_sector(origin_x, origin_y, direction_deg, target_pos, half_width_deg=45):
     bearing = math.degrees(math.atan2(rel_x, -rel_y))
     offset = (bearing - direction_deg + 180) % 360 - 180
     return abs(offset) < half_width_deg
+
+def map_to_percent(value, min_input, max_input, min_return, max_return):
+    percent = max_return * (value - min_input) / (max_input - min_input)
+    return max(min_return, min(max_return, percent))

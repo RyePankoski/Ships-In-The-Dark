@@ -16,8 +16,6 @@ class RadarSystem(Instrument):
     """Active sonar-style sweep: rays go out in a circle over many frames and
     each one leaves a blip where it first hits something."""
 
-    keys = (('r', 'radar_sweep'),)
-
     def __init__(self, ctx):
         super().__init__(ctx)
         self.scanning = False
@@ -38,9 +36,8 @@ class RadarSystem(Instrument):
         self.ctx.sfx('radar')
         self.signatures = []
         self.begin_scan()
-        self.ctx.start_cooldown()
 
-    def update(self, dt, inputs):
+    def update(self, dt, held_button):
         if self.scanning:
             self.signatures.extend(self.continue_scan())
 

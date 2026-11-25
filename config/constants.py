@@ -20,13 +20,12 @@ FLIGHT_ASSIST_DRAG = 0.4  # coasting bleed per second with the dampener on
 DRIFT_DRAG = 0.0  # coasting bleed per second with the dampener off (0 = pure drift, no speed loss)
 BRAKE_DRAG = 1.0  # per second while braking (tab)
 
-
 # ---------------------------------------------------------------------------
 # Ship fuel, health and power
 # ---------------------------------------------------------------------------
 SHIP_MAX_FUEL = 401
 SHIP_MAX_HEALTH = 100
-LOW_FUEL_FRACTION = 5  # divisor: low-fuel warning at SHIP_MAX_FUEL / 5 (20% of the tank)
+LOW_FUEL_FRACTION = 10  # divisor: low-fuel warning at SHIP_MAX_FUEL / 5 (20% of the tank)
 BLINK_FUEL_THRESHOLD = 50
 THROTTLED_SPEED = 40
 HIGH_USE = 4  # power draw at or above this triggers the high-draw warning
@@ -34,6 +33,23 @@ HIGH_USE = 4  # power draw at or above this triggers the high-draw warning
 # Switches that change a ship's power draw. The owning player sets them; the server applies them.
 POWER_FLAGS = ('laser_on', 'prox_scan_on', 'blinking', 'deep_field_on', 'dampening', 'material_assessor_on', 'radar_scan_on', 'dfs_detector_on', 'range_bands_on')
 
+# Ship systems draw
+THRUST_DRAW = 2
+BRAKING_DRAW = 2
+DAMPENING_DRAW = 0.75
+TURNING_DRAW = 0.25
+
+LASER_DRAW = 1
+DEEP_FIELD_DRAW = 0.75
+PROXIMITY_SCAN_DRAW = 0.1
+RADAR_SCAN_DRAW = 0.25
+DFS_DETECTOR_DRAW = 0.05
+RANGE_BANDS_DRAW = 0.8
+MATERIAL_ASSESSOR_DRAW = 0.25
+
+
+MINING_DRAW = 5
+BLINKING_DRAW = 50
 
 # ---------------------------------------------------------------------------
 # Weapons: missiles
@@ -52,7 +68,6 @@ MISSILE_AVOID_CLEARANCE = 250  # berth given to a rock; tune to visible missile 
 MISSILE_AVOID_WEIGHT = 1.0  # 1.0 = up to ~45 deg deflection from straight-at-target
 MISSILE_AVOID_SMOOTH = 0.15  # 0.1 = heavy smoothing (gliding), 0.4 = snappier
 
-
 # ---------------------------------------------------------------------------
 # Weapons: bullets and laser
 # ---------------------------------------------------------------------------
@@ -64,20 +79,18 @@ BULLET_HIT_RADIUS = 25  # a pirate bullet hurts a ship it passes within this man
 LASER_STEP = 2
 LASER_RANGE = 5000
 
-
 # ---------------------------------------------------------------------------
 # Mining laser: locks the nearest mineable rock in range and burns it away
 # ---------------------------------------------------------------------------
 MINING_RANGE = 200  # centre to centre, world units
 MINING_TIME = 8.0  # seconds of beam on one rock
 RANGE_BANDS_DRAW = 0.25  # power draw while the radar range bands are on
-MINING_DRAW = 1.5 # power draw while the mining beam is on (LaserAssessor draws 1)
+MINING_DRAW = 1.5  # power draw while the mining beam is on (LaserAssessor draws 1)
 MINING_FUEL_YIELD = 100  # fuel from an icy rock
 MINING_MISSILE_YIELD = 1  # missiles from a metallic rock
 MINING_HULL_YIELD = 100  # hull rebuild from a semi-metallic rock
 # What each mineable material pays out. Anything not listed can't be mined.
 MINING_YIELD = {'icy': 'fuel', 'metallic': 'missile', 'semi-metallic': 'hull'}
-
 
 # ---------------------------------------------------------------------------
 # Sensors, scanners and countermeasures
@@ -91,7 +104,6 @@ CORRIDOR_DEPTH = 8000  # deep field scan configuration
 CORRIDOR_WIDTH = 2000
 
 DECOY_LIFETIME = 30
-
 
 # ---------------------------------------------------------------------------
 # World
@@ -110,7 +122,6 @@ FIRST_OBJECT_ID = 1000
 SINGLE_PLAYER_SPAWN = (500, 500)
 SINGLE_PLAYER_ENEMY_SPAWN = (500, 600)
 
-
 # ---------------------------------------------------------------------------
 # Networking and timing
 # ---------------------------------------------------------------------------
@@ -125,7 +136,6 @@ SNAPSHOT_AGE = 0.06  # how old a snapshot is on arrival: one tick plus a LAN tri
 SNAP_DISTANCE = 400  # a gap bigger than this (blink, respawn) is a teleport, not an error to ease out
 CORRECTION_RATE = 10  # per second; the smaller the gap after a snapshot, the sooner it's gone
 LOCAL_VELOCITY_BLEND = 0.25  # how far our own ship's heading/speed is pulled to the server's per snapshot
-
 
 # ---------------------------------------------------------------------------
 # Players

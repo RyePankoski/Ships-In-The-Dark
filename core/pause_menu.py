@@ -26,11 +26,9 @@ class PauseMenu:
     CONSOLE, CONTROLS, MANUAL = 'console', 'controls', 'manual'
 
     # Keys per screen -> this class's own action names. Clicks use the same names.
-    CONSOLE_KEYS = {'esc': 'resume', 'c': 'controls', 'm': 'manual', 'q': 'quit'}
-    CONTROLS_KEYS = {'esc': 'back', 'c': 'back'}
-    MANUAL_KEYS = {'esc': 'back', 'm': 'back', 'arrow_key_left': 'prev', 'arrow_key_right': 'next'}
-    # Keys that the input cooldown should count as a press
-    KEYS = ('esc', 'c', 'm', 'q', 'arrow_key_left', 'arrow_key_right')
+    CONSOLE_KEYS = {pygame.K_ESCAPE: 'resume', pygame.K_c: 'controls', pygame.K_m: 'manual', pygame.K_q: 'quit'}
+    CONTROLS_KEYS = {pygame.K_ESCAPE: 'back', pygame.K_c: 'back'}
+    MANUAL_KEYS = {pygame.K_ESCAPE: 'back', pygame.K_m: 'back', pygame.K_LEFT: 'prev', pygame.K_RIGHT: 'next'}
 
     # Console options: (label, key hint, action)
     OPTIONS = (
@@ -42,7 +40,7 @@ class PauseMenu:
 
     # Shown on the controls screen. Left column, then right column; each is a
     # list of (section title, [(key, description), ...]). Keep in sync with
-    # MainScene.KEY_ACTIONS and the instruments' keys.
+    # MainScene.handle_inputs.
     CONTROLS_LAYOUT = (
         [
             ("FLIGHT", [
@@ -120,13 +118,12 @@ class PauseMenu:
         self.is_open = True
         self.page = self.CONSOLE
 
-    def handle(self, inputs, clicks, keys_live):
+    def handle(self, events, clicks):
         """Act on this frame's clicks and key presses while the menu is open.
 
         Args:
-            inputs: The frame's key states (see utility.input.collect_inputs).
+            events: The frame's pygame events; key presses are read from these.
             clicks: Actions of the menu buttons clicked this frame.
-            keys_live: False while the input cooldown is running; keys are ignored then.
 
         Returns:
             'resume' when the menu has closed and the player is back in the cockpit,
@@ -137,7 +134,8 @@ class PauseMenu:
             self.CONTROLS: self.CONTROLS_KEYS,
             self.MANUAL: self.MANUAL_KEYS,
         }[self.page]
-        keys = [action for key, action in keymap.items() if keys_live and inputs.get(key)]
+        keys = [keymap[event.key] for event in events
+                if event.type == pygame.KEYDOWN and event.key in keymap]
 
         for action in (*clicks, *keys):
             if action == 'resume':

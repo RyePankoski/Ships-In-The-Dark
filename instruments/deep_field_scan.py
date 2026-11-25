@@ -1,5 +1,6 @@
 import math
 import random
+
 from instruments.instrument import Instrument
 from config.constants import CORRIDOR_WIDTH, CORRIDOR_DEPTH
 from utility.geometry import in_sector
@@ -13,13 +14,6 @@ RANGE_ERROR = 0.4
 
 class DeepFieldScan(Instrument):
     """Long, narrow-ish cone in one of eight directions. Slow to point, hears everything in it."""
-
-    keys = (
-        ('k', 'toggle_dfs'),
-        ('o', 'dfs_scan'),
-        ('arrow_key_up', 'dfs_bearing_cw'),
-        ('arrow_key_down', 'dfs_bearing_ccw'),
-    )
 
     # The sound played while we are being swept. None until one is added: put its name
     # in audio_manager's sound list (or use an existing one, e.g. 'dfs_scan_warning').
@@ -37,7 +31,7 @@ class DeepFieldScan(Instrument):
         # (fuzzed) distance to the nearest mover, or None if nothing moved
         self.has_result = False
         self.reported_range = None
-        self._bearing_changed = False
+        self.turn_sound = Timer(0.2)  # how long the turning sound lasts after a turn
 
         # Being swept: set by a 'dfs_scanned' event, cleared when the warning timer runs out
         self.scanned = False
@@ -61,7 +55,6 @@ class DeepFieldScan(Instrument):
     def toggle_alert(self):
         self.alert_on = not self.alert_on
         self.ctx.sfx('keyboard_clack')
-        self.ctx.start_cooldown()
 
     def warning_state(self):
         """'off' if the pilot turned the alert off, 'active' while we are being swept, else 'idle'."""
@@ -80,7 +73,6 @@ class DeepFieldScan(Instrument):
     def toggle(self):
         self.on = not self.on
         self.ctx.sfx('dfs_toggle')
-        self.ctx.start_cooldown()
         self.clear_result()
 
     def clear_result(self):
@@ -93,7 +85,6 @@ class DeepFieldScan(Instrument):
             self.reported_range = self.nearest_mover_range(in_sweep)
             self.has_result = True
             self.ctx.sfx('dfs_scan')
-            self.ctx.start_cooldown()
             # Ships caught in the sweep are told they were scanned (the world routes it to them)
             ships = [getattr(c, 'player_id', None) for _, c in in_sweep if c.kind == 'ship']
             ships = [pid for pid in ships if pid is not None]
@@ -103,16 +94,14 @@ class DeepFieldScan(Instrument):
     def turn(self, step):
         if self.on:
             self.direction_index = (self.direction_index + step) % 8
-            self._bearing_changed = True
+            self.turn_sound.start()
             self.ctx.sfx('dfs_dir_change')
             self.clear_result()
-            self.ctx.start_cooldown()
 
-    def update(self, dt, inputs):
+    def update(self, dt, held_button):
         # The turning sound is cut once the bearing stops changing
-        if self.on and self.ctx.keys_live and not self._bearing_changed:
+        if self.turn_sound.update(dt):
             self.ctx.stop_sfx('dfs_dir_change')
-        self._bearing_changed = False
 
         if self.scanned and self.warning.update(dt):
             self.scanned = False

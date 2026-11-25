@@ -6,8 +6,6 @@ class CloseRangeScan(Instrument):
     """Always-on short-range sensor. Remembers what it has seen and lets the
     confidence in it fade once it is out of range."""
 
-    keys = (('q', 'toggle_prox_scan'),)
-
     def __init__(self, ctx):
         super().__init__(ctx)
         self.on = True
@@ -24,9 +22,8 @@ class CloseRangeScan(Instrument):
     def toggle(self):
         self.on = not self.on
         self.ctx.sfx('close_range_toggle')
-        self.ctx.start_cooldown()
 
-    def update(self, dt, inputs):
+    def update(self, dt, held_button):
         if self.on:
             self.scan()
 

@@ -4,7 +4,6 @@ import pygame
 
 from config.constants import CALLSIGN_MAX
 from simulation.settings import LAYOUT_NAMES
-from utility.input import collect_inputs
 from utility.text_input import blink_cursor, edit_text
 
 class Screen:
@@ -219,7 +218,7 @@ class PlayScreen(Screen):
             if state is not None:
                 session.sync_world(state)
 
-        command = scene.update(collect_inputs(), dt, events)
+        command = scene.update(dt, events)
 
         # The scene decides where the pilot goes (game over screen, pause console, or spectate)
         if scene.outcome == 'lobby':
@@ -241,5 +240,5 @@ class PlayScreen(Screen):
             self.tutorial.run()
 
         if net:
-            net.send_command(scene.command)
+            net.send_command(scene.last_command)
         return None

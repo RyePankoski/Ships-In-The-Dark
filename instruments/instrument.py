@@ -17,16 +17,13 @@ keeps what several things share (the locked target, threat warnings).
 class InstrumentContext:
     """What an instrument is allowed to touch. MainScene builds one and hands it out."""
 
-    def __init__(self, ship, contacts, cockpit, audio, start_cooldown, world=None, send_action=None):
+    def __init__(self, ship, contacts, cockpit, audio, world=None, send_action=None):
         self.ship = ship
         self._send_action = send_action
         self.world = world
         self.contacts = contacts
         self.cockpit = cockpit
         self.audio = audio
-        self._start_cooldown = start_cooldown
-        # True on frames when held keys may repeat an action (not mid-cooldown)
-        self.keys_live = True
 
     def sfx(self, name, **kwargs):  # kwargs: force, loops, volume
         self.audio.play_sfx(name, **kwargs)
@@ -39,15 +36,8 @@ class InstrumentContext:
         multiplayer the server does it and tells everyone."""
         self._send_action(action)
 
-    def start_cooldown(self):
-        """Hold the pilot's keys off for a moment so one press is one action."""
-        self._start_cooldown()
-
 
 class Instrument:
-    # (key, action) pairs: which keys trigger which of this instrument's actions
-    keys = ()
-
     def __init__(self, ctx):
         self.ctx = ctx
         self.ship = ctx.ship
@@ -58,8 +48,9 @@ class Instrument:
         """{action name: handler}. A key or a button producing that name calls the handler."""
         return {}
 
-    def update(self, dt, inputs):
-        """Once per frame, after the world has stepped."""
+    def update(self, dt, held_button):
+        """Once per frame, before the world is stepped. `held_button` is the action of the
+        on-screen hold button under the mouse, or None."""
 
     def console_buttons(self):
         """Buttons for the console's SENSORS // DISPLAYS bank: (label, action, style) each.

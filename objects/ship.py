@@ -5,6 +5,7 @@ import pygame
 from config.constants import *
 from ai.ai import AI
 from objects.base import DirectionSteered
+from utility.geometry import map_to_percent
 
 
 class Ship(DirectionSteered):
@@ -26,8 +27,6 @@ class Ship(DirectionSteered):
         self.dir_x = 0
         self.dir_y = 0
         self.speed = 0
-
-
 
         self.player_id = player_id
 
@@ -123,46 +122,41 @@ class Ship(DirectionSteered):
         if not self.ai:
             self._sum_draw_and_burn_fuel(dt)
 
-        if self.current_draw <= 0:
-            self.visibility = 0
-        elif self.current_draw < 1:
-            self.visibility = 15
-        elif self.current_draw < 2:
-            self.visibility = 30
-        elif self.current_draw < 3:
-            self.visibility = 100
-        else:
-            self.visibility = 255
+        self.visibility = map_to_percent(self.current_draw, 0, 4, 0, 255)
+        print(self.visibility)
 
     def _sum_draw_and_burn_fuel(self, dt):
         self.current_draw = 0
 
         if self.thrusting:
-            self.current_draw += 2
-        if self.dampening:
-            self.current_draw += 1
-        if self.turning:
-            self.current_draw += 0.5
+            self.current_draw += THRUST_DRAW
         if self.braking:
-            self.current_draw += 0.5
+            self.current_draw += BRAKING_DRAW  # Up from 0.5
+        if self.dampening:
+            self.current_draw += DAMPENING_DRAW  # Down from 1
+        if self.turning:
+            self.current_draw += TURNING_DRAW  # Down from 0.5
+
         if self.laser_on:
-            self.current_draw += 1
-        if self.mining_on and self.mining_target is not None:
-            self.current_draw += 5
-        if self.prox_scan_on:
-            self.current_draw += 0.1
-        if self.blinking:
-            self.current_draw += 50
+            self.current_draw += LASER_DRAW
         if self.deep_field_on:
-            self.current_draw += 1
+            self.current_draw += DEEP_FIELD_DRAW  # Down from 1
+        if self.prox_scan_on:
+            self.current_draw += PROXIMITY_SCAN_DRAW
         if self.radar_scan_on:
-            self.current_draw += 0.25
+            self.current_draw += RADAR_SCAN_DRAW
+
         if self.material_assessor_on:
-            self.current_draw += 0.5
+            self.current_draw += MATERIAL_ASSESSOR_DRAW  # Down from 0.5
         if self.dfs_detector_on:
-            self.current_draw += 0.05
+            self.current_draw += DFS_DETECTOR_DRAW
         if self.range_bands_on:
-            self.current_draw += 0.25
+            self.current_draw += RANGE_BANDS_DRAW  # Up from 0.5
+
+        if self.mining_on and self.mining_target is not None:
+            self.current_draw += MINING_DRAW
+        if self.blinking:
+            self.current_draw += BLINKING_DRAW
 
         # Per second of play, not per simulation step: singleplayer steps every frame and the
         # server steps TICK_RATE times a second, so a step-based drain would differ between them.

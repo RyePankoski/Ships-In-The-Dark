@@ -17,7 +17,7 @@ from instruments.mining_laser import MiningLaser
 from instruments.material_assessor import MaterialAssessor
 from instruments.radar_system import RadarSystem
 from instruments.range_bands import RangeBands
-from simulation.world import MOVE_KEYS, POWER_FLAGS, empty_command
+from simulation.world import POWER_FLAGS, empty_command
 from utility.geometry import squared_distance
 from utility.input import key_pressed
 from utility.timer import Timer
@@ -29,7 +29,7 @@ class MainScene:
     local=True:  single-player. This scene owns the World and steps it.
     local=False: multiplayer. The World is a copy kept up to date by the client
                  from server snapshots; this scene only reads it and produces
-                 `self.command` for the client to send to the server.
+                 the command update() returns, which the client sends to the server.
 
     The scene never moves world objects in multiplayer; it asks via a command.
     Its direct writes to the player's ship (dampening, fuel_acknowledge,
@@ -40,17 +40,6 @@ class MainScene:
     """
 
     SHUTDOWN_WAIT = 2
-
-    KEY_ACTIONS = (
-        ('right_alt', 'decoy'),
-        ('p', 'fire_missile'),
-        ('x', 'debug_enemy_fire'),
-        ('slash', 'debug_enemy_visibility'),
-        ('m', 'toggle_map'),
-        ('g', 'toggle_dampening'),
-        ('h', 'toggle_vectors'),
-        ('esc', 'escape'),
-    )
 
     # seconds of black screen so the shutdown sound can play
 
@@ -71,8 +60,9 @@ class MainScene:
         # Outgoing actions (blink, instruments, decoy, fire) all queue here. handle_inputs
         # drains it into the command, so there is only one list to track.
         self._outbox = []
-        # What we asked the world to do this frame (the client sends it in multiplayer)
-        self.command = empty_command()
+        # The command from the last frame that made one. The client resends it on screens
+        # that return none (see update).
+        self.last_command = empty_command()
 
         # Purely visual
         self.explosions = []
@@ -81,7 +71,7 @@ class MainScene:
         # (see instruments/instrument.py). The order is the order they draw in.
         self.instrument_context = InstrumentContext(
             self.player_ship, world.contacts, self.cockpit, audio_manager,
-            start_cooldown=self.start_input_cooldown, world=world,
+            world=world,
             send_action=lambda action: self._outbox.append(action),
         )
         self.radar_system = RadarSystem(self.instrument_context)
@@ -96,7 +86,6 @@ class MainScene:
                             self.material_assessor, self.mining_laser, self.close_range_scan,
                             self.blink]
 
-        self.key_actions = self.KEY_ACTIONS + tuple(k for i in self.instruments for k in i.keys)
         self.instrument_actions = {}
         for instrument in self.instruments:
             for name, handler in instrument.actions().items():
@@ -128,9 +117,6 @@ class MainScene:
         self.grid_on = True
         self.vectors_on = False  # heading / velocity overlay on the ship (H / VECTORS button)
         self.pause = PauseMenu()  # the operator console (Esc)
-
-        # input timer: after a key press, held keys wait this long before they repeat
-        self.input_cooldown = Timer(0.2)
 
         # Control
         self.lock_inputs = False
@@ -169,18 +155,7 @@ class MainScene:
     def enemy_ships(self):
         return [ship for ship in self.world.ships if ship is not self.player_ship]
 
-    @property
-    def input_cooling_down(self):
-        return self.input_cooldown.running
-
-    @input_cooling_down.setter
-    def input_cooling_down(self, value):
-        if value:
-            self.input_cooldown.arm()
-        else:
-            self.input_cooldown.stop()
-
-    def update(self, inputs, dt, events=()):
+    def update(self, dt, events=()):
         """Advance the cockpit by one frame. Returns the command for the world, or None
         when the world should not be stepped this frame (console shutdown, game over, spectating).
 
@@ -204,16 +179,12 @@ class MainScene:
         clicks = buttons.clicked_actions(events)
         held = buttons.held_action()
 
-        if held:
-            inputs = dict(inputs)
-            inputs[held] = True
-
         self.update_explosions(dt)
 
         # The outcome is decided by the World (locally, or by the server's snapshot); here we only show it
         if self.world.outcome == 'dead':
             # Nothing we send matters any more; stop repeating the last command
-            self.command = empty_command()
+            self.last_command = empty_command()
             # Others still flying: watch them instead of the debrief screen
             targets = self.spectate_targets()
             if not self.local and targets:
@@ -233,9 +204,9 @@ class MainScene:
 
         cockpit_keys = not self.pause.is_open
         if not cockpit_keys:
-            clicks = self.handle_pause(inputs, clicks)
+            clicks = self.handle_pause(events, clicks)
 
-        self.command = self.handle_inputs(inputs, dt, clicks, cockpit_keys=cockpit_keys)
+        self.handle_inputs(events, clicks, cockpit_keys=cockpit_keys)
 
         self.update_threats()
         self.timers(dt)
@@ -244,14 +215,12 @@ class MainScene:
             self.aim_laser_at_mouse()
 
         for instrument in self.instruments:
-            instrument.update(dt, inputs)
+            instrument.update(dt, held)
 
         self.update_ship_power_use()
-        # The command was built before the instruments updated; send the switches as they stand now,
-        # or the World would apply last frame's values over the ones just set.
-        self.command['power'] = {name: getattr(self.player_ship, name) for name in POWER_FLAGS}
         self.handle_general_sound_effects()
-        return self.command
+        self.last_command = self.make_command()
+        return self.last_command
 
     def draw(self):
         """Draw this frame's state, after the world has been stepped."""
@@ -299,26 +268,19 @@ class MainScene:
         self.player_ship.dfs_detector_on = self.deep_field_scan.alert_on
         self.player_ship.range_bands_on = self.range_bands.on
 
-    def start_input_cooldown(self):
-        self.input_cooling_down = True
-
     def open_pause(self):
         self.pause.open()
         self.audio_manager.play_sfx('pause')
-        self.input_cooling_down = True
 
-    def handle_pause(self, inputs, clicks):
+    def handle_pause(self, events, clicks):
         """While the operator console is open it takes this frame's clicks and keys.
 
         Returns the clicks left for the cockpit, which is none.
         """
         if clicks:
             self.audio_manager.play_sfx('keyboard_clack')
-        keys_live = not self.input_cooling_down
-        if clicks or (keys_live and any(inputs.get(key) for key in PauseMenu.KEYS)):
-            self.input_cooling_down = True
 
-        outcome = self.pause.handle(inputs, clicks, keys_live)
+        outcome = self.pause.handle(events, clicks)
         if outcome == 'resume':
             self.audio_manager.play_sfx('resume')
         elif outcome == 'quit':
@@ -327,40 +289,86 @@ class MainScene:
 
         return ()
 
-    def handle_inputs(self, inputs, dt, clicks=(), cockpit_keys=True):
-        """Turn this frame's keys and clicks into cockpit changes + a command for the world."""
+    def handle_inputs(self, events, clicks=(), cockpit_keys=True):
+        """Turn this frame's keys and clicks into changes to the cockpit and the outbox.
+        Nothing is returned: make_command() gathers the results afterwards.
+
+        Keys are read here, one line each: the key, then the method it calls.
+        Clicks arrive as action names and go through perform().
+        """
+        if self.lock_inputs:
+            return
+
+        # One press, one action. Keys only count while the cockpit has them (console closed).
+        if cockpit_keys:
+            # Scene
+            if key_pressed(events, pygame.K_RALT):
+                self._decoy()
+            if key_pressed(events, pygame.K_SPACE):
+                self._fire_missile()
+            if key_pressed(events, pygame.K_x):
+                self._debug_enemy_fire()
+            if key_pressed(events, pygame.K_SLASH):
+                self._debug_enemy_visibility()
+            if key_pressed(events, pygame.K_m):
+                self._toggle_map()
+            if key_pressed(events, pygame.K_q):
+                self._toggle_dampening()
+            if key_pressed(events, pygame.K_h):
+                self._toggle_vectors()
+            if key_pressed(events, pygame.K_ESCAPE):
+                self._escape()
+            # Instruments
+            if key_pressed(events, pygame.K_e):
+                self.laser_assessor.toggle()
+            if key_pressed(events, pygame.K_i):
+                self.laser_assessor.lock()
+            if key_pressed(events, pygame.K_t):
+                self.blink.press()
+            if key_pressed(events, pygame.K_g):
+                self.close_range_scan.toggle()
+            if key_pressed(events, pygame.K_n):
+                self.material_assessor.start_scan()
+            if key_pressed(events, pygame.K_1):
+                self.mining_laser.toggle()
+            if key_pressed(events, pygame.K_r):
+                self.radar_system.sweep()
+            if key_pressed(events, pygame.K_l):
+                self.range_bands.toggle()
+            if key_pressed(events, pygame.K_k):
+                self.deep_field_scan.toggle()
+            if key_pressed(events, pygame.K_o):
+                self.deep_field_scan.scan()
+            if key_pressed(events, pygame.K_UP):
+                self.deep_field_scan.turn(1)
+            if key_pressed(events, pygame.K_DOWN):
+                self.deep_field_scan.turn(-1)
+
+        # Clicks on the console buttons
+        for action in clicks:
+            self.perform(action)
+
+    def make_command(self):
+        """Gather this frame's results into the command for the world (and the server).
+        This is the only place a command is built."""
         command = empty_command()
         command['laser_target'] = self.laser_assessor.hit_id
+        command['move'] = None if self.lock_inputs else self.held_movement()
+        command['actions'] = self._drain_outbox()
+        command['power'] = {name: getattr(self.player_ship, name) for name in POWER_FLAGS}
+        return command
 
-        if self.lock_inputs:
-            command['actions'] = self._drain_outbox()
-            return command
-
-        if inputs['up'] or inputs['left'] or inputs['down'] or inputs['right']:
+    def held_movement(self):
+        """Which movement keys are held right now. Also plays or stops the thrust sound."""
+        pressed = pygame.key.get_pressed()
+        move = {'up': bool(pressed[pygame.K_w]), 'down': bool(pressed[pygame.K_s]),
+                'left': bool(pressed[pygame.K_a]), 'right': bool(pressed[pygame.K_d]),
+                'left_shift': bool(pressed[pygame.K_LSHIFT]), 'tab': bool(pressed[pygame.K_TAB])}
+        if move['up'] or move['left'] or move['down'] or move['right']:
             self.audio_manager.play_sfx('thrust')
         else:
             self.audio_manager.stop_sfx('thrust')
-
-        command['move'] = {key: bool(inputs[key]) for key in MOVE_KEYS}
-
-        # Held keys repeat every frame, so they wait out the cooldown. A click
-        # is a single press and always goes through.
-        actions = []
-        keys_live = not self.input_cooling_down
-        self.instrument_context.keys_live = keys_live
-        if keys_live and cockpit_keys:
-            for key, action in self.key_actions:
-                if inputs[key]:
-                    actions.append(action)
-        actions += clicks
-
-        for action in actions:
-            self.perform(action)
-
-        command['actions'] = self._drain_outbox()
-        # Read after the actions, so a switch flipped this frame (e.g. dampening) is the one sent
-        command['power'] = {name: getattr(self.player_ship, name) for name in POWER_FLAGS}
-        return command
+        return move
 
     def _drain_outbox(self):
         """Hand over everything queued so far and start a fresh outbox."""
@@ -379,7 +387,6 @@ class MainScene:
 
     def _decoy(self):
         self._outbox.append({'type': 'decoy'})
-        self.input_cooling_down = True
         self.audio_manager.play_sfx('deploy_decoy')
 
     def _fire_missile(self):
@@ -387,7 +394,6 @@ class MainScene:
         if self.player_ship.can_fire_missile() and target_id is not None and self.laser_assessor.on:
             self.laser_assessor.on = False
             self._outbox.append({'type': 'fire', 'target': target_id})
-            self.input_cooling_down = True
             self.audio_manager.play_sfx('fire_missile')
 
     def _debug_enemy_fire(self):
@@ -396,7 +402,6 @@ class MainScene:
             enemy = self.enemy_ships[0]
             enemy.fire()
             self.world.fire_missile(enemy, self.player_ship)
-            self.input_cooling_down = True
 
     def _debug_enemy_visibility(self):
         if self.local and self.enemy_ships:
@@ -404,13 +409,10 @@ class MainScene:
             enemy.current_draw += 0.5
             if enemy.current_draw > 5:
                 enemy.current_draw = 0
-            self.input_cooling_down = True
-
 
     def _toggle_dampening(self):
         self.player_ship.dampening = not self.player_ship.dampening
         self.audio_manager.play_sfx('inertial_dampener')
-        self.input_cooling_down = True
 
     def _fuel_acknowledge(self):
         self.player_ship.fuel_acknowledge = not self.player_ship.fuel_acknowledge
@@ -419,11 +421,9 @@ class MainScene:
     def _toggle_vectors(self):
         self.vectors_on = not self.vectors_on
         self.audio_manager.play_sfx('map_open' if self.vectors_on else 'map_close')
-        self.input_cooling_down = True
 
     def _toggle_map(self):
         self.map.toggle()
-        self.input_cooling_down = True
         self.audio_manager.play_sfx('map_open' if self.map.is_open else 'map_close')
 
     def _marker_add(self):
@@ -443,7 +443,6 @@ class MainScene:
         self.audio_manager.play_sfx('map_marker_delete')
 
     def _escape(self):
-        self.input_cooling_down = True
         if self.map.placing:
             # Esc backs out of marker placement before it closes anything
             self.map.cancel_marker()
@@ -542,7 +541,6 @@ class MainScene:
     def timers(self, dt):
         self.missile_contact.update(dt)
         self.ship_destroyed.update(dt)
-        self.input_cooldown.update(dt)
 
         if self.ftl_traveling:
             self.lock_inputs = True
@@ -617,7 +615,7 @@ class MainScene:
 
     def update_spectate(self, clicks, targets):
         """Our ship is gone: follow another living pilot, with PREV / NEXT to switch."""
-        self.command = empty_command()
+        self.last_command = empty_command()
         ids = [ship.player_id for ship in targets]
         if self.spectate_id not in ids:
             self.spectate_id = ids[0]

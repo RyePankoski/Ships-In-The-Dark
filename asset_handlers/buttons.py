@@ -5,11 +5,11 @@ call, so the clickable area is always exactly what's on screen and can never
 drift from the drawing. Each frame's buttons become the click targets for the
 next frame (input is handled before drawing).
 
-Every button names an *action*: the same string the keyboard produces for that
-key (see MainScene.KEY_ACTIONS), so a click and a key press run the same code.
-A `hold` button doesn't fire an action; while the mouse is held on it, it
-reports its action as a held virtual key instead (e.g. 'arrow_key_left' to
-sweep the laser).
+Every button names an *action*: the name MainScene.perform() looks up to find
+the method to call. A key press calls that same method directly.
+A `hold` button doesn't fire an action; while the mouse is held on it,
+held_action() reports its name instead (e.g. 'arrow_key_left' to sweep the
+laser).
 """
 import pygame
 

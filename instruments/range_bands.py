@@ -17,8 +17,6 @@ class RangeBands(Instrument):
     """Lights the radar's distance bands that hold something moving. It says how far
     away movement is, not where."""
 
-    keys = (('l', 'toggle_range_bands'),)
-
     def __init__(self, ctx):
         super().__init__(ctx)
         self.on = False
@@ -31,10 +29,9 @@ class RangeBands(Instrument):
     def toggle(self):
         self.on = not self.on
         self.ctx.sfx('keyboard_clack')
-        self.ctx.start_cooldown()
         self.hot = set()
 
-    def update(self, dt, inputs):
+    def update(self, dt, held_button):
         if not self.on:
             return
         hot = set()

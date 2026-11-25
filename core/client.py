@@ -3,10 +3,6 @@ from .screens import CallsignScreen, IpScreen, LobbyScreen, MenuScreen, PlayScre
 from .session import Session
 from core.tutorial import Tutorial
 
-# Screens where the player types a callsign. Leaving any of them commits it once, here,
-# so a new exit path cannot skip the commit.
-COMMIT_CALLSIGN_ON_EXIT = (CallsignScreen, LobbyScreen)
-
 
 class Client:
     """Picks the active screen and moves between them. Connection and world state live
@@ -32,32 +28,48 @@ class Client:
         self.active = self.menu_screen
         self.tutorial = False
 
-        # Which method handles the action a screen returns, keyed by screen type.
-        self.transitions = {
-            MenuScreen: self.after_menu,
-            CallsignScreen: self.after_callsign,
-            IpScreen: self.after_ip,
-            LobbyScreen: self.after_lobby,
-            WorldSettingsScreen: self.after_settings,
-            PlayScreen: self.after_play,
-        }
-
     def run(self, dt, events):
         """Run the active screen for one frame. Returns False when the screen chose an
-        action (a transition), which means nothing was drawn this frame."""
+        action (a transition), which means nothing was drawn this frame.
+
+        Each branch is one screen: run it, and if it returned an action, hand that to
+        the screen's after_ method, which decides where to go next."""
         self.session.update(dt)
 
-        action = self.active.run(events, dt)
-        if action:
-            self.handle(self.active, action)
-            return False
-        return True
+        if self.active is self.menu_screen:
+            action = self.menu_screen.run(events, dt)
+            if action:
+                self.after_menu(action)
 
-    def handle(self, screen, action):
-        """Move on from `screen` given the action it returned."""
-        if isinstance(screen, COMMIT_CALLSIGN_ON_EXIT):
-            self.session.commit_callsign()  # every way out of these screens confirms the name
-        self.transitions[type(screen)](action) # noqa
+        elif self.active is self.callsign_screen:
+            action = self.callsign_screen.run(events, dt)
+            if action:
+                self.after_callsign()
+
+        elif self.active is self.ip_screen:
+            action = self.ip_screen.run(events, dt)
+            if action:
+                self.after_ip(action)
+
+        elif self.active is self.lobby_screen:
+            action = self.lobby_screen.run(events, dt)
+            if action:
+                self.after_lobby(action)
+
+        elif self.active is self.settings_screen:
+            action = self.settings_screen.run(events, dt)
+            if action:
+                self.after_settings()
+
+        elif self.active is self.play_screen:
+            action = self.play_screen.run(events, dt)
+            if action:
+                self.after_play(action)
+
+        else:
+            raise RuntimeError(f"Client.run has no branch for screen {self.active!r}")
+
+        return not action
 
     def after_menu(self, action):
         session = self.session
@@ -74,7 +86,8 @@ class Client:
         elif action == 'quit':
             self.exit_requested = True  # main.py owns the actual shutdown
 
-    def after_callsign(self, action):
+    def after_callsign(self):
+        self.session.commit_callsign()  # every way out of this screen confirms the name
         self.active = self.menu_screen
 
     def after_ip(self, action):
@@ -85,6 +98,7 @@ class Client:
             self.active = self.menu_screen
 
     def after_lobby(self, action):
+        self.session.commit_callsign()  # every way out of this screen confirms the name
         if action == 'started':
             self.start_game(self.session.config)
         elif action == 'refused':
@@ -94,7 +108,7 @@ class Client:
         else:
             self.leave()
 
-    def after_settings(self, action):
+    def after_settings(self):
         self.active = self.lobby_screen
 
     def after_play(self, action):
@@ -115,8 +129,6 @@ class Client:
         lesson = Tutorial(self.audio, self.draw_ui, self.session, scene) if tutorial else None
         self.play_screen = PlayScreen(self.session, self.draw_ui, self.audio, scene, lesson)
         self.active = self.play_screen
-
-
 
     def leave(self, status=""):
         self.play_screen = None

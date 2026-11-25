@@ -11,8 +11,6 @@ class BlinkDrive(Instrument):
     HELM bank of the control banks and reads `busy`.
     """
 
-    keys = (('t', 'blink'),)
-
     def __init__(self, ctx):
         super().__init__(ctx)
         self.charge = Timer(5.5)  # charge time (was 3): 2.5 seconds longer
@@ -42,7 +40,7 @@ class BlinkDrive(Instrument):
         if self.ship.fuel <= BLINK_FUEL_THRESHOLD:
             self.ctx.sfx('blink_denied')
 
-    def update(self, dt, inputs):
+    def update(self, dt, held_button):
         if self.charge.update(dt):
             self.arrival.start()
             # The world does the actual jump (on the server, in multiplayer)

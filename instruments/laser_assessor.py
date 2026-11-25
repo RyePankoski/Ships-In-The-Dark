@@ -1,5 +1,7 @@
 import math
 
+import pygame
+
 from instruments.instrument import Instrument
 from config.constants import LASER_RANGE, LASER_STEP, GRID_SIZE
 
@@ -7,11 +9,6 @@ from config.constants import LASER_RANGE, LASER_STEP, GRID_SIZE
 class LaserAssessor(Instrument):
     """The targeting laser: sweep it onto something, lock it, and that's a missile solution.
     Whatever it touches is 'painted', which the other player's ship will notice."""
-
-    keys = (
-        ('i', 'toggle_laser'),
-        ('space', 'laser_lock'),
-    )
 
     def __init__(self, ctx):
         super().__init__(ctx)
@@ -41,12 +38,10 @@ class LaserAssessor(Instrument):
         self.on = not self.on
         self.laser_locked = False
         self.ctx.sfx('laser')
-        self.ctx.start_cooldown()
 
     def lock(self):
         if not self.on:
             return
-        self.ctx.start_cooldown()
         if self.laser_locked:
             self.ctx.sfx('laser_turn_off')
             self.laser_locked = False
@@ -54,17 +49,21 @@ class LaserAssessor(Instrument):
             self.ctx.sfx('laser_locked')
             self.laser_locked = True
 
-    def update(self, dt, inputs):
+    def update(self, dt, held_button):
         cockpit = self.ctx.cockpit
+        # Held: the arrow keys, or the panel's < > buttons
+        pressed = pygame.key.get_pressed()
+        left = pressed[pygame.K_LEFT] or held_button == 'arrow_key_left'
+        right = pressed[pygame.K_RIGHT] or held_button == 'arrow_key_right'
 
         if self.on:
-            if inputs['arrow_key_left'] or inputs['arrow_key_right']:
+            if left or right:
                 self.ctx.sfx('laser_dir_change')
             else:
                 self.ctx.stop_sfx('laser_dir_change')
 
             self.endpoint, self.target_type = self.shine_laser()
-            self.change_direction(inputs, dt)
+            self.change_direction(left, right, dt)
             self._unpainted = False
         elif not self._unpainted:
             # Our own ship's `painted` comes from the world (someone else's laser), so leave it alone
@@ -156,11 +155,11 @@ class LaserAssessor(Instrument):
         else:
             return "MOVING", signature_distance
 
-    def change_direction(self, inputs, dt):
-        if inputs['arrow_key_left']:
+    def change_direction(self, left, right, dt):
+        if left:
             self.direction -= 40 * dt
             self.laser_locked = False
-        if inputs['arrow_key_right']:
+        if right:
             self.direction += 40 * dt
             self.laser_locked = False
 

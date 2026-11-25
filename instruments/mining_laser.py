@@ -9,8 +9,6 @@ class MiningLaser(Instrument):
     No laser paint needed. The switch lives on the server: this sends 'mine' and 'mine_off' and shows whatever the ship says (see
     simulation/world.py: _start_mining, _step_mining). It also draws the beam."""
 
-    keys = (('e', 'toggle_mining'),)
-
     @property
     def on(self):
         return self.ship.mining_on
@@ -28,7 +26,6 @@ class MiningLaser(Instrument):
                 self.ctx.sfx('cancel')
                 return
             self.ctx.send_action({'type': 'mine', 'target': rock.net_id})
-        self.ctx.start_cooldown()
 
     def console_buttons(self):
         return [("MINING LASER", 'toggle_mining', dict(key="E", lit=self.on, sub="CUT ASTEROIDS FOR ORE"))]

@@ -18,8 +18,6 @@ class MaterialAssessor(Instrument):
     The scan runs for a while (longer the farther away the target is). Moving the
     laser off the target, or switching it off, cancels the scan."""
 
-    keys = (('n', 'material_scan'),)
-
     def __init__(self, ctx, laser):
         super().__init__(ctx)
         self.laser = laser          # the LaserAssessor whose beam we read
@@ -38,7 +36,7 @@ class MaterialAssessor(Instrument):
     def draw_controls(self, ui):
         ui.draw_material_scan_button(self)
 
-    def update(self, dt, inputs):
+    def update(self, dt, held_button):
         if self.scanning is None:
             return
 
@@ -84,7 +82,6 @@ class MaterialAssessor(Instrument):
         self.result = None
 
         print('playing sound')
-        self.ctx.start_cooldown()
 
     def scan_progress(self):
         """0.0 when no scan is running, rising to 1.0 as it completes. For drawing later."""
