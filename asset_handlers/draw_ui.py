@@ -1539,6 +1539,16 @@ class DrawUI:
         pygame.draw.rect(self.screen, color or theme.GREEN_BRIGHT, plate, 2)
         self.screen.blit(surf, rect)
 
+    def display_ai_messages(self, messages, show=True):
+        if not show:
+            return
+        world_left, _, world_top, _ = self._get_world_bounds()
+        y = world_top + 10
+        for message in messages[:5]:
+            surf = self.font_body.render(message, True, theme.GREEN_BRIGHT)
+            self.screen.blit(surf, (world_left + 10, y))
+            y += surf.get_height() + 4
+
     def _radar_geometry(self):
         """(radar_rect, center_x, center_y, max_radius) of the radar scope."""
         radar_x, radar_y, radar_size = self._get_radar_bounds()
@@ -1572,8 +1582,9 @@ class DrawUI:
         self.screen.blit(layer, radar_rect.topleft)
         self.screen.set_clip(old_clip)
 
-    def draw_radar(self, player_ship, signatures, is_scanning=False, sweep_angle=None, rings=0, show=True):
-        """`rings` is how many distance rings to draw (0 for none)."""
+    def draw_radar(self, player_ship, signatures, is_scanning=False, sweep_angle=None, rings=0, movers=(), show=True):
+        """`rings` is how many distance rings to draw (0 for none). `movers` is (x, y) of each
+        moving thing the close range scan sees: drawn as plain red dots, no heading."""
         if not show:
             return
         radar_rect, center_x, center_y, max_radius = self._radar_geometry()
@@ -1660,6 +1671,12 @@ class DrawUI:
             # Blocky retro blips instead of smooth circles
             pygame.draw.rect(self.screen, color, (radar_px - 2, radar_py - 2, 4, 4))
             pygame.draw.rect(self.screen, tuple(min(255, c + 110) for c in color), (radar_px - 1, radar_py - 1, 2, 2))  # Hot center
+
+        # Moving contacts from the close range scan: a red dot where each one is now
+        for mover_x, mover_y in movers:
+            radar_px = int(center_x + (mover_x - player_x) * radar_scale)
+            radar_py = int(center_y + (mover_y - player_y) * radar_scale)
+            pygame.draw.circle(self.screen, theme.RED, (radar_px, radar_py), 3)
 
         # Restore rendering area
         self.screen.set_clip(old_clip)

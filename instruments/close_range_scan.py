@@ -11,6 +11,7 @@ class CloseRangeScan(Instrument):
         self.on = True
         self.scan_range = CLOSE_RANGE_SCAN_RANGE
         self.confirmed_contacts = []  # [x, y, kind, (vel_x, vel_y), confidence, age, object]
+        self.in_range_now = []  # objects the latest scan detected, for the radar's moving dots
 
         self.confidence_decay = 0.999  # Per frame multiplier
         self.confirmation_time = 60  # Frames to reach full confidence (1.0)
@@ -35,6 +36,7 @@ class CloseRangeScan(Instrument):
         """Updates contacts and decays confidence over time."""
         x, y = self.ship.center
         detections = {obj: obj for obj in self.contacts.within(x, y, self.scan_range, exclude=self.ship)}
+        self.in_range_now = list(detections)
 
         known = {c[6] for c in self.confirmed_contacts}
         for obj in detections:
@@ -66,3 +68,9 @@ class CloseRangeScan(Instrument):
     def get_contacts(self):
         """Confirmed contacts formatted for display: (x, y, kind, (vel_x, vel_y), confidence)."""
         return [(c[0], c[1], c[2], c[3], c[4]) for c in self.confirmed_contacts]
+
+    def moving_now(self):
+        """(x, y) of each thing the scan is detecting this frame that is moving. Empty while the scan is off."""
+        if not self.on:
+            return []
+        return [obj.center for obj in self.in_range_now if obj.moving]

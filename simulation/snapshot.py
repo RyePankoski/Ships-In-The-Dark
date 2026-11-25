@@ -113,7 +113,7 @@ def _sync_npcs(grid, rows, fields, create):
             setattr(obj, name, data[name])
         if hasattr(obj, 'update_rect'):
             obj.update_rect()
-        grid.add(obj)
+        grid.add_to_grid(obj)
 
 
 def _pack(obj, fields, object_id):

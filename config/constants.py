@@ -27,7 +27,6 @@ LOW_FUEL_FRACTION = 0.1  # low-fuel warning when the tank falls to this fraction
 BLINK_FUEL_THRESHOLD = 50
 HIGH_USE = 4
 
-
 RADIATION_BUILDUP = 0.5
 RADIATION_BLEED = 3.0
 
@@ -69,6 +68,13 @@ MISSILE_FEELER_STEP = 25  # sample spacing; keep < GRID_SIZE so no cell is skipp
 MISSILE_AVOID_CLEARANCE = 250  # berth given to a rock; tune to visible missile size
 MISSILE_AVOID_WEIGHT = 1.0  # 1.0 = up to ~45 deg deflection from straight-at-target
 MISSILE_AVOID_SMOOTH = 0.15  # 0.1 = heavy smoothing (gliding), 0.4 = snappier
+
+# AI ship asteroid avoidance (same feeler idea as the missile, tuned separately)
+AI_FEELER_LENGTH = 250  # how far ahead an AI ship looks for rocks
+AI_FEELER_STEP = 25  # sample spacing; keep < GRID_SIZE so no cell is skipped
+AI_AVOID_CLEARANCE = 80  # berth given to a rock's edge, in pixels
+AI_AVOID_WEIGHT = 1.0  # 1.0 = up to ~45 deg deflection from straight-at-destination
+AI_AVOID_SMOOTH = 0.15  # 0.1 = heavy smoothing (gliding), 0.4 = snappier
 
 # ---------------------------------------------------------------------------
 # Weapons: bullets

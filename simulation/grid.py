@@ -21,7 +21,7 @@ class Grid:
     def cell_of(self, x, y):
         return (int(x // self.cell_size), int(y // self.cell_size))
 
-    def add(self, obj):
+    def add_to_grid(self, obj):
         cell = self.cell_of(obj.pos_x, obj.pos_y)
         self._cells.setdefault(cell, []).append(obj)
         self._where[obj] = cell
@@ -37,7 +37,7 @@ class Grid:
         """Re-file obj after its position changed. Cheap when it stayed in its cell."""
         if self.cell_of(obj.pos_x, obj.pos_y) != self._where[obj]:
             self.remove(obj)
-            self.add(obj)
+            self.add_to_grid(obj)
 
     def clear(self):
         self._cells.clear()

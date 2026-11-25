@@ -56,6 +56,7 @@ class MainScene:
             world=world,
             send_action=lambda action: self._outbox.append(action),
         )
+
         self.radar_system = RadarSystem(self.instrument_context)
         self.range_bands = RangeBands(self.instrument_context)
         self.deep_field_scan = DeepFieldScan(self.instrument_context)
@@ -63,6 +64,7 @@ class MainScene:
         self.material_assessor = MaterialAssessor(self.instrument_context, self.laser_assessor)
         self.mining_laser = MiningLaser(self.instrument_context)
         self.close_range_scan = CloseRangeScan(self.instrument_context)
+        self.radar_system.prox_scan = self.close_range_scan
         self.blink = BlinkDrive(self.instrument_context)
         self.instruments = [self.radar_system, self.range_bands, self.deep_field_scan, self.laser_assessor,
                             self.material_assessor, self.mining_laser, self.close_range_scan,
@@ -255,10 +257,6 @@ class MainScene:
         self.audio_manager.play_sfx('pause')
 
     def handle_pause(self, events, clicks):
-        """While the operator console is open it takes this frame's clicks and keys.
-
-        Returns the clicks left for the cockpit, which is none.
-        """
         if clicks:
             self.audio_manager.play_sfx('keyboard_clack')
 
@@ -272,12 +270,6 @@ class MainScene:
         return ()
 
     def handle_inputs(self, events, clicks=(), cockpit_keys=True):
-        """Turn this frame's keys and clicks into changes to the cockpit and the outbox.
-        Nothing is returned: make_command() gathers the results afterwards.
-
-        Keys are read here, one line each: the key, then the method it calls.
-        Clicks arrive as action names and go through perform().
-        """
         if self.lock_inputs:
             return
 

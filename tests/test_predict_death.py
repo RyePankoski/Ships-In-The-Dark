@@ -19,7 +19,7 @@ def _world_with_fast_ship_in_rock():
     ship._set_velocity(150, 0)  # over the 100 crash threshold, under SHIP_MAX_SPEED
     world.ships.append(ship)
     rock = Asteroid(*ship.rect.center, 60)  # centred on the ship
-    world.asteroids.add(rock)
+    world.asteroids.add_to_grid(rock)
     return world, ship
 
 

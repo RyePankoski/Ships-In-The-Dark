@@ -27,6 +27,7 @@ class RadarSystem(Instrument):
         self.radar_rays = None
 
         self.signatures = []  # (x, y, color) blips from the current sweep
+        self.prox_scan = None  # set by MainScene: its moving contacts show as red dots
 
     # --- Instrument ---------------------------------------------------------
     def actions(self):
@@ -44,7 +45,8 @@ class RadarSystem(Instrument):
     def draw_panel(self, ui):
         # The distance rings only show while the range bands are on
         rings = RANGE_BAND_COUNT if self.ship.range_bands_on else 0
-        ui.draw_radar(self.ship, self.signatures, self.scanning, self._sweep_angle(), rings)
+        movers = self.prox_scan.moving_now() if self.prox_scan else []
+        ui.draw_radar(self.ship, self.signatures, self.scanning, self._sweep_angle(), rings, movers)
 
     def _sweep_angle(self):
         """Direction of the ray being cast right now, or None when no sweep is running."""

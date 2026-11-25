@@ -1,5 +1,4 @@
 import math
-from selectors import SelectSelector
 
 import pygame
 from config.constants import *
@@ -13,12 +12,12 @@ class Ship(DirectionSteered):
     material = 'metallic'
 
     def __init__(self, x=None, y=None, player_id=None, is_ai=False):
-
         self.pos_x = x
         self.pos_y = y
         self.dir_x = 0
         self.dir_y = 0
         self.speed = 0
+        self.is_ai = is_ai
 
         self.player_id = player_id
 
@@ -26,17 +25,10 @@ class Ship(DirectionSteered):
         self.turn_speed = 0.0
         self.turning = False
 
-        if is_ai:
-            self.ai = AI(self)
-        else:
-            self.ai = None
-
         self.screen_width, self.screen_height = pygame.display.get_desktop_sizes()[0]
         self.rect = pygame.Rect(self.pos_x, self.pos_y, 200, 200)
 
-        # Everything on a Ship is a *fact about the world*: the server owns it in
-        # multiplayer and sends it to every client. What a player has switched on
-        # or detected lives in core/cockpit.py instead and never leaves the client.
+        # Stealth related
         self.radar_cross_section = 100
         self.visibility = 0
         self.health = SHIP_MAX_HEALTH
@@ -96,11 +88,6 @@ class Ship(DirectionSteered):
         self.called_print = 0
 
     def run_ship(self, dt, width, height):
-
-        if self.ai:
-            self.ai.run(width, height)
-
-
         self.calculate_draw_and_use_fuel(dt)
         self.calculate_visibility()
 
@@ -142,7 +129,7 @@ class Ship(DirectionSteered):
 
     def calculate_draw_and_use_fuel(self, dt):
 
-        if self.ai:
+        if self.is_ai:
             return
 
         if self.fuel < SHIP_MAX_FUEL * LOW_FUEL_FRACTION:
@@ -184,7 +171,6 @@ class Ship(DirectionSteered):
             self.current_draw += MINING_DRAW
         if self.blinking:
             self.current_draw += BLINKING_DRAW
-
 
         use = self.current_draw / 45 * dt * TICK_RATE
         self.fuel -= use
@@ -231,35 +217,26 @@ class Ship(DirectionSteered):
     def handle_radiation_buildup(self, dt):
         if self.speed < 1:
             self.time_not_moving += dt
-            self.radiation_buildup += ((self.time_not_moving ** 2.0)/10000.0)
+            self.radiation_buildup += ((self.time_not_moving ** 2.0) / 10000.0)
             self.radiation_buildup = min(self.radiation_buildup, 500)
         elif self.speed > 1:
             self.radiation_buildup -= map_to_range_linear(self.speed, 0, 80, 0, 10) * dt
-            self.radiation_buildup = max(0, self.radiation_buildup)
+            self.radiation_buildup = max(0.0, self.radiation_buildup)
             self.time_not_moving = 0.0
 
-        if not self.ai:
-            print(f"{self.radiation_buildup} : {self.called_print}")
-            self.called_print += 1
-
+        # if not self.is_ai:
+        #     print(f"{self.radiation_buildup} : {self.called_print}")
+        #     self.called_print += 1
 
     def move(self, dt):
         self.pos_x += self.vel_x * dt
         self.pos_y += self.vel_y * dt
 
-        # Player heading is driven by turning in apply_inputs. AI ships have no
-        # turn controls; they steer by setting dir/speed, so they keep facing their motion.
-        if self.ai is not None:
-            angle = math.atan2(self.dir_y, -self.dir_x)
-            self.heading = math.degrees(angle) + 90
-
     def facing(self):
-        """Unit vector the ship's nose points along (screen coordinates)."""
         rad = math.radians(self.heading)
         return -math.sin(rad), -math.cos(rad)
 
     def right_vector(self):
-        """Unit vector out of the ship's right side (screen coordinates)."""
         rad = math.radians(self.heading)
         return math.cos(rad), -math.sin(rad)
 
@@ -273,7 +250,7 @@ class Ship(DirectionSteered):
 
         # Turning: left and right set a turn rate that eases toward its target,
         # so the nose swings up to speed and settles out smoothly. With shift held
-        # left and right slide the ship sideways instead, so the nose doesn't turn.
+        # left and right, slide the ship sideways instead, so the nose doesn't turn.
         turn_input = 0 if translate else (1 if inputs['left'] else 0) - (1 if inputs['right'] else 0)
         slowdown = 1 - SHIP_TURN_SLOWDOWN * min(1.0, self.speed / SHIP_MAX_SPEED)
         target = turn_input * SHIP_TURN_RATE * slowdown
@@ -298,7 +275,14 @@ class Ship(DirectionSteered):
         # Slide: with shift held, left and right push across the nose
         slide = 0
         if translate:
+
             slide = (1 if inputs['right'] else 0) - (1 if inputs['left'] else 0)
+
+            if 0 > self.heading > 90 or 270 < self.heading < 360:
+                slide = slide
+            else:
+                slide = -slide
+
             self.translate_left = slide < 0
             self.translate_right = slide > 0
         else:
@@ -329,8 +313,6 @@ class Ship(DirectionSteered):
             self._set_velocity(self.vel_x * factor, self.vel_y * factor)
 
     def dampen(self, dt):
-        """Drag while coasting. Flight assist (dampener on) bleeds speed quickly;
-        with it off the ship keeps drifting."""
         k = FLIGHT_ASSIST_DRAG if self.dampening else DRIFT_DRAG
         factor = math.exp(-k * dt)
         self._set_velocity(self.vel_x * factor, self.vel_y * factor)

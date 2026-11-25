@@ -4,6 +4,7 @@
 - Files may import and call each other directly. What matters is that you can follow what a thread of execution is doing by reading the code
 - When suggesting architectural changes, weigh how easy it is to trace a thread through the code above performance or cleverness. Name the tradeoff if a change makes tracing harder.
 - I will ask questions about how I think things should be done, if you think I am wrong, say so.
+- Don't write docstrings
 
 ## Project layout                                                                                                                                                                                                                                                                                                 
   - `main.py`: entry point. pygame loop; calls `core/root.py` `Core.run()` each frame.                                                                                                                                                                                                                              
