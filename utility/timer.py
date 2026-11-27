@@ -12,8 +12,9 @@ class Timer:
         self.elapsed = 0.0
         self.running = False
 
-    def start(self, duration=0):
-        self.duration = duration
+    def start(self, duration=None):
+        if duration is not None:
+            self.duration = duration
         self.elapsed = 0.0
         self.running = True
 

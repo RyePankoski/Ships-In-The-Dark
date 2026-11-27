@@ -6,8 +6,8 @@ class CloseRangeScan(Instrument):
     """Always-on short-range sensor. Remembers what it has seen and lets the
     confidence in it fade once it is out of range."""
 
-    def __init__(self, ctx):
-        super().__init__(ctx)
+    def __init__(self, shared_references):
+        super().__init__(shared_references)
         self.on = True
         self.scan_range = CLOSE_RANGE_SCAN_RANGE
         self.confirmed_contacts = []  # [x, y, kind, (vel_x, vel_y), confidence, age, object]
@@ -17,12 +17,9 @@ class CloseRangeScan(Instrument):
         self.confirmation_time = 60  # Frames to reach full confidence (1.0)
 
     # --- Instrument ---------------------------------------------------------
-    def actions(self):
-        return {'toggle_prox_scan': self.toggle}
-
     def toggle(self):
         self.on = not self.on
-        self.ctx.sfx('close_range_toggle')
+        self.shared_references.sfx('close_range_toggle')
 
     def update(self, dt, held_button):
         if self.on:

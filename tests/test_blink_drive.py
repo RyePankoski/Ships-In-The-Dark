@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from instruments.blink_drive import BlinkDrive
-from instruments.instrument import InstrumentContext
+from instruments.instrument import SharedInstrumentReferences
 
 
 class _Silent:
@@ -12,8 +12,8 @@ class _Silent:
 def _drive():
     ship = SimpleNamespace(fuel=500, drop_lock=False)
     sent = []
-    ctx = InstrumentContext(ship, None, None, _Silent(), send_action=sent.append)
-    return BlinkDrive(ctx), sent
+    shared_references = SharedInstrumentReferences(ship, None, _Silent(), outbox=sent)
+    return BlinkDrive(shared_references), sent
 
 
 def test_blink_waits_out_the_full_charge_before_jumping():

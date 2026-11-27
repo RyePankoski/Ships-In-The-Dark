@@ -15,7 +15,7 @@ class Core:
         self.draw = DrawUI(screen)
         self.audio = AudioManager()
         self.client = Client(screen, self.draw, self.audio)
-        self.splashing = True
+        self.splashing = False
         self.splash_screen_timer = 0
 
     @property

@@ -14,8 +14,8 @@ class BlinkDrive(Instrument):
     CHARGE_SECONDS = 5.5  # was 3: 2.5 seconds longer
     ARRIVAL_SECONDS = 2
 
-    def __init__(self, ctx):
-        super().__init__(ctx)
+    def __init__(self, shared_references):
+        super().__init__(shared_references)
         self.charge = Timer()
         self.arrival = Timer()
 
@@ -25,8 +25,8 @@ class BlinkDrive(Instrument):
 
     def interrupt(self):
         if self.charging:
-            self.ctx.sfx('blink_denied')
-            self.ctx.stop_sfx('blink')
+            self.shared_references.sfx('blink_denied')
+            self.shared_references.stop_sfx('blink')
             self.charge.stop()
 
     @property
@@ -37,29 +37,26 @@ class BlinkDrive(Instrument):
     def busy(self):
         return self.charging or self.arriving
 
-    def actions(self):
-        return {'blink': self.press}
-
     def press(self):
         if not self.charging and self.ship.fuel > BLINK_FUEL_THRESHOLD:
             self.charge.start(self.CHARGE_SECONDS)  # start() with no duration would reset it to 0
             self.ship.drop_lock = True  # a blink breaks any lock on us
-            self.ctx.sfx('blink')
+            self.shared_references.sfx('blink')
 
         if self.ship.fuel <= BLINK_FUEL_THRESHOLD:
-            self.ctx.sfx('blink_denied')
+            self.shared_references.sfx('blink_denied')
 
     def update(self, dt, held_button):
         if self.charge.update(dt):
             self.arrival.start(self.ARRIVAL_SECONDS)
             # The world does the actual jump (on the server, in multiplayer)
-            self.ctx.send_action({'type': 'blink'})
+            self.shared_references.outbox.append({'type': 'blink'})
         self.arrival.update(dt)
 
         if self.arriving:
-            self.ctx.sfx('blink_arrival')
+            self.shared_references.sfx('blink_arrival')
         else:
-            self.ctx.stop_sfx('blink_arrival')
+            self.shared_references.stop_sfx('blink_arrival')
 
     def draw_effects(self, draw_game, camera_x, camera_y):
         if self.charging:

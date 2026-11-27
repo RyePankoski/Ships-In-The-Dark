@@ -16,8 +16,8 @@ class RadarSystem(Instrument):
     """Active sonar-style sweep: rays go out in a circle over many frames and
     each one leaves a blip where it first hits something."""
 
-    def __init__(self, ctx):
-        super().__init__(ctx)
+    def __init__(self, shared_references):
+        super().__init__(shared_references)
         self.scanning = False
         self.current_frame = 1
         self.scan_frames = 100
@@ -30,11 +30,8 @@ class RadarSystem(Instrument):
         self.prox_scan = None  # set by MainScene: its moving contacts show as red dots
 
     # --- Instrument ---------------------------------------------------------
-    def actions(self):
-        return {'radar_sweep': self.sweep}
-
     def sweep(self):
-        self.ctx.sfx('radar')
+        self.shared_references.sfx('radar')
         self.signatures = []
         self.begin_scan()
 

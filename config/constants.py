@@ -155,7 +155,6 @@ TICK_RATE = 20  # server simulation steps per second
 TICK_DT = 1 / TICK_RATE
 BROADCAST_RATE = 20  # server state snapshots sent per second (independent of the frame rate)
 REF_HZ = 60  # the frame rate the per-step ship handling constants were tuned at
-SHUTDOWN_WAIT = 2  # seconds the shutdown sequence runs before quitting (core/main_scene.py)
 
 # Client-side prediction (see simulation/snapshot.py)
 SNAPSHOT_AGE = 0.06  # how old a snapshot is on arrival: one tick plus a LAN trip, roughly

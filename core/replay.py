@@ -7,11 +7,6 @@ PLAYBACK_SAMPLES_PER_SECOND = 2.0
 
 
 def record_flights(world, dt):
-    """Called once a frame on every machine, whatever the mode. Each ship takes a
-    position sample when its own timer runs out. A blink's jump happens when its charge
-    ends (the flag drops), so that is where the mark goes: after the last sample from
-    before the jump, before any sample from after it. Clients never simulate the ships
-    (the snapshots move them), so this is where a client's flight record comes from."""
     for ship in world.ships:
         if ship.was_blinking and not ship.blinking:
             ship.position_record.append(BLINK_RECORD_MARK)
@@ -20,14 +15,6 @@ def record_flights(world, dt):
 
 
 class ReplayState:
-    """The after-action replay: a copy of every pilot's flight record, and how far
-    through those records the replay has got.
-
-    `progress` is in samples (sample n is about n * POSITION_RECORD_SECONDS into the
-    flight). MainScene owns one while the replay is on screen, steps it from the
-    buttons and keys, and draws it through DrawUI.draw_replay_map.
-    """
-
     def __init__(self, world):
         self.asteroids = list(world.asteroids)
         self.width = world.width

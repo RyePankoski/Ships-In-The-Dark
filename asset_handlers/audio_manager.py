@@ -98,7 +98,6 @@ class AudioManager:
             'typing_click': 'sounds/typing_click.wav',
             'pause': 'sounds/pause.wav',
             'resume': 'sounds/resume.wav',
-            'shutdown': 'sounds/shutdown.wav',
             'fuel_fault_acknowledge': 'sounds/fuel_fault_acknowledge.wav',
             'enemy_ship_destroyed': 'sounds/enemy_ship_destroyed.wav',
             'tutorial_proceed': 'sounds/tutorial_proceed.wav',
@@ -106,7 +105,8 @@ class AudioManager:
             # Misc
             'keyboard_clack': 'sounds/keyboard_clack.wav',
             'startup': 'sounds/startup.wav',
-            'tutorial_splash': 'sounds/tutorial_splash.wav'
+            'tutorial_splash': 'sounds/tutorial_splash.wav',
+            'tutorial_complete': 'sounds/tutorial_complete.wav'
         }
 
         for name, filename in sound_files.items():
@@ -155,6 +155,12 @@ class AudioManager:
         channel = self.sfx_channels.get(name)
         if channel is not None:
             channel.stop()
+
+    def play_while(self, name, active, loops=0):
+        if active:
+            self.play_sfx(name, loops=loops)
+        else:
+            self.stop_sfx(name)
 
     def is_playing(self, name):
         """True if this specific sound is currently playing."""

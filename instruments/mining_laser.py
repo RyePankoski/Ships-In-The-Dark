@@ -14,18 +14,15 @@ class MiningLaser(Instrument):
         return self.ship.mining_on
 
     # --- Instrument ---------------------------------------------------------
-    def actions(self):
-        return {'toggle_mining': self.toggle}
-
     def toggle(self):
         if self.on:
-            self.ctx.send_action({'type': 'mine_off'})
+            self.shared_references.outbox.append({'type': 'mine_off'})
         else:
             rock = self._nearest_mineable_rock()
             if rock is None:
-                self.ctx.sfx('cancel')
+                self.shared_references.sfx('cancel')
                 return
-            self.ctx.send_action({'type': 'mine', 'target': rock.net_id})
+            self.shared_references.outbox.append({'type': 'mine', 'target': rock.net_id})
 
     def console_buttons(self):
         return [("MINING LASER", 'toggle_mining', dict(key="E", lit=self.on, sub="CUT ASTEROIDS FOR ORE"))]

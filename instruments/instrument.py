@@ -1,28 +1,27 @@
 """The shape every sensor and ship system fits into.
 
 To add one:
-  1. Subclass Instrument, say what it answers to (`keys`, `actions()`), what it does
-     each frame (`update`), and what it draws (`draw_panel`, `draw_overlay`,
-     `draw_controls`). Everything is optional.
+  1. Subclass Instrument, say what it does each frame (`update`) and what it draws
+     (`draw_panel`, `draw_overlay`, `draw_controls`). Everything is optional.
   2. Add it to the list in MainScene.__init__.
-That's all: keys, clicks, per-frame updates, drawing, the console button and the
-telemetry line are all picked up from the list.
+  3. Wire its input: keys in MainScene.handle_inputs, buttons in MainScene.perform.
+Per-frame updates, drawing, the console button and the telemetry line are picked
+up from the list.
 
 An instrument asks the world what is out there through `self.contacts` (see
-simulation/contacts.py), and keeps its own switch and readouts. The cockpit only
-keeps what several things share (the locked target, threat warnings).
+simulation/contacts.py), and keeps its own switch and readouts.
 """
 
 
-class InstrumentContext:
+class SharedInstrumentReferences:
     """What an instrument is allowed to touch. MainScene builds one and hands it out."""
 
-    def __init__(self, ship, contacts, cockpit, audio, world=None, send_action=None):
+    def __init__(self, ship, contacts, audio, world=None, outbox=None):
         self.ship = ship
-        self._send_action = send_action
+        # Requests to the world, e.g. {'type': 'blink'}. In multiplayer the server does them.
+        self.outbox = outbox
         self.world = world
         self.contacts = contacts
-        self.cockpit = cockpit
         self.audio = audio
 
     def sfx(self, name, **kwargs):  # kwargs: force, loops, volume
@@ -31,22 +30,13 @@ class InstrumentContext:
     def stop_sfx(self, name):
         self.audio.stop_sfx(name)
 
-    def send_action(self, action):
-        """Ask the world to do something (a dict like {'type': 'radar_sweep'}). In
-        multiplayer the server does it and tells everyone."""
-        self._send_action(action)
-
 
 class Instrument:
-    def __init__(self, ctx):
-        self.ctx = ctx
-        self.ship = ctx.ship
-        self.contacts = ctx.contacts
-        self.world = ctx.world
-
-    def actions(self):
-        """{action name: handler}. A key or a button producing that name calls the handler."""
-        return {}
+    def __init__(self, shared_references):
+        self.shared_references = shared_references
+        self.ship = shared_references.ship
+        self.contacts = shared_references.contacts
+        self.world = shared_references.world
 
     def update(self, dt, held_button):
         """Once per frame, before the world is stepped. `held_button` is the action of the

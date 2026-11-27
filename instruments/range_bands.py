@@ -17,18 +17,15 @@ class RangeBands(Instrument):
     """Lights the radar's distance bands that hold something moving. It says how far
     away movement is, not where."""
 
-    def __init__(self, ctx):
-        super().__init__(ctx)
+    def __init__(self, shared_references):
+        super().__init__(shared_references)
         self.on = False
         self.hot = set()  # band numbers (1..RANGE_BAND_COUNT) with a mover in them
 
     # --- Instrument ---------------------------------------------------------
-    def actions(self):
-        return {'toggle_range_bands': self.toggle}
-
     def toggle(self):
         self.on = not self.on
-        self.ctx.sfx('keyboard_clack')
+        self.shared_references.sfx('keyboard_clack')
         self.hot = set()
 
     def update(self, dt, held_button):

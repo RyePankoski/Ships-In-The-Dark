@@ -119,16 +119,6 @@ class PauseMenu:
         self.page = self.CONSOLE
 
     def handle(self, events, clicks):
-        """Act on this frame's clicks and key presses while the menu is open.
-
-        Args:
-            events: The frame's pygame events; key presses are read from these.
-            clicks: Actions of the menu buttons clicked this frame.
-
-        Returns:
-            'resume' when the menu has closed and the player is back in the cockpit,
-            'quit' when they chose QUIT TO MENU, or None.
-        """
         keymap = {
             self.CONSOLE: self.CONSOLE_KEYS,
             self.CONTROLS: self.CONTROLS_KEYS,
@@ -143,7 +133,6 @@ class PauseMenu:
                 self.page = self.CONSOLE
                 return 'resume'
             if action == 'quit':
-                # Stays open: the scene blacks out behind it while the shutdown plays
                 return 'quit'
             if action == 'controls':
                 self.page = self.CONTROLS
@@ -160,19 +149,18 @@ class PauseMenu:
                 self.page = self.CONSOLE
         return None
 
-    def draw(self, screen, buttons, underlay=True):
+    def draw(self, screen, buttons):
         """Draw the current screen over the game, and register its buttons.
 
         Draw the game frame first, then call this. Nothing
-        drawn underneath stays clickable. underlay=False skips the blanked
-        feed, for when the caller has already blacked the screen out.
+        drawn underneath stays clickable.
         """
         if not self.is_open:
             return
         if self.page == self.MANUAL:
             # Opaque: the manual is reading material, so the feed doesn't show through
             screen.fill(theme.BG)
-        elif underlay:
+        else:
             draw_blank_underlay(screen)
         buttons.block_below()
         if self.page == self.CONTROLS:

@@ -18,8 +18,8 @@ class MaterialAssessor(Instrument):
     The scan runs for a while (longer the farther away the target is). Moving the
     laser off the target, or switching it off, cancels the scan."""
 
-    def __init__(self, ctx, laser):
-        super().__init__(ctx)
+    def __init__(self, shared_references, laser):
+        super().__init__(shared_references)
         self.laser = laser          # the LaserAssessor whose beam we read
         self.scanning = None        # contact being assessed right now
         self.scan_total = 0.0       # how long the current scan takes
@@ -27,9 +27,6 @@ class MaterialAssessor(Instrument):
         self.result = None
 
     # --- Instrument ---------------------------------------------------------
-    def actions(self):
-        return {'material_scan': self.start_scan}
-
     def draw_panel(self, ui):
         ui.draw_material_assessment(self)
 
@@ -43,8 +40,8 @@ class MaterialAssessor(Instrument):
         # The scan only holds while the beam stays on the same thing
         if self.laser_target() is not self.scanning:
             self.scanning = None
-            self.ctx.sfx('scan_interrupt')
-            self.ctx.stop_sfx('material_scan')
+            self.shared_references.sfx('scan_interrupt')
+            self.shared_references.stop_sfx('material_scan')
             return
 
         self.scan_left -= dt
@@ -56,8 +53,8 @@ class MaterialAssessor(Instrument):
                 found = getattr(self.scanning, 'material', 'matter')
             self.result = (self.scanning, found)
             self.scanning = None
-            self.ctx.stop_sfx('material_scan')
-            self.ctx.sfx('material_scan_complete')
+            self.shared_references.stop_sfx('material_scan')
+            self.shared_references.sfx('material_scan_complete')
 
     # --- The scan -----------------------------------------------------------
     def laser_target(self):
@@ -75,7 +72,7 @@ class MaterialAssessor(Instrument):
             return
 
         dx, dy = target.center[0] - self.ship.center[0], target.center[1] - self.ship.center[1]
-        self.ctx.sfx('material_scan')
+        self.shared_references.sfx('material_scan')
         self.scanning = target
         self.scan_total = scan_time(math.hypot(dx, dy))
         self.scan_left = self.scan_total

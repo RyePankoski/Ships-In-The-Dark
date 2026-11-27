@@ -10,8 +10,8 @@ class LaserAssessor(Instrument):
     """The targeting laser: sweep it onto something, lock it, and that's a missile solution.
     Whatever it touches is 'painted', which the other player's ship will notice."""
 
-    def __init__(self, ctx):
-        super().__init__(ctx)
+    def __init__(self, shared_references):
+        super().__init__(shared_references)
         self.on = False
         self.painted = False
         self.direction = 0
@@ -19,8 +19,9 @@ class LaserAssessor(Instrument):
         self.signature_position = (0, 0)
         self.previous_signature_position = (0, 0)
 
-        self.current_target = None
+        self.current_target = None  # the last thing the beam touched, kept after the beam leaves it
         self.previous_target = None
+        self.missile_target = None  # what the beam is touching now: the thing a missile would go for
         self.laser_locked = False
         self.tracking_lost = False
 
@@ -31,26 +32,22 @@ class LaserAssessor(Instrument):
         self.target_distance = 0
 
     # --- Instrument ---------------------------------------------------------
-    def actions(self):
-        return {'toggle_laser': self.toggle, 'laser_lock': self.lock}
-
     def toggle(self):
         self.on = not self.on
         self.laser_locked = False
-        self.ctx.sfx('laser')
+        self.shared_references.sfx('laser')
 
     def lock(self):
         if not self.on:
             return
         if self.laser_locked:
-            self.ctx.sfx('laser_turn_off')
+            self.shared_references.sfx('laser_turn_off')
             self.laser_locked = False
         elif self.current_target is not None:
-            self.ctx.sfx('laser_locked')
+            self.shared_references.sfx('laser_locked')
             self.laser_locked = True
 
     def update(self, dt, held_button):
-        cockpit = self.ctx.cockpit
         # Held: the arrow keys, or the panel's < > buttons
         pressed = pygame.key.get_pressed()
         left = pressed[pygame.K_LEFT] or held_button == 'arrow_key_left'
@@ -58,9 +55,9 @@ class LaserAssessor(Instrument):
 
         if self.on:
             if left or right:
-                self.ctx.sfx('laser_dir_change')
+                self.shared_references.sfx('laser_dir_change')
             else:
-                self.ctx.stop_sfx('laser_dir_change')
+                self.shared_references.stop_sfx('laser_dir_change')
 
             self.endpoint, self.target_type = self.shine_laser()
             self.change_direction(left, right, dt)
@@ -76,11 +73,10 @@ class LaserAssessor(Instrument):
 
         # Missiles (and anything else that needs a target) follow what the beam is touching.
         # The lock only keeps the beam on it; it is not required.
-        cockpit.target = self.current_target if touching and self.current_target is not None else None
-        cockpit.has_missile_solution = cockpit.target is not None
+        self.missile_target = self.current_target if touching else None
 
         if self.tracking_lost:
-            self.ctx.sfx('laser_lock_lost')
+            self.shared_references.sfx('laser_lock_lost')
             self.tracking_lost = False
 
     def status_line(self):
@@ -163,5 +159,16 @@ class LaserAssessor(Instrument):
             self.direction += 40 * dt
             self.laser_locked = False
 
-    def set_direction(self, direction):
-        self.direction = direction
+    def aim_at_mouse(self, ui):
+        if not self.on or not pygame.mouse.get_focused() or not pygame.mouse.get_pressed()[0]:
+            return
+        pos = pygame.mouse.get_pos()
+        if ui.buttons.is_over_button(pos):
+            return
+        # The camera keeps our ship in the middle of the screen
+        width, height = ui.view_size()
+        dx, dy = pos[0] - width / 2, pos[1] - height / 2
+        if dx == 0 and dy == 0:
+            return
+        self.direction = math.degrees(math.atan2(dy, dx)) % 360
+        self.laser_locked = False

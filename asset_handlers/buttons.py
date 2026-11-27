@@ -5,8 +5,8 @@ call, so the clickable area is always exactly what's on screen and can never
 drift from the drawing. Each frame's buttons become the click targets for the
 next frame (input is handled before drawing).
 
-Every button names an *action*: the name MainScene.perform() looks up to find
-the method to call. A key press calls that same method directly.
+Every button names an *action*: MainScene.perform() has a branch per name that
+calls the method. A key press calls that same method directly.
 A `hold` button doesn't fire an action; while the mouse is held on it,
 held_action() reports its name instead (e.g. 'arrow_key_left' to sweep the
 laser).
@@ -69,6 +69,9 @@ class ButtonLayer:
             if button.rect.collidepoint(pos):
                 return button
         return None
+
+    def is_over_button(self, pos):
+        return self._top_at(pos) is not None
 
     def clicked_actions(self, events):
         """Actions of the enabled, non-hold buttons left-clicked in these events."""

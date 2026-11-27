@@ -237,10 +237,6 @@ class Ship(DirectionSteered):
             self.radiation_buildup = max(0.0, self.radiation_buildup)
             self.time_not_moving = 0.0
 
-        # if not self.is_ai:
-        #     print(f"{self.radiation_buildup} : {self.called_print}")
-        #     self.called_print += 1
-
     def move(self, dt):
         self.pos_x += self.vel_x * dt
         self.pos_y += self.vel_y * dt

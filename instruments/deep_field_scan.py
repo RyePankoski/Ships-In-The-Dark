@@ -19,8 +19,8 @@ class DeepFieldScan(Instrument):
     # in audio_manager's sound list (or use an existing one, e.g. 'dfs_scan_warning').
     SCANNED_WARNING_SECONDS = 2
 
-    def __init__(self, ctx):
-        super().__init__(ctx)
+    def __init__(self, shared_references):
+        super().__init__(shared_references)
         self.on = False
         self.direction_index = 0  # 0-7 representing 0°, 45°, 90°, etc.
         self.directions = [0, 45, 90, 135, 180, 225, 270, 315]
@@ -40,21 +40,12 @@ class DeepFieldScan(Instrument):
         self.alert_on = True
 
     # --- Instrument ---------------------------------------------------------
-    def actions(self):
-        return {
-            'toggle_dfs': self.toggle,
-            'dfs_scan': self.scan,
-            'dfs_bearing_cw': lambda: self.turn(1),
-            'dfs_bearing_ccw': lambda: self.turn(-1),
-            'toggle_dfs_alert': self.toggle_alert,
-        }
-
     def console_buttons(self):
         return [("DFS ALERT", 'toggle_dfs_alert', dict(lit=self.alert_on, states=("ON", "OFF"), sub="WARN WHEN SWEPT BY A DFS"))]
 
     def toggle_alert(self):
         self.alert_on = not self.alert_on
-        self.ctx.sfx('keyboard_clack')
+        self.shared_references.sfx('keyboard_clack')
 
     def warning_state(self):
         """'off' if the pilot turned the alert off, 'active' while we are being swept, else 'idle'."""
@@ -68,11 +59,11 @@ class DeepFieldScan(Instrument):
         self.scanned = True
         self.warning.start()
         if self.alert_on:
-            self.ctx.sfx('dfs_scanned_warning', force=True)
+            self.shared_references.sfx('dfs_scanned_warning', force=True)
 
     def toggle(self):
         self.on = not self.on
-        self.ctx.sfx('dfs_toggle')
+        self.shared_references.sfx('dfs_toggle')
         self.clear_result()
 
     def clear_result(self):
@@ -84,24 +75,24 @@ class DeepFieldScan(Instrument):
             in_sweep = self.contacts_in_sweep()
             self.reported_range = self.nearest_mover_range(in_sweep)
             self.has_result = True
-            self.ctx.sfx('dfs_scan')
+            self.shared_references.sfx('dfs_scan')
             # Ships caught in the sweep are told they were scanned (the world routes it to them)
             ships = [getattr(c, 'player_id', None) for _, c in in_sweep if c.kind == 'ship']
             ships = [pid for pid in ships if pid is not None]
             if ships:
-                self.ctx.send_action({'type': 'dfs_scan', 'targets': ships})
+                self.shared_references.outbox.append({'type': 'dfs_scan', 'targets': ships})
 
     def turn(self, step):
         if self.on:
             self.direction_index = (self.direction_index + step) % 8
             self.turn_sound.start()
-            self.ctx.sfx('dfs_dir_change')
+            self.shared_references.sfx('dfs_dir_change')
             self.clear_result()
 
     def update(self, dt, held_button):
         # The turning sound is cut once the bearing stops changing
         if self.turn_sound.update(dt):
-            self.ctx.stop_sfx('dfs_dir_change')
+            self.shared_references.stop_sfx('dfs_dir_change')
 
         if self.scanned and self.warning.update(dt):
             self.scanned = False
