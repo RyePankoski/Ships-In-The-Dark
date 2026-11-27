@@ -11,10 +11,13 @@ class BlinkDrive(Instrument):
     HELM bank of the control banks and reads `busy`.
     """
 
+    CHARGE_SECONDS = 5.5  # was 3: 2.5 seconds longer
+    ARRIVAL_SECONDS = 2
+
     def __init__(self, ctx):
         super().__init__(ctx)
-        self.charge = Timer(5.5)  # charge time (was 3): 2.5 seconds longer
-        self.arrival = Timer(2)
+        self.charge = Timer()
+        self.arrival = Timer()
 
     @property
     def charging(self):
@@ -39,7 +42,7 @@ class BlinkDrive(Instrument):
 
     def press(self):
         if not self.charging and self.ship.fuel > BLINK_FUEL_THRESHOLD:
-            self.charge.start()
+            self.charge.start(self.CHARGE_SECONDS)  # start() with no duration would reset it to 0
             self.ship.drop_lock = True  # a blink breaks any lock on us
             self.ctx.sfx('blink')
 
@@ -48,7 +51,7 @@ class BlinkDrive(Instrument):
 
     def update(self, dt, held_button):
         if self.charge.update(dt):
-            self.arrival.start()
+            self.arrival.start(self.ARRIVAL_SECONDS)
             # The world does the actual jump (on the server, in multiplayer)
             self.ctx.send_action({'type': 'blink'})
         self.arrival.update(dt)

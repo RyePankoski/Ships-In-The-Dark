@@ -15,12 +15,11 @@ class Core:
         self.draw = DrawUI(screen)
         self.audio = AudioManager()
         self.client = Client(screen, self.draw, self.audio)
-        self.splashing = False
+        self.splashing = True
         self.splash_screen_timer = 0
 
     @property
     def exit_requested(self):
-        """True once the player has chosen QUIT from the menu; main.py then shuts down."""
         return self.client.exit_requested
 
     def run(self, dt, events=()):

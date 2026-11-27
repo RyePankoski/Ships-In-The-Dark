@@ -19,7 +19,7 @@ def _world_with_ai_crossing_rock():
     ai = world.ai_list[0]
     rock = Asteroid(800, 500, 60)
     world.asteroids.add_to_grid(rock)
-    ai.destination = (1200, 500)
+    ai.ultimate_destination = (1200, 500)
     return world, ai, rock
 
 
@@ -54,7 +54,7 @@ def test_ai_with_clear_path_flies_straight():
     world.asteroids.clear()
     world.spawn_ship(2, is_ai=True, x=500, y=500)
     ai = world.ai_list[0]
-    ai.destination = (1200, 500)
+    ai.ultimate_destination = (1200, 500)
 
     for _ in range(20):
         world.step({}, 0.016)

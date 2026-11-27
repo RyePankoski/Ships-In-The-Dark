@@ -52,10 +52,10 @@ class AudioManager:
             'laser_locked': 'sounds/laser_locked.wav',
             'laser_turn_off': 'sounds/laser_turn_off.wav',
             'laser_lock_lost': 'sounds/laser_lock_lost.mp3',
-            'material_scan' : 'sounds/material_scanner.wav',
-            'material_scan_complete' : 'sounds/material_scan_complete.wav',
-            'scan_interrupt' : 'sounds/scan_interrupt.wav',
-            'mining_laser' : 'sounds/mining_laser.wav',
+            'material_scan': 'sounds/material_scanner.wav',
+            'material_scan_complete': 'sounds/material_scan_complete.wav',
+            'scan_interrupt': 'sounds/scan_interrupt.wav',
+            'mining_laser': 'sounds/mining_laser.wav',
 
             # DFS scanner
             'dfs_toggle': 'sounds/dfs_toggle.wav',
@@ -86,9 +86,9 @@ class AudioManager:
             'low_health': 'sounds/low_health.wav',
             'death_screen': 'sounds/death_screen.wav',
             'low_fuel': 'sounds/low_fuel.wav',
-            'blink_denied' : 'sounds/blink_denied.wav',
-            'player_hit_by_missile' : 'sounds/player_hit_by_missile.wav',
-            'dfs_scanned_warning' : 'sounds/dfs_scanned_warning.wav',
+            'blink_denied': 'sounds/blink_denied.wav',
+            'player_hit_by_missile': 'sounds/player_hit_by_missile.wav',
+            'dfs_scanned_warning': 'sounds/dfs_scanned_warning.wav',
 
             # UI
             # "Glitch (Faulty Core) 9" by Dylan Kelk/SilverIllusionist for fuel acknowledge
@@ -96,15 +96,17 @@ class AudioManager:
             'close_range_toggle': 'sounds/close_range_toggle.wav',
             'cancel': 'sounds/cancel.wav',
             'typing_click': 'sounds/typing_click.wav',
-            'pause' : 'sounds/pause.wav',
-            'resume' : 'sounds/resume.wav',
-            'shutdown' : 'sounds/shutdown.wav',
-            'fuel_fault_acknowledge' : 'sounds/fuel_fault_acknowledge.wav',
-            'enemy_ship_destroyed' : 'sounds/enemy_ship_destroyed.wav',
+            'pause': 'sounds/pause.wav',
+            'resume': 'sounds/resume.wav',
+            'shutdown': 'sounds/shutdown.wav',
+            'fuel_fault_acknowledge': 'sounds/fuel_fault_acknowledge.wav',
+            'enemy_ship_destroyed': 'sounds/enemy_ship_destroyed.wav',
+            'tutorial_proceed': 'sounds/tutorial_proceed.wav',
 
             # Misc
             'keyboard_clack': 'sounds/keyboard_clack.wav',
-            'startup' : 'sounds/startup.wav',
+            'startup': 'sounds/startup.wav',
+            'tutorial_splash': 'sounds/tutorial_splash.wav'
         }
 
         for name, filename in sound_files.items():

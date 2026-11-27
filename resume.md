@@ -1,0 +1,2 @@
+We were working on the ai brain. Making it reason about what do. Gave it some rudimentary abilities like hiding when the player is close, or navigating in the players general direction.
+Thought this only happens once on startup at this point.

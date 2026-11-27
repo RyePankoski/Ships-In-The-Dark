@@ -13,7 +13,7 @@ from simulation.contacts import Contacts
 from simulation.grid import Grid
 from simulation.settings import WorldSettings
 from ai.ai import AI
-from utility.geometry import squared_distance
+from utility.geometry import is_clear_ship_spot, is_empty_space, squared_distance
 from config.constants import *
 
 
@@ -135,7 +135,7 @@ class World:
 
     def spawn_ship(self, player_id, is_ai=False, x=None, y=None):
         if x is None or y is None:
-            x, y = self.random_empty_point()
+            x, y = self.random_clear_ship_spot()
 
         ship = Ship(x, y, player_id=player_id, is_ai=is_ai)
 
@@ -184,16 +184,15 @@ class World:
         while True:
             x = self.rng.randint(0, self.width)
             y = self.rng.randint(0, self.height)
-            if self.is_empty_space(x, y):
+            if is_empty_space(self.asteroids, x, y):
                 return x, y
 
-    def is_empty_space(self, x, y):
-        # A rock's centre can be up to its radius plus the clearance away, and that can
-        # reach into the neighbouring cells, so look at those too.
-        for asteroid in self.asteroids.near(x, y, reach=self.asteroids.reach_for(MAX_ROCK_RADIUS + 50)):
-            if squared_distance((x, y), (asteroid.pos_x, asteroid.pos_y)) < (asteroid.size + 50) ** 2:
-                return False
-        return True
+    def random_clear_ship_spot(self):
+        while True:
+            x = self.rng.randint(0, self.width)
+            y = self.rng.randint(0, self.height)
+            if is_clear_ship_spot(self.asteroids, x, y):
+                return x, y
 
     def get_ship(self, player_id):
         return next((ship for ship in self.ships if ship.player_id == player_id), None)
@@ -237,7 +236,7 @@ class World:
             ship.decrease_cloaking()
 
         elif kind == 'blink':
-            ship.pos_x, ship.pos_y = self.random_empty_point()
+            ship.pos_x, ship.pos_y = self.random_clear_ship_spot()
             ship.update_rect()
             ship.drop_lock = False  # they've jumped: locks on them can hold again
 
@@ -279,15 +278,16 @@ class World:
     def _die_on_asteroids(self, ship, announce=False):
         for asteroid in self.asteroids.near(ship.rect.center[0], ship.rect.center[1]):
             if squared_distance(ship.rect.center, (asteroid.pos_x, asteroid.pos_y)) < asteroid.size ** 2:
-                if ship.speed > 100:
+                if ship.speed > 50 and not ship.is_ai:
                     ship.alive = False
                     ship.took_damage = True
                 else:
-                    ship.health -= 50
+                    ship.health -= AI_ROCK_DAMAGE if ship.is_ai else 50
                     if announce:
                         self.events.append(('asteroid_damage', ship.player_id))
-                    ship.dir_x *= -1.5
-                    ship.dir_y *= -1.5
+                    ship.dir_x *= -1.1
+                    ship.dir_y *= -1.1
+
 
     def predict(self, my_id, command, dt):
         """A client's guess at the next dt, between snapshots. Only motion: our own
@@ -339,12 +339,10 @@ class World:
 
     def _step_ai(self, dt):
         for ai in self.ai_list:
-            ai.run(dt, self.ships, self.asteroids, self.drones, self.bullets, self.lasers)
+            for action in ai.run(dt, self.ships, self.asteroids, self.drones, self.bullets, self.lasers):
+                self.do_action(ai.ship, action)
 
     def _step_mining(self, dt):
-        """Burns the rock the ship has designated. Nothing is picked automatically:
-        the designation is made by a 'mine' action (see do_action). It ends when the
-        rock is mined out, dies, or goes out of range, or when the beam switches off."""
         for ship in self.ships:
             if not ship.alive or not ship.mining_on or ship.mining_target is None:
                 _drop_mining(ship)
@@ -435,10 +433,10 @@ class World:
         self.dead_asteroid_log.append(rock.net_id)
 
     def _clear_spot(self, spot):
-        """`spot` if no rock is on it, otherwise a random empty point."""
-        if self.is_empty_space(*spot):
+        """`spot` if no rock is on it, otherwise a random clear ship spot."""
+        if is_clear_ship_spot(self.asteroids, spot[0], spot[1]):
             return spot
-        return self.random_empty_point()
+        return self.random_clear_ship_spot()
 
     def _generate(self, rng):
         centers = [(rng.randint(0, self.width), rng.randint(0, self.height)) for _ in range(max(3, self.settings.asteroids // 20))]

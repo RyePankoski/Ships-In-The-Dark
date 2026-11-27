@@ -4,6 +4,7 @@ import pygame
 from asset_handlers.draw_game import DrawGame
 from core.cockpit import Cockpit
 from core.pause_menu import PauseMenu
+from core.replay import ReplayState
 from core.session import MatchConfig
 from config.constants import SHUTDOWN_WAIT
 from core.tactical_map_state import TacticalMapState
@@ -105,6 +106,9 @@ class MainScene:
         self.vectors_on = False  # heading / velocity overlay on the ship (H / VECTORS button)
         self.pause = PauseMenu()  # the operator console (Esc)
 
+        # HUD elements to skip drawing this frame, by name. The tutorial fills this in.
+        self.hud_hidden = set()
+
         # Control
         self.lock_inputs = False
         # Where the pilot leaves this scene, or None while the match is still on screen.
@@ -115,6 +119,7 @@ class MainScene:
         self.is_host = config.is_host  # the host decides whether the match goes back to the lobby
         self.spectate_id = None  # player_id of the pilot we're watching, once our own ship is gone
         self.shutdown_timer = None  # counts down after QUIT TO MENU, then outcome is set to 'menu'
+        self.replay = None  # a ReplayState while the after-action replay is on screen (from the end screen)
 
         # Fun cinematic type stuff
         self.ftl_traveling = False
@@ -138,6 +143,7 @@ class MainScene:
         self.ship_destroyed = Timer(2.0)
         self.ship_destroyed_name = ""
 
+    @property
     def enemy_ships(self):
         return [ship for ship in self.world.ships if ship is not self.player_ship]
 
@@ -165,15 +171,21 @@ class MainScene:
         clicks = buttons.clicked_actions(events)
         held = buttons.held_action()
 
+        # The replay plays over the finished match: the world is not stepped while it runs
+        if self.replay is not None:
+            self.update_replay(dt, events, clicks)
+            return None
+
         self.update_explosions(dt)
 
         # The outcome is decided by the World (locally, or by the server's snapshot); here we only show it
         if self.world.outcome == 'dead':
             # Nothing we send matters anymore; stop repeating the last command
             self.last_command = empty_command()
-            # Others still flying: watch them instead of the debrief screen
+            # Two or more others still flying: watch them instead of the debrief screen.
+            # With one left that pilot has won, so the match is over for everyone.
             targets = self.spectate_targets()
-            if not self.local and targets:
+            if not self.local and len(targets) > 1:
                 self.view = 'spectate'
                 self.update_spectate(clicks, targets)
             else:
@@ -219,7 +231,9 @@ class MainScene:
             self.draw_spectate(self.spectate_targets())
         elif self.view == 'end':
             message, subtitle, _ = self.end_message
-            self.draw_ui.draw_debrief_screen(message, subtitle, self.end_options())
+            self.draw_ui.draw_debrief_screen(message, subtitle, [('replay', "REPLAY FLIGHT", "R")] + self.end_options())
+        elif self.view == 'replay':
+            self.draw_replay()
         else:
             self.draw_scene()
 
@@ -496,6 +510,8 @@ class MainScene:
             self.outcome = 'menu'
 
     def update_end(self, clicks=(), events=()):
+        if 'replay' in clicks or key_pressed(events, pygame.K_r):
+            self.replay = ReplayState(self.world)
         self.apply_end_clicks(clicks)
         if self.outcome is None:
             self.apply_end_keys(events)
@@ -503,6 +519,31 @@ class MainScene:
             self.audio_manager.stop_all()
             self.audio_manager.play_sfx(self.end_message[2])
             self._end_sound_played = True
+
+    def update_replay(self, dt, events, clicks):
+        """Buttons and keys drive the replay; ESC or EXIT REPLAY returns to the end screen."""
+        replay = self.replay
+        if 'replay_exit' in clicks or key_pressed(events, pygame.K_ESCAPE):
+            self.replay = None
+            self.view = 'end'
+            return
+        self.view = 'replay'
+        # The client resends last_command every frame; a replay must not repeat old actions
+        self.last_command = empty_command()
+        if 'replay_play' in clicks or key_pressed(events, pygame.K_SPACE):
+            replay.play_pause()
+        if 'replay_forward' in clicks or key_pressed(events, pygame.K_RIGHT):
+            replay.step_forward()
+        if 'replay_back' in clicks or key_pressed(events, pygame.K_LEFT):
+            replay.step_back()
+        replay.update(dt)
+
+    def draw_replay(self):
+        replay = self.replay
+        self.draw_ui.buttons.begin_frame()
+        self.draw_ui.draw_replay_map(replay.asteroids, replay.pilots, replay.width, replay.height,
+                                     replay.progress, replay.playing, replay.last_sample)
+        self.draw_ui.buttons.end_frame()
 
     def spectate_targets(self):
         """Living pilots other than us, in player_id order."""
@@ -516,6 +557,11 @@ class MainScene:
                 if ship.player_id == self.spectate_id and ship.alive:
                     return ship
         return self.player_ship
+
+        # for ship in self.world.ships:
+        #     if ship.player_id != self.spectate_id and ship.alive:
+        #         return ship
+        # return None
 
     def update_spectate(self, clicks, targets):
         """Our ship is gone: follow another living pilot, with PREV / NEXT to switch."""
@@ -546,6 +592,17 @@ class MainScene:
 
         self.draw_ui.buttons.end_frame()
 
+    def instrument_hidden(self, instrument):
+        if instrument is self.radar_system:
+            return 'radar' in self.hud_hidden
+        if instrument is self.deep_field_scan:
+            return 'dfs' in self.hud_hidden
+        if instrument is self.laser_assessor:
+            return 'laser' in self.hud_hidden
+        if instrument is self.material_assessor:
+            return 'material' in self.hud_hidden
+        return False
+
     def draw_scene(self):
         world = self.world
         cockpit = self.cockpit
@@ -566,29 +623,43 @@ class MainScene:
         self.draw_ui.draw_ui_layout()
         self.draw_ui.draw_callsign_plate(world.callsigns.get(self.my_id), self.my_id,
                                          len(world.callsigns), self.local)
-        self.draw_ui.draw_power_readout(self.player_ship)
-        self.draw_ui.draw_navcom(self.player_ship)
-        self.draw_ui.draw_cloaking_level(self.player_ship)
+        if 'power' not in self.hud_hidden:
+            self.draw_ui.draw_power_readout(self.player_ship)
+        if 'navcom' not in self.hud_hidden:
+            self.draw_ui.draw_navcom(self.player_ship)
+        if 'cloaking' not in self.hud_hidden:
+            self.draw_ui.draw_cloaking_level(self.player_ship)
         self.draw_ui.draw_laser_painted_warning(self.player_ship.painted)
-        self.draw_ui.draw_ship_info(self.player_ship, cockpit,
-                                    [line for line in (i.status_line() for i in self.instruments) if line],
-                                    dfs_warning=self.deep_field_scan.warning_state())
+        if 'ship_info' not in self.hud_hidden:
+            self.draw_ui.draw_ship_info(self.player_ship, cockpit,
+                                        [line for line in (i.status_line() for i in self.instruments) if line],
+                                        dfs_warning=self.deep_field_scan.warning_state())
         if self.vectors_on:
             self.draw_ui.draw_ship_vectors(self.player_ship, camera_x, camera_y)
-        self.draw_ui.draw_control_banks(self.player_ship, cockpit, blink_busy=self.blink.busy, vectors_on=self.vectors_on,
-                                        sensor_buttons=[b for i in self.instruments for b in i.console_buttons()])
+        if 'control_banks' not in self.hud_hidden:
+            self.draw_ui.draw_control_banks(self.player_ship, cockpit, blink_busy=self.blink.busy, vectors_on=self.vectors_on,
+                                        hidden_buttons=self.hud_hidden,
+                                            sensor_buttons=[b for i in self.instruments for b in i.console_buttons()])
         self.draw_ui.draw_missile_lock_warning(cockpit.enemy_has_missile_solution)
+
         for instrument in self.instruments:
+            if self.instrument_hidden(instrument):
+                continue
             instrument.draw_panel(self.draw_ui)
         self.draw_ui.draw_catastrophe_warning(cockpit.catastrophic_warning)
 
-        self.draw_ui.draw_dfs_warning(self.deep_field_scan.scanned, self.deep_field_scan.alert_on, self.deep_field_scan.warning.elapsed)
+        if 'dfs' not in self.hud_hidden:
+            self.draw_ui.draw_dfs_warning(self.deep_field_scan.scanned, self.deep_field_scan.alert_on, self.deep_field_scan.warning.elapsed)
 
         self.draw_ui.draw_missile_contact(self.missile_contact.remaining, self.missile_contact.duration)
         self.draw_ui.draw_ship_destroyed(self.ship_destroyed.remaining, self.ship_destroyed.duration, self.ship_destroyed_name)
         for instrument in self.instruments:
+            if self.instrument_hidden(instrument):
+                continue
             instrument.draw_overlay(self.draw_ui, camera_x, camera_y)
         for instrument in self.instruments:
+            if self.instrument_hidden(instrument):
+                continue
             instrument.draw_controls(self.draw_ui)
         self.draw_ui.draw_tactical_map(self.map.is_open, self.player_ship, self.close_range_scan.get_contacts(),
                                        markers=self.map.markers, marker_mode=self.map.marker_mode)

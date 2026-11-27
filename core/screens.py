@@ -3,6 +3,7 @@ itself, handles input, and returns an action string (or None) for the Client to 
 import pygame
 
 from config.constants import CALLSIGN_MAX
+from core.replay import record_flights
 from simulation.settings import LAYOUT_NAMES
 from utility.text_input import blink_cursor, edit_text
 
@@ -217,6 +218,7 @@ class PlayScreen(Screen):
             state = net.take_state()
             if state is not None:
                 session.sync_world(state)
+        record_flights(session.world, dt)
 
         command = scene.update(dt, events)
 
@@ -237,7 +239,7 @@ class PlayScreen(Screen):
         scene.draw()
 
         if self.tutorial:
-            self.tutorial.run()
+            self.tutorial.run_tutorial(events, dt)
 
         if net:
             net.send_command(scene.last_command)

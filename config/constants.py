@@ -5,6 +5,7 @@
 # ---------------------------------------------------------------------------
 # Ship handling
 # ---------------------------------------------------------------------------
+SHIP_CENTRE_OFFSET = 100  # the ship's rect is 200 square with (pos_x, pos_y) at its top-left, and collisions use its centre
 SHIP_THRUST = 20  # acceleration along the nose while thrusting
 SHIP_MAX_SPEED = 80
 RETRO_THRUST_FRACTION = 0.5  # reverse burn (down key) as a fraction of forward thrust
@@ -20,7 +21,7 @@ BRAKE_DRAG = 1.0  # per second while braking (tab)
 # ---------------------------------------------------------------------------
 # Ship fuel and health
 # ---------------------------------------------------------------------------
-SHIP_MAX_FUEL = 401
+SHIP_MAX_FUEL = 501
 SHIP_MAX_HEALTH = 100
 THROTTLED_SPEED = 40  # top speed while the hull is badly damaged
 LOW_FUEL_FRACTION = 0.1  # low-fuel warning when the tank falls to this fraction of SHIP_MAX_FUEL
@@ -29,6 +30,11 @@ HIGH_USE = 4
 
 RADIATION_BUILDUP = 0.5
 RADIATION_BLEED = 3.0
+
+# How often each ship records its position for the after-action replay
+POSITION_RECORD_SECONDS = 2
+# Written into a flight record when a ship starts a blink. The replay breaks the line there.
+BLINK_RECORD_MARK = (-100, -100)
 
 # ---------------------------------------------------------------------------
 # Power draw
@@ -52,6 +58,20 @@ DFS_DETECTOR_DRAW = 0.05
 RANGE_BANDS_DRAW = 0.8
 MATERIAL_ASSESSOR_DRAW = 0.25
 MINING_DRAW = 5
+
+
+#----------------------------------------------------------------------------
+# Enemy AI
+#----------------------------------------------------------------------------
+LOOKAHEAD = 200  # how far the AI's feeler reaches for rocks
+AI_ROCK_DAMAGE = 5  # health an AI ship loses each step it touches a rock; it bounces off instead of dying
+
+NOSE_FEELER_RANGE = 150  # how far ahead of the nose the AI checks for rocks it is swinging into; short, so it only reacts to close rocks
+
+AVOID_FRONT_ANGLE = 165  # half-width of the cone in front of the AI; a rock stays "in front" until it's nearly behind
+AI_SIDEWAYS_DRAG = 3.0  # per second bleed of the AI's sideways drift, stronger than the player's dampener
+AVOID_MARGIN = 40  # extra clearance a rock needs before the AI stops avoiding it, so it doesn't re-detect on the next fram
+
 
 # ---------------------------------------------------------------------------
 # Weapons: missiles
@@ -89,7 +109,7 @@ BULLET_HIT_RADIUS = 25  # a pirate bullet hurts a ship it passes within this man
 # ---------------------------------------------------------------------------
 MINING_RANGE = 200  # center to center, world units
 MINING_TIME = 8.0  # seconds of beam on one rock
-MINING_FUEL_YIELD = 100  # fuel from an icy rock
+MINING_FUEL_YIELD = SHIP_MAX_FUEL / 4  # fuel from an icy rock
 MINING_MISSILE_YIELD = 1  # missiles from a metallic rock
 # What each mine able material pays out. Anything not listed can't be mined.
 MINING_YIELD = {'icy': 'fuel', 'metallic': 'missile', 'semi-metallic': 'hull'}

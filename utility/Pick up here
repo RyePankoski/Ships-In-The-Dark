@@ -1,0 +1,3 @@
+We are working on building the brain of the ai.
+It reasons about what to do, last thing I did was making it get the direction you are in relative to it.
+Then pick a random point in that direction and go there. Either make it go to the point before rescanning or have the direction value it stores go stale.

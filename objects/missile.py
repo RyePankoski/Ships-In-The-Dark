@@ -75,8 +75,6 @@ class Missile(WorldObject):
                     self.target.alive = False
 
                 self.exploded_on_type = type(self.target)
-                # Human pilots have ai set to None; AI ships and other targets don't count
-                self.exploded_on_player = getattr(self.target, 'ai', True) is None
             return
 
         # Seek: unit vector straight at the target

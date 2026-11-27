@@ -10,7 +10,7 @@ from dataclasses import dataclass, asdict, replace
 # The choices for each setting, first one is the default. The lobby cycles through these in order.
 OPTIONS = {
     'size': (1000, 3000, 5000, 8000, 10000, 12000, 20000),  # side length of the square world, world units
-    'asteroids': (0, 10, 50, 100, 200, 500, 1000),  # rocks in the world
+    'asteroids': (0, 10, 50, 100, 200, 250, 500, 1000),  # rocks in the world
     'layout': ('scattered', 'clustered'),  # scattered: spread evenly; clustered: in belts
     'drones': (0, 2, 5, 10, 20, 40, 100),  # mining drones
     'pirates': (0, 1, 2, 3, 4, 5),  # mining vessels that shoot at pilots
@@ -25,7 +25,7 @@ class WorldSettings:
     asteroids: int = OPTIONS['asteroids'][3]
     layout: str = OPTIONS['layout'][0]
     drones: int = OPTIONS['drones'][2]
-    pirates: int = OPTIONS['pirates'][0]
+    pirates: int = OPTIONS['pirates'][1]
 
     def cycled(self, name):
         """The same settings with one of them moved to the next option (wrapping round)."""

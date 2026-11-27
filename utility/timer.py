@@ -7,14 +7,18 @@ class Timer:
     `remaining` counts down (effects that fade out).
     """
 
-    def __init__(self, duration):
+    def __init__(self, duration=0):
         self.duration = duration
         self.elapsed = 0.0
         self.running = False
 
-    def start(self):
+    def start(self, duration=0):
+        self.duration = duration
         self.elapsed = 0.0
         self.running = True
+
+    def change_duration(self, duration):
+        self.duration = duration
 
     def arm(self):
         """Start unless already running, so repeated calls don't restart it."""
@@ -33,6 +37,9 @@ class Timer:
             self.stop()
             return True
         return False
+
+    def is_running(self):
+        return True if self.running else False
 
     @property
     def remaining(self):

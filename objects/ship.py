@@ -2,9 +2,9 @@ import math
 
 import pygame
 from config.constants import *
-from ai.ai import AI
 from objects.base import DirectionSteered
 from utility.geometry import map_to_range_linear, map_to_range_log
+from utility.timer import Timer
 
 
 class Ship(DirectionSteered):
@@ -87,6 +87,11 @@ class Ship(DirectionSteered):
         self.damage_cooldown = 0.2
         self.called_print = 0
 
+        self.position_record = []
+        self.position_record.append((self.pos_x, self.pos_y))
+        self.record_position_timer = Timer()
+        self.was_blinking = False  # blinking as record_flights saw it last frame
+
     def run_ship(self, dt, width, height):
         self.calculate_draw_and_use_fuel(dt)
         self.calculate_visibility()
@@ -123,6 +128,14 @@ class Ship(DirectionSteered):
             self.dampen(dt)
 
         self.bounce(width, height)
+
+    def record_position(self, dt):
+
+        if not self.record_position_timer.is_running():
+            self.record_position_timer.start(POSITION_RECORD_SECONDS)
+            self.position_record.append((int(self.pos_x), int(self.pos_y)))
+        else:
+            self.record_position_timer.update(dt)
 
     def calculate_visibility(self):
         self.visibility = map_to_range_log(self.cloaking_value, 0, 5, 255, 0, 0.08)
@@ -295,29 +308,29 @@ class Ship(DirectionSteered):
             accel = SHIP_THRUST * 1 * thrust
             fx, fy = self.facing()
             # Never let thrust add speed beyond the cap, but don't cut a ship that is already over it
-            self._set_velocity(self.vel_x + fx * accel * dt,
-                               self.vel_y + fy * accel * dt,
-                               max(speed_cap, self.speed))
+            self.set_velocity(self.vel_x + fx * accel * dt,
+                              self.vel_y + fy * accel * dt,
+                              max(speed_cap, self.speed))
 
         if slide != 0:
             accel = SHIP_THRUST * slide
             rx, ry = self.right_vector()
-            self._set_velocity(self.vel_x + rx * accel * dt,
-                               self.vel_y + ry * accel * dt,
-                               max(speed_cap, self.speed))
+            self.set_velocity(self.vel_x + rx * accel * dt,
+                              self.vel_y + ry * accel * dt,
+                              max(speed_cap, self.speed))
 
         # Brakes: a hard, frame-rate independent bleed of velocity
         self.braking = bool(inputs['tab'])
         if self.braking:
             factor = math.exp(-BRAKE_DRAG * dt)
-            self._set_velocity(self.vel_x * factor, self.vel_y * factor)
+            self.set_velocity(self.vel_x * factor, self.vel_y * factor)
 
     def dampen(self, dt):
         k = FLIGHT_ASSIST_DRAG if self.dampening else DRIFT_DRAG
         factor = math.exp(-k * dt)
-        self._set_velocity(self.vel_x * factor, self.vel_y * factor)
+        self.set_velocity(self.vel_x * factor, self.vel_y * factor)
 
-    def _set_velocity(self, vx, vy, max_speed=SHIP_MAX_SPEED):
+    def set_velocity(self, vx, vy, max_speed=SHIP_MAX_SPEED):
         """Store a velocity vector as (dir, speed), clamped to max_speed."""
         s = math.hypot(vx, vy)
         if s > max_speed:
