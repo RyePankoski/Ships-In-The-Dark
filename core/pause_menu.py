@@ -8,8 +8,8 @@ ship movement still runs.
 import pygame
 
 from config import theme
-from asset_handlers import fonts
 from asset_handlers.buttons import draw_blank_underlay
+from asset_handlers.ui_scale import px, ui_font
 from config.manual import *
 
 
@@ -17,7 +17,7 @@ def _put(screen, surf, **where):
     """Blit text straight onto the blanked feed, on a black backing so it stays readable.
     `where` is a get_rect anchor, e.g. topleft=(x, y)."""
     rect = surf.get_rect(**where)
-    pygame.draw.rect(screen, theme.BLACK, rect.inflate(14, 4))
+    pygame.draw.rect(screen, theme.BLACK, rect.inflate(px(14), px(4)))
     screen.blit(surf, rect)
 
 
@@ -174,13 +174,13 @@ class PauseMenu:
         w, h = screen.get_size()
         t = pygame.time.get_ticks() / 1000.0
 
-        title_font = fonts.font(64)
-        body_font = fonts.font(32)
-        small_font = fonts.font(22)
+        title_font = ui_font(64)
+        body_font = ui_font(32)
+        small_font = ui_font(22)
 
         # No card: everything hangs off one left margin, straight on the blanked feed
-        line_h = 78
-        x0, top = 48, 40
+        line_h = px(78)
+        x0, top = px(48), px(40)
 
         # Header strip
         header = small_font.render("UPLINK HELD  //  SHIP STILL LIVE", True, theme.AMBER_DIM)
@@ -188,51 +188,51 @@ class PauseMenu:
 
         # Title
         title = title_font.render("OPERATOR CONSOLE", True, theme.AMBER_BRIGHT)
-        _put(screen, title, topleft=(x0, top + 30))
+        _put(screen, title, topleft=(x0, top + px(30)))
 
         # Options
-        y = top + 136
+        y = top + px(136)
         for label, key, action in self.OPTIONS:
-            rect = pygame.Rect(x0, y, 520, line_h - 12)
+            rect = pygame.Rect(x0, y, px(520), line_h - px(12))
             buttons.button(screen, rect, label, action, key=key, align="left", font=body_font,
-                           key_font=fonts.font(18))
+                           key_font=ui_font(18))
             y += line_h
 
         # Status line at the bottom, with a blinking input cursor
         cursor = "_" if int(t * 2) % 2 == 0 else " "
         footer = small_font.render(f"STATUS: PAUSED  //  AWAITING INPUT {cursor}", True, theme.AMBER_DIM)
-        _put(screen, footer, bottomleft=(x0, h - 32))
+        _put(screen, footer, bottomleft=(x0, h - px(32)))
 
     def _draw_controls(self, screen, buttons):
         w, h = screen.get_size()
 
-        title_font = fonts.font(54)
-        row_font = fonts.font(27)
-        section_font = fonts.font(24)
-        small_font = fonts.font(21)
+        title_font = ui_font(54)
+        row_font = ui_font(27)
+        section_font = ui_font(24)
+        small_font = ui_font(21)
 
-        row_h = row_font.get_height() + 8
-        section_gap = 24
-        section_h = section_font.get_height() + 10
-        key_col_w = 200
-        col_w = 540
-        col_gap = 64
+        row_h = row_font.get_height() + px(8)
+        section_gap = px(24)
+        section_h = section_font.get_height() + px(10)
+        key_col_w = px(200)
+        col_w = px(540)
+        col_gap = px(64)
 
         def column_height(sections):
             return sum(section_h + len(rows) * row_h for _, rows in sections) + section_gap * (len(sections) - 1)
 
         body_h = max(column_height(col) for col in self.CONTROLS_LAYOUT)
-        left, top = 48, 40
+        left, top = px(48), px(40)
 
         header = small_font.render("OPERATOR CONSOLE  //  INPUT MAP", True, theme.AMBER_DIM)
         _put(screen, header, topleft=(left, top))
         title = title_font.render("CONTROLS", True, theme.AMBER_BRIGHT)
-        _put(screen, title, topleft=(left, top + 30))
+        _put(screen, title, topleft=(left, top + px(30)))
 
-        body_top = top + 120
+        body_top = top + px(120)
         divider_x = left + col_w + col_gap // 2
         pygame.draw.line(screen, theme.AMBER_FAINT,
-                         (divider_x, body_top), (divider_x, body_top + body_h), 1)
+                         (divider_x, body_top), (divider_x, body_top + body_h), px(1))
 
         for col_index, sections in enumerate(self.CONTROLS_LAYOUT):
             x = left + col_index * (col_w + col_gap)
@@ -243,20 +243,20 @@ class PauseMenu:
                 _put(screen, heading, topleft=(x, y))
                 rule_y = y + heading.get_height() // 2
                 pygame.draw.line(screen, theme.AMBER_DIM,
-                                 (x + heading.get_width() + 10, rule_y), (x + col_w, rule_y), 1)
+                                 (x + heading.get_width() + px(10), rule_y), (x + col_w, rule_y), px(1))
                 y += section_h
 
                 for key, description in rows:
                     # Plain tabulated key column, no outlined keycaps (that's <kbd> styling)
                     key_surf = row_font.render(key, True, theme.GREEN_BRIGHT)
-                    _put(screen, key_surf, topleft=(x + 8, y))
+                    _put(screen, key_surf, topleft=(x + px(8), y))
                     desc_surf = row_font.render(description, True, theme.GREEN)
                     _put(screen, desc_surf, topleft=(x + key_col_w, y))
                     y += row_h
                 y += section_gap
 
-        back = pygame.Rect(0, 0, 260, 50)
-        back.bottomleft = (left, h - 40)
+        back = pygame.Rect(0, 0, px(260), px(50))
+        back.bottomleft = (left, h - px(40))
         buttons.button(screen, back, "BACK", 'back', key="ESC", align="left", font=row_font)
 
     @staticmethod
@@ -277,8 +277,8 @@ class PauseMenu:
     def _manual_tab_rects(self, width, left, top):
         """Lay the topic tabs out left to right, wrapping onto new rows as needed.
         Returns one Rect per entry in MANUAL_PAGES."""
-        font = fonts.font(20)
-        pad, gap, row_h, row_gap = 16, 8, 40, 8
+        font = ui_font(20)
+        pad, gap, row_h, row_gap = px(16), px(8), px(40), px(8)
         rects, x, y = [], left, top
         for title, _ in self.MANUAL_PAGES:
             tab_w = font.size(title)[0] + 2 * pad
@@ -291,7 +291,7 @@ class PauseMenu:
 
     def _draw_manual(self, screen, buttons):
         w, h = screen.get_size()
-        left, top = 48, 40
+        left, top = px(48), px(40)
         margin = left
         text_w = w - 2 * margin
 
@@ -299,14 +299,14 @@ class PauseMenu:
         last = len(self.MANUAL_PAGES) - 1
 
         # Bottom row: BACK on the left; PREV, page count and NEXT on the right
-        nav_h = 50
-        nav_top = h - 40 - nav_h
-        row_font = fonts.font(27)
-        back = pygame.Rect(left, nav_top, 260, nav_h)
+        nav_h = px(50)
+        nav_top = h - px(40) - nav_h
+        row_font = ui_font(27)
+        back = pygame.Rect(left, nav_top, px(260), nav_h)
         buttons.button(screen, back, "BACK", 'back', key="ESC", align="left", font=row_font)
 
-        prev_rect = pygame.Rect(w - margin - 2 * 150 - 16, nav_top, 150, nav_h)
-        next_rect = pygame.Rect(w - margin - 150, nav_top, 150, nav_h)
+        prev_rect = pygame.Rect(w - margin - px(2 * 150 + 16), nav_top, px(150), nav_h)
+        next_rect = pygame.Rect(w - margin - px(150), nav_top, px(150), nav_h)
         buttons.button(screen, prev_rect, "PREV", 'prev', key="<-", align="left", font=row_font,
                        enabled=self.manual_page > 0)
         buttons.button(screen, next_rect, "NEXT", 'next', key="->", align="left", font=row_font,
@@ -316,40 +316,40 @@ class PauseMenu:
         def blit(surf, **where):
             screen.blit(surf, surf.get_rect(**where))
 
-        counter = fonts.font(22).render(f"{self.manual_page + 1} / {last + 1}", True, theme.AMBER_DIM)
+        counter = ui_font(22).render(f"{self.manual_page + 1} / {last + 1}", True, theme.AMBER_DIM)
         blit(counter, midbottom=(w // 2, nav_top + nav_h))
 
         # Header strip
-        header = fonts.font(21).render("OPERATOR CONSOLE  //  MANUAL", True, theme.AMBER_DIM)
+        header = ui_font(21).render("OPERATOR CONSOLE  //  MANUAL", True, theme.AMBER_DIM)
         blit(header, topleft=(left, top))
 
         # Topic tabs: click one to jump straight to that topic. The open one gets a bright border.
-        tab_font = fonts.font(20)
-        tabs_top = top + 36
+        tab_font = ui_font(20)
+        tabs_top = top + px(36)
         tab_rects = self._manual_tab_rects(text_w, left, tabs_top)
         for index, ((tab_title, _), rect) in enumerate(zip(self.MANUAL_PAGES, tab_rects)):
             buttons.button(screen, rect, tab_title, f"page:{index}", align="left", font=tab_font)
             if index == self.manual_page:
-                pygame.draw.rect(screen, theme.AMBER_BRIGHT, rect, 2)
+                pygame.draw.rect(screen, theme.AMBER_BRIGHT, rect, px(2))
         tabs_bottom = max(rect.bottom for rect in tab_rects)
 
         # The topic's title, with a rule to the right edge
-        title_surf = fonts.font(44).render(title, True, theme.AMBER_BRIGHT)
-        title_y = tabs_bottom + 18
+        title_surf = ui_font(44).render(title, True, theme.AMBER_BRIGHT)
+        title_y = tabs_bottom + px(18)
         blit(title_surf, topleft=(left, title_y))
-        rule_y = title_y + title_surf.get_height() + 8
-        pygame.draw.line(screen, theme.AMBER_DIM, (left, rule_y), (w - margin, rule_y), 1)
+        rule_y = title_y + title_surf.get_height() + px(8)
+        pygame.draw.line(screen, theme.AMBER_DIM, (left, rule_y), (w - margin, rule_y), px(1))
 
         # Body: wrap at the largest size that fits between the rule and the nav row
-        body_top = rule_y + 18
-        body_bottom = nav_top - 30
+        body_top = rule_y + px(18)
+        body_bottom = nav_top - px(30)
         for size in (30, 28, 26, 24, 22, 20):
-            body_font = fonts.font(size)
-            lines = self._wrap(body_font, body, text_w - 16)
+            body_font = ui_font(size)
+            lines = self._wrap(body_font, body, text_w - px(16))
             line_h = body_font.get_linesize()
             if body_top + len(lines) * line_h <= body_bottom:
                 break
         y = body_top
         for line in lines:
-            blit(body_font.render(line, True, theme.GREEN), topleft=(left + 8, y))
+            blit(body_font.render(line, True, theme.GREEN), topleft=(left + px(8), y))
             y += line_h

@@ -232,14 +232,14 @@ class Ship(DirectionSteered):
     def handle_shrink(self, dt):
         if self.speed < 1:
             if not self.shrink_timer.is_running():
-                self.shrink_timer.start(10)
+                self.shrink_timer.start(20)
         else:
             self.shrink_timer.stop()
             self.shrink = 0
 
         if self.shrink_timer.update(dt):
             self.shrink += 1
-            self.shrink_timer.start(5)
+            self.shrink_timer.start(15)
             print(self.shrink)
 
 

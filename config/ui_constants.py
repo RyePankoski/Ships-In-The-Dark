@@ -1,5 +1,10 @@
 from config.constants import RADAR_PULSE_RANGE
 
+# The window size the UI is laid out for. Every UI pixel size in the code is in these
+# design pixels, and asset_handlers/ui_scale.py converts it to the real window.
+DESIGN_WIDTH = 2560
+DESIGN_HEIGHT = 1440
+
 # Panel Dimensions (locked, matches UI layout)
 PANEL_WIDTH = 600
 THIN_HEIGHT = 200

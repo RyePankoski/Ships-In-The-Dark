@@ -125,7 +125,7 @@ class LaserAssessor(Instrument):
             self.dwell_timer = 0
             return "STATIC", signature_distance
         else:
-            if (contact.kind == 'ship' or 'decoy') and self._dwell(dt):
+            if (contact.kind == 'ship' or contact.kind == 'decoy') and self._dwell(dt):
                 return "ENEMY SHIP", signature_distance
             else:
                 return "MOVING", signature_distance

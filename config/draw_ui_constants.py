@@ -1,6 +1,7 @@
 """Tuning numbers and colour roles for asset_handlers/draw_ui.py.
 
 Panel geometry shared with the instruments lives in config/ui_constants.py.
+Pixel and font sizes are design pixels (see asset_handlers/ui_scale.py).
 """
 from config import theme
 

@@ -11,10 +11,10 @@ from config import ui_constants as ui
 from config import draw_ui_constants as k
 from config.constants import (BLINK_RECORD_MARK, GRID_SIZE, HIGH_USE, LASER_RANGE, LOW_FUEL_FRACTION,
                               POSITION_RECORD_SECONDS, SHIP_MAX_FUEL, SHIP_MAX_SPEED, TOTAL_MISSILES)
-from asset_handlers import fonts
 from asset_handlers.buttons import ButtonLayer, draw_button, draw_frame
 from asset_handlers.crt import crt
 from asset_handlers.grime import build_panel
+from asset_handlers.ui_scale import px, ui_font, ui_legacy_font
 from simulation.settings import WorldSettings
 from utility.geometry import map_to_range_linear
 from utility.text_input import blink_cursor
@@ -56,21 +56,6 @@ class DrawUI:
         self._throttle_rect = None  # the free row under the bar: SYSTEMS THROTTLED sits there
         self._map_view = None  # (center, scale, player_x, player_y) of the last tactical map
 
-        self.font_body = fonts.legacy_font(k.FONT_SIZE_BODY)
-        self.font_radar_label = fonts.legacy_font(k.FONT_SIZE_RADAR)
-        self.font_scan_header = fonts.legacy_font(k.FONT_SIZE_SCAN_HEADER)
-        self.font_scan_body = fonts.legacy_font(k.FONT_SIZE_SCAN_BODY)
-        self.font_grid = fonts.legacy_font(k.FONT_SIZE_GRID)
-        self.font_tiny = fonts.legacy_font(k.FONT_SIZE_TINY)
-        self.font_pirate_lock = fonts.legacy_font(24)
-        self.font_dfs_warning = fonts.legacy_font(28)
-        self.font_critical = fonts.font(15)
-
-        self.menu_title_font = fonts.font(k.MENU_TITLE_SIZE)
-        self.menu_font = fonts.font(k.MENU_FONT_SIZE)
-        self.menu_small_font = fonts.font(k.MENU_SMALL_SIZE)
-        self.menu_key_font = fonts.font(k.MENU_KEY_SIZE)
-
     # ------------------------------------------------------------------
     # Shared drawing primitives
     # ------------------------------------------------------------------
@@ -87,9 +72,9 @@ class DrawUI:
 
     # A box's name, as a heading line inside its top-left corner.
     def _box_title(self, rect, title, color=theme.AMBER, steady=False):
-        font = fonts.font(15)
+        font = ui_font(15)
         surf = (font.render_steady if steady else font.render)(title, True, color)
-        self.screen.blit(surf, (rect.left + 22, rect.top + 6))
+        self.screen.blit(surf, (rect.left + px(22), rect.top + px(6)))
 
     # A framed section with its name as a heading line inside the top.
     def _section(self, rect, title, frame=theme.AMBER_DIM, text=theme.AMBER):
@@ -100,16 +85,17 @@ class DrawUI:
     # Returns the y where the box's contents can start.
     def _titled_box(self, rect, title, color=theme.AMBER_DIM, text=theme.AMBER):
         self._frame(rect, color, fill=None, tick=8, width=1)
-        surf = fonts.font(20).render(title, True, text)
-        tab = pygame.Rect(rect.left + 20, rect.top - surf.get_height() // 2, surf.get_width() + 16, surf.get_height())
+        surf = ui_font(20).render(title, True, text)
+        tab = pygame.Rect(rect.left + px(20), rect.top - surf.get_height() // 2,
+                          surf.get_width() + px(16), surf.get_height())
         pygame.draw.rect(self.screen, theme.BG, tab)
-        self.screen.blit(surf, (tab.left + 8, tab.top))
-        return rect.top + surf.get_height() // 2 + 16
+        self.screen.blit(surf, (tab.left + px(8), tab.top))
+        return rect.top + surf.get_height() // 2 + px(16)
 
     # A title sitting on the top border of a scope or instrument box, cut into the line.
     def _border_tab(self, rect, text, color, fill=theme.BG):
-        surf = self.font_tiny.render(f" {text} ", True, color)
-        tab = surf.get_rect(midleft=(rect.left + 14, rect.top))
+        surf = ui_legacy_font(k.FONT_SIZE_TINY).render(f" {text} ", True, color)
+        tab = surf.get_rect(midleft=(rect.left + px(14), rect.top))
         pygame.draw.rect(self.screen, fill, tab)
         self.screen.blit(surf, tab)
         return tab
@@ -118,7 +104,7 @@ class DrawUI:
     # `region` on one row. Falls back to the smallest size if nothing fits.
     def _fit_status(self, region, texts, gap=0):
         for size in (34, 30, 26, 22, 18, 14):
-            font = fonts.font(size)
+            font = ui_font(size)
             surfs = [font.render(text, True, color) for text, color in texts]
             width = sum(s.get_width() for s in surfs) + gap * (len(surfs) - 1)
             if font.get_height() <= region.height and width <= region.width:
@@ -127,57 +113,57 @@ class DrawUI:
 
     # Two columns of label / value fields inside a box, one row per entry of `rows`.
     def _field_grid(self, box, rows, font, label_color, value_color):
-        line_h = font.get_height() + 12
+        line_h = font.get_height() + px(12)
         col_w = box.width // 2
         for r, row in enumerate(rows):
             for c, (label, value) in enumerate(row):
-                fx = box.left + 22 + c * col_w
-                fy = box.top + 22 + k.BOX_HEAD + r * line_h
+                fx = box.left + px(22) + c * col_w
+                fy = box.top + px(22 + k.BOX_HEAD) + r * line_h
                 self.screen.blit(font.render(label, True, label_color), (fx, fy))
-                self.screen.blit(font.render(value, True, value_color), (fx + 220, fy))
+                self.screen.blit(font.render(value, True, value_color), (fx + px(220), fy))
 
     # One boxed field per setting, stacked from `top`. Stops before the bottom of the box.
     def _setting_lines(self, box, top, lines, color):
-        font = fonts.font(30)
-        step = font.get_height() + 22
+        font = ui_font(30)
+        step = font.get_height() + px(22)
         for i, line in enumerate(lines):
-            r = pygame.Rect(box.left + k.MENU_PAD, top + i * step, box.width - 2 * k.MENU_PAD, step - 10)
-            if r.bottom > box.bottom - k.MENU_PAD:
+            r = pygame.Rect(box.left + px(k.MENU_PAD), top + i * step, box.width - 2 * px(k.MENU_PAD), step - px(10))
+            if r.bottom > box.bottom - px(k.MENU_PAD):
                 break
             self._frame(r, theme.AMBER_FAINT, fill=None, tick=6, width=1)
             surf = font.render(line, True, color)
-            self.screen.blit(surf, surf.get_rect(midleft=(r.left + 18, r.centery)))
+            self.screen.blit(surf, surf.get_rect(midleft=(r.left + px(18), r.centery)))
 
     # Up to two status lines under a box heading.
     def _status_lines(self, box, top, lines, color):
-        font = fonts.font(22)
+        font = ui_font(22)
         for i, line in enumerate(lines[:2]):
             self.screen.blit(font.render(line, True, color),
-                             (box.left + k.MENU_PAD, top + 4 + i * (font.get_height() + 10)))
+                             (box.left + px(k.MENU_PAD), top + px(4) + i * (font.get_height() + px(10))))
 
     # The identification line over a rule across the top of a panel. Returns the y below it.
     def _ident_strip(self, panel, x0, x1, font, color, rule_color):
-        y = panel.top + 18
+        y = panel.top + px(18)
         ident = font.render(k.IDENT_LINE, True, color)
         self.screen.blit(ident, (x0, y))
         rev = font.render(k.REV_LINE, True, color)
         self.screen.blit(rev, rev.get_rect(topright=(x1, y)))
-        y += ident.get_height() + 8
-        pygame.draw.line(self.screen, rule_color, (x0, y), (x1, y))
-        return y + 16
+        y += ident.get_height() + px(8)
+        pygame.draw.line(self.screen, rule_color, (x0, y), (x1, y), px(1))
+        return y + px(16)
 
     # The callsign in large type under the box heading, with a rule beneath it.
     # Returns the y of the rule.
     def _draw_callsign_name(self, rect, name, color, rule_color):
-        pad = 22
-        big = fonts.font(34)
+        pad = px(22)
+        big = ui_font(34)
         name_surf = big.render(name, True, color)
         if name_surf.get_width() > rect.width - 2 * pad:
-            name_surf = fonts.font(26).render(name, True, color)
-        name_y = rect.top + 8 + k.BOX_HEAD + 14
+            name_surf = ui_font(26).render(name, True, color)
+        name_y = rect.top + px(8 + k.BOX_HEAD + 14)
         self.screen.blit(name_surf, (rect.left + pad, name_y))
-        rule_y = name_y + big.get_height() + 6
-        pygame.draw.line(self.screen, rule_color, (rect.left + pad, rule_y), (rect.right - pad, rule_y))
+        rule_y = name_y + big.get_height() + px(6)
+        pygame.draw.line(self.screen, rule_color, (rect.left + pad, rule_y), (rect.right - pad, rule_y), px(1))
         return rule_y
 
     # ------------------------------------------------------------------
@@ -187,10 +173,10 @@ class DrawUI:
     # The flight window, as (left, right, top, bottom).
     def _get_world_bounds(self):
         return (
-            ui.PANEL_WIDTH,
-            self.screen.get_width() - ui.PANEL_WIDTH,
-            ui.THIN_HEIGHT,
-            self.screen.get_height() - ui.THIN_HEIGHT,
+            px(ui.PANEL_WIDTH),
+            self.screen.get_width() - px(ui.PANEL_WIDTH),
+            px(ui.THIN_HEIGHT),
+            self.screen.get_height() - px(ui.THIN_HEIGHT),
         )
 
     def _viewport_rect(self):
@@ -200,20 +186,21 @@ class DrawUI:
     # The four console panels around the flight window: (top, bottom, left, right).
     def _get_panel_rects(self):
         w, h = self.screen.get_size()
+        panel_w, thin_h = px(ui.PANEL_WIDTH), px(ui.THIN_HEIGHT)
         return (
-            pygame.Rect(0, 0, w, ui.THIN_HEIGHT),
-            pygame.Rect(0, h - ui.THIN_HEIGHT, w, ui.THIN_HEIGHT),
-            pygame.Rect(0, ui.THIN_HEIGHT, ui.PANEL_WIDTH, h - 2 * ui.THIN_HEIGHT),
-            pygame.Rect(w - ui.PANEL_WIDTH, ui.THIN_HEIGHT, ui.PANEL_WIDTH, h - 2 * ui.THIN_HEIGHT),
+            pygame.Rect(0, 0, w, thin_h),
+            pygame.Rect(0, h - thin_h, w, thin_h),
+            pygame.Rect(0, thin_h, panel_w, h - 2 * thin_h),
+            pygame.Rect(w - panel_w, thin_h, panel_w, h - 2 * thin_h),
         )
 
     # The radar scope, as (radar_x, radar_y, radar_size).
     def _get_radar_bounds(self):
-        radar_x = self.screen.get_width() - ui.PANEL_WIDTH + ui.RADAR_PADDING
-        radar_y = ui.THIN_HEIGHT + ui.RADAR_PADDING
-        radar_size = self.screen.get_height() - 2 * ui.THIN_HEIGHT - 2 * ui.RADAR_PADDING
+        radar_x = self.screen.get_width() - px(ui.PANEL_WIDTH) + px(ui.RADAR_PADDING)
+        radar_y = px(ui.THIN_HEIGHT) + px(ui.RADAR_PADDING)
+        radar_size = self.screen.get_height() - 2 * px(ui.THIN_HEIGHT) - 2 * px(ui.RADAR_PADDING)
         # Leave room underneath for the laser target box and its buttons (14px gap + 70px box)
-        radar_size = min(radar_size - 84, ui.PANEL_WIDTH - 2 * ui.RADAR_PADDING)
+        radar_size = min(radar_size - px(84), px(ui.PANEL_WIDTH) - 2 * px(ui.RADAR_PADDING))
         return radar_x, radar_y, radar_size
 
     # (radar_rect, center_x, center_y, max_radius) of the radar scope.
@@ -224,19 +211,19 @@ class DrawUI:
 
     # The control column: between the top and bottom consoles, inset from the edge.
     def _left_column_rect(self):
-        m = ui.DFS_PANEL_MARGIN
-        return pygame.Rect(m, ui.THIN_HEIGHT + m, ui.PANEL_WIDTH - 2 * m,
-                           self.screen.get_height() - 2 * ui.THIN_HEIGHT - 2 * m)
+        m = px(ui.DFS_PANEL_MARGIN)
+        return pygame.Rect(m, px(ui.THIN_HEIGHT) + m, px(ui.PANEL_WIDTH) - 2 * m,
+                           self.screen.get_height() - 2 * px(ui.THIN_HEIGHT) - 2 * m)
 
     # The three readout boxes across the bottom console, right of the telemetry:
     # (deep field scan, nav-com, cloaking), equal width, sharing the strip's height.
     def _readout_rects(self):
         w, h = self.screen.get_size()
-        top = h - ui.THIN_HEIGHT + 12
-        height = ui.THIN_HEIGHT - 24
-        left = ui.PANEL_WIDTH + ui.DFS_PANEL_MARGIN
-        gap = 12
-        slot_w = (w - ui.DFS_PANEL_MARGIN - left - 2 * gap) // 3
+        top = h - px(ui.THIN_HEIGHT) + px(12)
+        height = px(ui.THIN_HEIGHT - 24)
+        left = px(ui.PANEL_WIDTH) + px(ui.DFS_PANEL_MARGIN)
+        gap = px(12)
+        slot_w = (w - px(ui.DFS_PANEL_MARGIN) - left - 2 * gap) // 3
         return [pygame.Rect(left + i * (slot_w + gap), top, slot_w, height) for i in range(3)]
 
     def _deep_field_rect(self):
@@ -250,20 +237,20 @@ class DrawUI:
 
     # The pilot ID box: top-left of the top panel.
     def _callsign_rect(self):
-        return pygame.Rect(24, 22, 380, ui.THIN_HEIGHT - 44)
+        return pygame.Rect(px(24), px(22), px(380), px(ui.THIN_HEIGHT - 44))
 
     # The laser assessor box: under the radar, half of the space down to the bottom console.
     def _laser_box_rect(self):
         radar_x, radar_y, radar_size = self._get_radar_bounds()
-        top = radar_y + radar_size + 14
-        height = (self.screen.get_height() - ui.THIN_HEIGHT - 12 - top) // 2
+        top = radar_y + radar_size + px(14)
+        height = (self.screen.get_height() - px(ui.THIN_HEIGHT) - px(12) - top) // 2
         return pygame.Rect(radar_x, top, radar_size, height)
 
     # The free space under the laser assessor box, down to the bottom console.
     def material_box_rect(self):
         laser = self._laser_box_rect()
-        box_y = laser.bottom + 14
-        box_h = self.screen.get_height() - ui.THIN_HEIGHT - 12 - box_y
+        box_y = laser.bottom + px(14)
+        box_h = self.screen.get_height() - px(ui.THIN_HEIGHT) - px(12) - box_y
         return pygame.Rect(laser.left, box_y, laser.width, box_h)
 
     # ------------------------------------------------------------------
@@ -280,40 +267,40 @@ class DrawUI:
         self.buttons.begin_frame()
         w, h = self.screen.get_size()
 
-        small = self.menu_small_font
-        title_surf = self.menu_title_font.render(title, True, theme.AMBER_BRIGHT)
-        line_surfs = [self.menu_font.render(line, True, theme.GREEN) for line in lines]
+        small = ui_font(k.MENU_SMALL_SIZE)
+        title_surf = ui_font(k.MENU_TITLE_SIZE).render(title, True, theme.AMBER_BRIGHT)
+        line_surfs = [ui_font(k.MENU_FONT_SIZE).render(line, True, theme.GREEN) for line in lines]
         footer_surf = small.render(footer, True, theme.RED) if footer else None
 
-        btn_w, btn_h, btn_gap = 360, 50, 12
+        btn_w, btn_h, btn_gap = px(360), px(50), px(12)
 
         # Plain fields on black, like the mission log: no card, one left margin
-        x0 = k.PLAIN_MARGIN
-        top = k.PLAIN_TOP
+        x0 = px(k.PLAIN_MARGIN)
+        top = px(k.PLAIN_TOP)
         header_surf = small.render(header.upper(), True, theme.AMBER_DIM)
         self.screen.blit(header_surf, (x0, top))
-        rule_y = top + header_surf.get_height() + 10
-        pygame.draw.line(self.screen, theme.AMBER_FAINT, (x0, rule_y), (w - x0, rule_y))
+        rule_y = top + header_surf.get_height() + px(10)
+        pygame.draw.line(self.screen, theme.AMBER_FAINT, (x0, rule_y), (w - x0, rule_y), px(1))
 
-        y = rule_y + 40
+        y = rule_y + px(40)
         self.screen.blit(title_surf, title_surf.get_rect(topleft=(x0, y)))
-        y += title_surf.get_height() + 36
+        y += title_surf.get_height() + px(36)
         for surf in line_surfs:
             self.screen.blit(surf, surf.get_rect(topleft=(x0, y)))
-            y += surf.get_height() + 12
+            y += surf.get_height() + px(12)
         if lines and buttons:
-            y += 24
+            y += px(24)
         for label, key, action, *rest in buttons:
             enabled = rest[0] if rest else True
             rect = pygame.Rect(x0, y, btn_w, btn_h)
             self._button(rect, label, action, key=key, enabled=enabled, align="left",
-                         font=self.menu_font, key_font=self.menu_key_font)
+                         font=ui_font(k.MENU_FONT_SIZE), key_font=ui_font(k.MENU_KEY_SIZE))
             y += btn_h + btn_gap
 
         # Bottom line: the last fault if there is one, else the input prompt
         if footer_surf is None:
             footer_surf = small.render(f"STATUS: AWAITING INPUT {blink_cursor()}", True, theme.AMBER_DIM)
-        self.screen.blit(footer_surf, footer_surf.get_rect(bottomleft=(x0, h - 32)))
+        self.screen.blit(footer_surf, footer_surf.get_rect(bottomleft=(x0, h - px(32))))
 
         self.buttons.end_frame()
 
@@ -324,20 +311,20 @@ class DrawUI:
             return
         self.buttons.begin_frame()
         w, h = self.screen.get_size()
-        x0 = k.PLAIN_MARGIN
-        top = k.PLAIN_TOP
-        head = self.menu_small_font
-        body = self.menu_font
+        x0 = px(k.PLAIN_MARGIN)
+        top = px(k.PLAIN_TOP)
+        head = ui_font(k.MENU_SMALL_SIZE)
+        body = ui_font(k.MENU_FONT_SIZE)
 
         self.screen.blit(head.render("ERGOT SYSTEMS // MISSION LOG", True, theme.AMBER_DIM), (x0, top))
         utc = head.render(f"UTC {_utc_clock()}", True, theme.AMBER_DIM)
         self.screen.blit(utc, utc.get_rect(topright=(w - x0, top)))
-        rule_y = top + head.get_height() + 10
-        pygame.draw.line(self.screen, theme.AMBER_FAINT, (x0, rule_y), (w - x0, rule_y))
+        rule_y = top + head.get_height() + px(10)
+        pygame.draw.line(self.screen, theme.AMBER_FAINT, (x0, rule_y), (w - x0, rule_y), px(1))
 
-        line_h = body.get_height() + 10
+        line_h = body.get_height() + px(10)
         label_w = body.size("STATUS  ")[0]
-        y = rule_y + 24
+        y = rule_y + px(24)
         for name, value, color in (("STATUS", status, theme.AMBER_BRIGHT), ("DETAIL", detail, theme.GREEN)):
             self.screen.blit(body.render(name, True, theme.AMBER_DIM), (x0, y))
             self.screen.blit(body.render(value, True, color), (x0 + label_w, y))
@@ -355,74 +342,79 @@ class DrawUI:
             return
         w, h = self.screen.get_size()
         self.screen.fill(theme.BLACK)
+        title_font = ui_font(k.MENU_TITLE_SIZE)
+        body_font = ui_font(k.MENU_FONT_SIZE)
+        small_font = ui_font(k.MENU_SMALL_SIZE)
+        key_font = ui_font(k.MENU_KEY_SIZE)
 
-        cert_w = min(860, w - 80)
-        cert_h = min(560, h - 200)
-        btn_h, btn_gap_y = 50, 24
+        cert_w = min(px(860), w - px(80))
+        cert_h = min(px(560), h - px(200))
+        btn_h, btn_gap_y = px(50), px(24)
         group_top = (h - (cert_h + btn_gap_y + btn_h)) // 2
         cert = pygame.Rect(0, 0, cert_w, cert_h)
         cert.midtop = (w // 2, group_top)
 
         self._frame(cert, theme.AMBER, fill=theme.BLACK, tick=10, width=2)
-        inner = cert.inflate(-24, -24)
+        inner = cert.inflate(px(-24), px(-24))
 
         def centred(surf, y):
             self.screen.blit(surf, surf.get_rect(midtop=(cert.centerx, y)))
             return y + surf.get_height()
 
-        y = centred(self.menu_small_font.render("ERGOT SYSTEMS // FLIGHT TRAINING", True, theme.AMBER_DIM), inner.top + 28)
-        y = centred(self.menu_title_font.render("CERTIFICATE OF COMPLETION", True, theme.AMBER_BRIGHT), y + 20)
-        rule_y = y + 16
-        pygame.draw.line(self.screen, theme.AMBER_FAINT, (cert.left + 80, rule_y), (cert.right - 80, rule_y))
+        y = centred(small_font.render("ERGOT SYSTEMS // FLIGHT TRAINING", True, theme.AMBER_DIM), inner.top + px(28))
+        y = centred(title_font.render("CERTIFICATE OF COMPLETION", True, theme.AMBER_BRIGHT), y + px(20))
+        rule_y = y + px(16)
+        pygame.draw.line(self.screen, theme.AMBER_FAINT, (cert.left + px(80), rule_y), (cert.right - px(80), rule_y), px(1))
 
-        y = centred(self.menu_small_font.render("THIS CERTIFIES THAT", True, theme.AMBER_DIM), rule_y + 36)
-        y = centred(self.menu_title_font.render(callsign.upper(), True, theme.GREEN_BRIGHT), y + 8)
-        y = centred(self.menu_font.render("has completed flight certification", True, theme.GREEN), y + 20)
-        y = centred(self.menu_font.render("and is cleared to remote pilot class 42 drones", True, theme.GREEN), y + 8)
+        y = centred(small_font.render("THIS CERTIFIES THAT", True, theme.AMBER_DIM), rule_y + px(36))
+        y = centred(title_font.render(callsign.upper(), True, theme.GREEN_BRIGHT), y + px(8))
+        y = centred(body_font.render("has completed flight certification", True, theme.GREEN), y + px(20))
+        y = centred(body_font.render("and is cleared to remote pilot class 42 drones", True, theme.GREEN), y + px(8))
 
         date_text = datetime.now().strftime("%Y-%m-%d")
-        sign_y = inner.bottom - 50
-        left_x = inner.left + 70
-        right_x = inner.right - 70
-        pygame.draw.line(self.screen, theme.AMBER_DIM, (left_x, sign_y), (left_x + 240, sign_y))
-        pygame.draw.line(self.screen, theme.AMBER_DIM, (right_x - 240, sign_y), (right_x, sign_y))
-        date_surf = self.menu_small_font.render("DATE: " + date_text, True, theme.AMBER)
-        self.screen.blit(date_surf, date_surf.get_rect(midbottom=(left_x + 120, sign_y - 6)))
-        officer_surf = self.menu_small_font.render("TRAINING OFFICER", True, theme.AMBER)
-        self.screen.blit(officer_surf, officer_surf.get_rect(midbottom=(right_x - 120, sign_y - 6)))
+        sign_y = inner.bottom - px(50)
+        left_x = inner.left + px(70)
+        right_x = inner.right - px(70)
+        pygame.draw.line(self.screen, theme.AMBER_DIM, (left_x, sign_y), (left_x + px(240), sign_y), px(1))
+        pygame.draw.line(self.screen, theme.AMBER_DIM, (right_x - px(240), sign_y), (right_x, sign_y), px(1))
+        date_surf = small_font.render("DATE: " + date_text, True, theme.AMBER)
+        self.screen.blit(date_surf, date_surf.get_rect(midbottom=(left_x + px(120), sign_y - px(6))))
+        officer_surf = small_font.render("TRAINING OFFICER", True, theme.AMBER)
+        self.screen.blit(officer_surf, officer_surf.get_rect(midbottom=(right_x - px(120), sign_y - px(6))))
 
-        seal_center = (cert.centerx, sign_y - 10)
-        pygame.draw.circle(self.screen, theme.AMBER_DIM, seal_center, 34, 2)
-        pygame.draw.circle(self.screen, theme.AMBER_FAINT, seal_center, 26, 1)
+        seal_center = (cert.centerx, sign_y - px(10))
+        pygame.draw.circle(self.screen, theme.AMBER_DIM, seal_center, px(34), px(2))
+        pygame.draw.circle(self.screen, theme.AMBER_FAINT, seal_center, px(26), px(1))
 
-        btn_w, btn_gap = 200, 16
+        btn_w, btn_gap = px(200), px(16)
         btn_y = cert.bottom + btn_gap_y
         total_w = btn_w * 2 + btn_gap
         left = w // 2 - total_w // 2
         for i, label in enumerate(("DOWNLOAD", "PRINT")):
             rect = pygame.Rect(left + i * (btn_w + btn_gap), btn_y, btn_w, btn_h)
-            draw_button(self.screen, rect, label, align="center", font=self.menu_font, key_font=self.menu_key_font)
+            draw_button(self.screen, rect, label, align="center", font=body_font, key_font=key_font)
 
     # Underlined text options down the bottom-left: [(action, label, key hint or None), ...].
     def draw_options(self, options, show=True):
         if not show:
             return
-        x0 = k.PLAIN_MARGIN
+        x0 = px(k.PLAIN_MARGIN)
         h = self.screen.get_height()
-        body = self.menu_font
-        head = self.menu_small_font
-        step = body.get_height() + 14
-        first_y = h - 48 - (len(options) - 1) * step
+        body = ui_font(k.MENU_FONT_SIZE)
+        head = ui_font(k.MENU_SMALL_SIZE)
+        step = body.get_height() + px(14)
+        first_y = h - px(48) - (len(options) - 1) * step
         for i, (action, label, key_hint) in enumerate(options):
             y = first_y + i * step
             text = body.render(label, True, theme.AMBER)
             key = head.render(f"  [{key_hint}]", True, theme.AMBER_DIM) if key_hint else pygame.Surface((0, 0))
             self.screen.blit(text, (x0, y))
             self.screen.blit(key, key.get_rect(bottomleft=(x0 + text.get_width(), y + text.get_height())))
-            underline_y = y + text.get_height() + 2
+            underline_y = y + text.get_height() + px(2)
             pygame.draw.line(self.screen, theme.AMBER_DIM, (x0, underline_y),
-                             (x0 + text.get_width() + key.get_width(), underline_y))
-            click = pygame.Rect(x0 - 8, y - 6, text.get_width() + key.get_width() + 16, text.get_height() + 12)
+                             (x0 + text.get_width() + key.get_width(), underline_y), px(1))
+            click = pygame.Rect(x0 - px(8), y - px(6),
+                                text.get_width() + key.get_width() + px(16), text.get_height() + px(12))
             self.buttons.register(click, action)
 
     # ------------------------------------------------------------------
@@ -444,15 +436,15 @@ class DrawUI:
         LOG = _lit(theme.GREEN, flicker)
         FAULT = _lit(theme.RED_BRIGHT, flicker)
 
-        field_font = fonts.font(30)
-        status_font = fonts.font(22)
-        btn_font = fonts.font(30)
-        key_font = fonts.font(20)
-        title_font = fonts.font(64)
-        small_font = fonts.font(20)
-        pad, gap = k.MENU_PAD, k.MENU_GAP
+        field_font = ui_font(30)
+        status_font = ui_font(22)
+        btn_font = ui_font(30)
+        key_font = ui_font(20)
+        title_font = ui_font(64)
+        small_font = ui_font(20)
+        pad, gap = px(k.MENU_PAD), px(k.MENU_GAP)
 
-        margin = k.MENU_MARGIN
+        margin = px(k.MENU_MARGIN)
         panel = pygame.Rect(margin, margin, w - 2 * margin, h - 2 * margin)
         self._frame(panel, theme.AMBER, fill=theme.BG, tick=14, width=2)
         x0, x1 = panel.left + pad, panel.right - pad
@@ -461,10 +453,10 @@ class DrawUI:
 
         title_surf = title_font.render(title, True, TITLE)
         self.screen.blit(title_surf, (x0, y))
-        y += title_surf.get_height() + 26
+        y += title_surf.get_height() + px(26)
 
-        line_h = field_font.get_height() + 12
-        record = pygame.Rect(x0, y, x1 - x0, 2 * line_h + 40 + k.BOX_HEAD)
+        line_h = field_font.get_height() + px(12)
+        record = pygame.Rect(x0, y, x1 - x0, 2 * line_h + px(40 + k.BOX_HEAD))
         self._section(record, "PILOT RECORD")
         self._field_grid(record, [
             [("CALLSIGN", callsign or "-"), ("UNIT ID", "ITD-218562B")],
@@ -473,11 +465,11 @@ class DrawUI:
         y = record.bottom + gap
 
         # Status block pinned to the bottom of the frame; the command grid fills the rest
-        status_h = 120
+        status_h = px(120)
         status_box = pygame.Rect(x0, panel.bottom - pad - status_h, x1 - x0, status_h)
         command = pygame.Rect(x0, y, x1 - x0, status_box.top - gap - y)
         self._section(command, "COMMAND")
-        btn_h, btn_gap = 66, 14
+        btn_h, btn_gap = px(66), px(14)
         grid_h = len(buttons) * btn_h + (len(buttons) - 1) * btn_gap
         top = command.top + (command.height - grid_h) // 2
         for i, (label, key, action) in enumerate(buttons):
@@ -485,14 +477,14 @@ class DrawUI:
             self._button(rect, label, action, key=key, align="left", font=btn_font, key_font=key_font)
 
         self._section(status_box, "STATUS", HEAD, theme.AMBER)
-        row_a = status_box.top + 30 + k.BOX_HEAD
+        row_a = status_box.top + px(30 + k.BOX_HEAD)
         if footer:
             status_text, status_color = footer, FAULT
         else:
             status_text, status_color = f"STATUS: AWAITING INPUT {blink_cursor()}", TITLE
-        self.screen.blit(status_font.render(status_text, True, status_color), (status_box.left + 22, row_a))
+        self.screen.blit(status_font.render(status_text, True, status_color), (status_box.left + px(22), row_a))
         hint = status_font.render("SELECT BY KEY OR CLICK", True, HEAD)
-        self.screen.blit(hint, hint.get_rect(topright=(status_box.right - 22, row_a)))
+        self.screen.blit(hint, hint.get_rect(topright=(status_box.right - px(22), row_a)))
 
         self.buttons.end_frame()
 
@@ -511,24 +503,24 @@ class DrawUI:
         LOG = _lit(theme.GREEN, flicker)
         LOG_HOT = _lit(theme.GREEN_BRIGHT, flicker)
 
-        title_font = fonts.font(64)
-        field_font = fonts.font(30)
-        small_font = fonts.font(22)
-        btn_font = fonts.font(30)
-        key_font = fonts.font(20)
-        pad, gap = k.MENU_PAD, k.MENU_GAP
+        title_font = ui_font(64)
+        field_font = ui_font(30)
+        small_font = ui_font(22)
+        btn_font = ui_font(30)
+        key_font = ui_font(20)
+        pad, gap = px(k.MENU_PAD), px(k.MENU_GAP)
 
-        margin = k.MENU_MARGIN
+        margin = px(k.MENU_MARGIN)
         panel = pygame.Rect(margin, margin, w - 2 * margin, h - 2 * margin)
         self._frame(panel, theme.AMBER, fill=theme.BG, tick=14, width=2)
         x0, x1 = panel.left + pad, panel.right - pad
-        y = self._ident_strip(panel, x0, x1, fonts.font(20), HEAD, RULE)
+        y = self._ident_strip(panel, x0, x1, ui_font(20), HEAD, RULE)
         title_surf = title_font.render("FLIGHT LOBBY", True, TITLE)
         self.screen.blit(title_surf, (x0, y))
-        y += title_surf.get_height() + 26
+        y += title_surf.get_height() + px(26)
 
         # Status block pinned to the bottom of the frame
-        status_h = 150
+        status_h = px(150)
         status_box = pygame.Rect(x0, panel.bottom - pad - status_h, x1 - x0, status_h)
 
         # Two rows of boxes fill the space above it; the left column is the narrower one
@@ -546,9 +538,10 @@ class DrawUI:
 
         # Pilot record: callsign in a field, then slot and net count
         top = self._titled_box(record, "PILOT RECORD")
-        row_h = field_font.get_height() + 18
-        value_x = record.left + pad + 200
-        field_rect = pygame.Rect(value_x - 14, top - 4, record.right - pad - value_x + 14, field_font.get_height() + 12)
+        row_h = field_font.get_height() + px(18)
+        value_x = record.left + pad + px(200)
+        field_rect = pygame.Rect(value_x - px(14), top - px(4),
+                                 record.right - pad - value_x + px(14), field_font.get_height() + px(12))
         self._frame(field_rect, theme.AMBER_DIM, fill=theme.BG, tick=6, width=1)
         self.screen.blit(field_font.render("CALLSIGN", True, HEAD), (record.left + pad, top))
         self.screen.blit(field_font.render(callsign + blink_cursor(), True, LOG_HOT), (value_x, top))
@@ -557,27 +550,27 @@ class DrawUI:
             self.screen.blit(field_font.render(label, True, HEAD), (record.left + pad, yy))
             self.screen.blit(field_font.render(value, True, LOG), (value_x, yy))
         hint = small_font.render("ENTER TO CONFIRM", True, HEAD)
-        self.screen.blit(hint, (record.left + pad, top + 3 * row_h + 6))
+        self.screen.blit(hint, (record.left + pad, top + 3 * row_h + px(6)))
 
         # Pilots on the net: one box per pilot, yours highlighted, overflow as a count
         top = self._titled_box(roster_box, f"PILOTS ON NET  //  {len(roster)}")
-        step = small_font.get_height() + 22
+        step = small_font.get_height() + px(22)
         capacity = max(0, (roster_box.bottom - pad - top) // step)
         shown = roster if len(roster) <= capacity else roster[:max(0, capacity - 1)]
         for i, (player_id, name) in enumerate(shown):
-            r = pygame.Rect(roster_box.left + pad, top + i * step, roster_box.width - 2 * pad, step - 8)
+            r = pygame.Rect(roster_box.left + pad, top + i * step, roster_box.width - 2 * pad, step - px(8))
             mine = player_id == your_id
             self._frame(r, theme.GREEN if mine else theme.AMBER_FAINT, fill=None, tick=6, width=1)
             pid = small_font.render(f"{player_id:02d}", True, HEAD)
-            self.screen.blit(pid, pid.get_rect(midleft=(r.left + 18, r.centery)))
+            self.screen.blit(pid, pid.get_rect(midleft=(r.left + px(18), r.centery)))
             name_surf = small_font.render(name, True, LOG_HOT if mine else LOG)
-            self.screen.blit(name_surf, name_surf.get_rect(midleft=(r.left + 84, r.centery)))
+            self.screen.blit(name_surf, name_surf.get_rect(midleft=(r.left + px(84), r.centery)))
             if mine:
                 tag = small_font.render("< YOU", True, LOG_HOT)
-                self.screen.blit(tag, tag.get_rect(midright=(r.right - 18, r.centery)))
+                self.screen.blit(tag, tag.get_rect(midright=(r.right - px(18), r.centery)))
         if len(roster) > len(shown):
             more = small_font.render(f"+{len(roster) - len(shown)} MORE", True, HEAD)
-            self.screen.blit(more, (roster_box.left + pad, top + len(shown) * step + 4))
+            self.screen.blit(more, (roster_box.left + pad, top + len(shown) * step + px(4)))
 
         # World parameters: one boxed field per setting
         top = self._titled_box(world, "WORLD PARAMETERS")
@@ -585,7 +578,7 @@ class DrawUI:
 
         # Command: the buttons, stacked and full width
         top = self._titled_box(command, "COMMAND")
-        bh, bgap = 66, 14
+        bh, bgap = px(66), px(14)
         total = len(buttons) * bh + (len(buttons) - 1) * bgap
         first = top + max(0, (command.bottom - pad - top - total) // 2)
         for i, (label, key, action, *rest) in enumerate(buttons):
@@ -597,7 +590,7 @@ class DrawUI:
         top = self._titled_box(status_box, "STATUS", HEAD, theme.AMBER)
         self._status_lines(status_box, top, status_lines, LOG_HOT)
         hint = small_font.render("SELECT BY KEY OR CLICK", True, HEAD)
-        self.screen.blit(hint, hint.get_rect(topright=(status_box.right - pad, top + 4)))
+        self.screen.blit(hint, hint.get_rect(topright=(status_box.right - pad, top + px(4))))
 
         self.buttons.end_frame()
 
@@ -617,22 +610,22 @@ class DrawUI:
         LOG = _lit(theme.GREEN, flicker)
         LOG_HOT = _lit(theme.GREEN_BRIGHT, flicker)
 
-        title_font = fonts.font(64)
-        btn_font = fonts.font(30)
-        key_font = fonts.font(20)
-        pad, gap = k.MENU_PAD, k.MENU_GAP
+        title_font = ui_font(64)
+        btn_font = ui_font(30)
+        key_font = ui_font(20)
+        pad, gap = px(k.MENU_PAD), px(k.MENU_GAP)
 
-        margin = k.MENU_MARGIN
+        margin = px(k.MENU_MARGIN)
         panel = pygame.Rect(margin, margin, w - 2 * margin, h - 2 * margin)
         self._frame(panel, theme.AMBER, fill=theme.BG, tick=14, width=2)
         x0, x1 = panel.left + pad, panel.right - pad
-        y = self._ident_strip(panel, x0, x1, fonts.font(20), HEAD, RULE)
+        y = self._ident_strip(panel, x0, x1, ui_font(20), HEAD, RULE)
         title_surf = title_font.render("WORLD SETTINGS", True, TITLE)
         self.screen.blit(title_surf, (x0, y))
-        y += title_surf.get_height() + 26
+        y += title_surf.get_height() + px(26)
 
         # Notice block pinned to the bottom of the frame
-        status_h = 150
+        status_h = px(150)
         status_box = pygame.Rect(x0, panel.bottom - pad - status_h, x1 - x0, status_h)
 
         # Left: the parameters to change. Right: the current world, then BACK.
@@ -640,7 +633,7 @@ class DrawUI:
         left_w = int((x1 - x0 - gap) * 0.5)
         right_x = x0 + left_w + gap
         right_w = x1 - right_x
-        command_h = 150
+        command_h = px(150)
         world_h = avail - gap - command_h
         params = pygame.Rect(x0, y, left_w, avail)
         world = pygame.Rect(right_x, y, right_w, world_h)
@@ -648,7 +641,7 @@ class DrawUI:
 
         # Parameters: one full-width button per setting
         top = self._titled_box(params, "PARAMETERS")
-        bh, bgap = 74, 16
+        bh, bgap = px(74), px(16)
         total = len(parameters) * bh + (len(parameters) - 1) * bgap
         first = top + max(0, (params.bottom - pad - top - total) // 2)
         for i, (label, key, action) in enumerate(parameters):
@@ -661,8 +654,8 @@ class DrawUI:
         # Command: BACK
         top = self._titled_box(command, "COMMAND")
         label, key, action = back
-        rect = pygame.Rect(command.left + pad, top + max(0, (command.bottom - pad - top - 66) // 2),
-                           command.width - 2 * pad, 66)
+        rect = pygame.Rect(command.left + pad, top + max(0, (command.bottom - pad - top - px(66)) // 2),
+                           command.width - 2 * pad, px(66))
         self._button(rect, label, action, key=key, font=btn_font, key_font=key_font)
 
         # Notice
@@ -692,13 +685,13 @@ class DrawUI:
         LOG_HOT = _lit(theme.GREEN_BRIGHT, flicker)
         FAULT = _lit(theme.RED_BRIGHT, flicker)
 
-        ident_font = fonts.font(20)
-        field_font = fonts.font(30)
-        boot_font = fonts.font(24)
-        status_font = fonts.font(22)
+        ident_font = ui_font(20)
+        field_font = ui_font(30)
+        boot_font = ui_font(24)
+        status_font = ui_font(22)
 
         # Same full-window panel and type scale as the main menu
-        margin, pad = k.MENU_MARGIN, k.MENU_PAD
+        margin, pad = px(k.MENU_MARGIN), px(k.MENU_PAD)
         panel = pygame.Rect(margin, margin, w - 2 * margin, h - 2 * margin)
         self._frame(panel, FRAME, fill=theme.BG, tick=14, width=2)
 
@@ -709,19 +702,19 @@ class DrawUI:
         y = self._ident_strip(panel, x0, x1, ident_font, HEAD, RULE)
 
         # System identification: fixed two-column field grid
-        line_h = field_font.get_height() + 12
-        id_box = pygame.Rect(x0, y, x1 - x0, 3 * line_h + 40 + k.BOX_HEAD)
+        line_h = field_font.get_height() + px(12)
+        id_box = pygame.Rect(x0, y, x1 - x0, 3 * line_h + px(40 + k.BOX_HEAD))
         self._section(id_box, "SYSTEM IDENTIFICATION")
         self._field_grid(id_box, [
             [("UNIT ID", "ITD-218562B"), ("DEBUG REF", "218562B")],
             [("FIRMWARE", "4.7.2"), ("BUILD", "2026.11.21")],
             [("MISSION", "SEEK AND DESTROY"), ("UTC", utc)],
         ], field_font, HEAD, LOG)
-        y = id_box.bottom + 14
+        y = id_box.bottom + px(14)
 
         # Load block, pinned to the bottom of the frame
-        load_h = 130 + k.BOX_HEAD
-        load_box = pygame.Rect(x0, panel.bottom - 18 - load_h, x1 - x0, load_h)
+        load_h = px(130 + k.BOX_HEAD)
+        load_box = pygame.Rect(x0, panel.bottom - px(18) - load_h, x1 - x0, load_h)
 
         lines = [
             "INITIALIZING MEMORY.........................OK",
@@ -755,15 +748,15 @@ class DrawUI:
         ]
 
         # Boot log: label, dotted leader, status column. Scrolls like a terminal.
-        log_box = pygame.Rect(x0, y, x1 - x0, load_box.top - 14 - y)
+        log_box = pygame.Rect(x0, y, x1 - x0, load_box.top - px(14) - y)
         self._section(log_box, f"BOOT LOG  //  {len(lines)} ENTRIES")
 
-        boot_lh = boot_font.get_height() + 4
-        log_top = log_box.top + 28 + k.BOX_HEAD
-        log_left = log_box.left + 22
-        log_right = log_box.right - 22
+        boot_lh = boot_font.get_height() + px(4)
+        log_top = log_box.top + px(28 + k.BOX_HEAD)
+        log_left = log_box.left + px(22)
+        log_right = log_box.right - px(22)
         status_x = log_left + int((log_right - log_left) * 0.64)
-        visible = max(1, (log_box.bottom - 12 - log_top) // boot_lh)
+        visible = max(1, (log_box.bottom - px(12) - log_top) // boot_lh)
 
         def line_start(i):
             return k.BOOT_START + i * k.BOOT_LINE_DELAY
@@ -792,9 +785,9 @@ class DrawUI:
                     cursor_x = log_left + lab.get_width()
 
                     if chars >= len(label):
-                        label_end = log_left + boot_font.size(label)[0] + 10
-                        for gx in range(label_end, status_x - 10, 9):
-                            pygame.draw.rect(self.screen, theme.AMBER_DIM, (gx, y0 + boot_lh - 9, 2, 2))
+                        label_end = log_left + boot_font.size(label)[0] + px(10)
+                        for gx in range(label_end, status_x - px(10), px(9)):
+                            pygame.draw.rect(self.screen, theme.AMBER_DIM, (gx, y0 + boot_lh - px(9), px(2), px(2)))
                         cursor_x = status_x
 
                     if chars > status_start:
@@ -811,7 +804,7 @@ class DrawUI:
 
                 if i == last:
                     cur = boot_font.render(blink_cursor(), True, LOG_HOT)
-                    self.screen.blit(cur, (cursor_x + 2, y0))
+                    self.screen.blit(cur, (cursor_x + px(2), y0))
 
         # Load block: bar, numeric readout, explicit status text
         self._section(load_box, "LOAD SEQUENCE")
@@ -821,10 +814,10 @@ class DrawUI:
         faults = sum(1 for i in started if "FAILED" in lines[i])
         entries_done = len(started)
 
-        bar = pygame.Rect(load_box.left + 22, load_box.top + 24 + k.BOX_HEAD, load_box.width - 44, 10)
+        bar = pygame.Rect(load_box.left + px(22), load_box.top + px(24 + k.BOX_HEAD), load_box.width - px(44), px(10))
         pygame.draw.rect(self.screen, theme.GREEN_FAINT, bar)
         pygame.draw.rect(self.screen, LOG, (bar.left, bar.top, int(bar.width * frac), bar.height))
-        pygame.draw.rect(self.screen, HEAD, bar, 1)
+        pygame.draw.rect(self.screen, HEAD, bar, px(1))
 
         def blit_seq(x, y, parts):
             for text, color in parts:
@@ -832,8 +825,8 @@ class DrawUI:
                 self.screen.blit(surf, (x, y))
                 x += surf.get_width()
 
-        row_a = bar.bottom + 12
-        blit_seq(load_box.left + 22, row_a, [
+        row_a = bar.bottom + px(12)
+        blit_seq(load_box.left + px(22), row_a, [
             (f"LOAD {int(frac * 100):3d}%", LOG),
             (f"   ENTRIES {entries_done:02d}/{len(lines):02d}", HEAD),
             (f"   FAULTS {faults:02d}", FAULT if faults else HEAD),
@@ -848,14 +841,14 @@ class DrawUI:
         else:
             status_text, status_color = "STATUS: READY", TITLE
 
-        row_b = row_a + status_font.get_height() + 8
-        blit_seq(load_box.left + 22, row_b, [(status_text, status_color)])
+        row_b = row_a + status_font.get_height() + px(8)
+        blit_seq(load_box.left + px(22), row_b, [(status_text, status_color)])
 
         if timer > k.BOOT_PROMPT_AFTER and int(timer * 2.5) % 2 == 0:
             msg = status_font.render("PRESS ENTER TO CONTINUE", True, TITLE)
         else:
             msg = status_font.render("INPUT: LOCKED", True, HEAD)
-        self.screen.blit(msg, msg.get_rect(topright=(load_box.right - 22, row_b)))
+        self.screen.blit(msg, msg.get_rect(topright=(load_box.right - px(22), row_b)))
 
     # Call every frame with the frame time. Returns True once the splash has run its course.
     def draw_tutorial_splash(self, dt):
@@ -864,15 +857,15 @@ class DrawUI:
 
         w, h = self.screen.get_size()
         self.screen.fill(theme.BLACK)
-        panel = pygame.Rect(16, 16, w - 32, h - 32)
+        panel = pygame.Rect(px(16), px(16), w - px(32), h - px(32))
         self._frame(panel, theme.AMBER, fill=theme.BG, tick=14, width=2)
 
-        title = self.menu_title_font.render("ERGOT SYSTEMS TRAINING MODULE", True, theme.AMBER_BRIGHT)
-        title_rect = title.get_rect(midtop=(panel.centerx, panel.top + 28))
+        title = ui_font(k.MENU_TITLE_SIZE).render("ERGOT SYSTEMS TRAINING MODULE", True, theme.AMBER_BRIGHT)
+        title_rect = title.get_rect(midtop=(panel.centerx, panel.top + px(28)))
         self.screen.blit(title, title_rect)
 
-        view_top = title_rect.bottom + 20
-        view = pygame.Rect(panel.left + 28, view_top, panel.width - 56, panel.bottom - 70 - view_top)
+        view_top = title_rect.bottom + px(20)
+        view = pygame.Rect(panel.left + px(28), view_top, panel.width - px(56), panel.bottom - px(70) - view_top)
         self._frame(view, theme.AMBER_DIM, fill=theme.BLACK, tick=8)
 
         cx, cy = view.center
@@ -894,8 +887,8 @@ class DrawUI:
 
         filled = int(k.TUTORIAL_SPLASH_BAR_LENGTH * progress)
         bar_text = "|" + ("#" * filled).ljust(k.TUTORIAL_SPLASH_BAR_LENGTH) + "|"
-        bar = self.menu_font.render(bar_text, True, theme.AMBER)
-        self.screen.blit(bar, bar.get_rect(midtop=(panel.centerx, view.bottom + 12)))
+        bar = ui_font(k.MENU_FONT_SIZE).render(bar_text, True, theme.AMBER)
+        self.screen.blit(bar, bar.get_rect(midtop=(panel.centerx, view.bottom + px(12))))
 
         return self.tutorial_splash_elapsed >= k.TUTORIAL_SPLASH_SECONDS
 
@@ -905,7 +898,7 @@ class DrawUI:
         for degrees in range(start_degrees, start_degrees + 181, 5):
             radians = math.radians(degrees)
             points.append((center[0] + rx * math.cos(radians), center[1] + ry * math.sin(radians)))
-        pygame.draw.lines(self.screen, color, False, points, 3)
+        pygame.draw.lines(self.screen, color, False, points, px(3))
 
     # Arrowhead with a notched back: nose forward, two swept-back corners, a notch between them.
     def _draw_splash_ship(self, position, forward):
@@ -915,7 +908,7 @@ class DrawUI:
             return (position[0] + local_x * forward[0] + local_y * side[0],
                     position[1] + local_x * forward[1] + local_y * side[1])
 
-        nose_len, half_width = 22, 13
+        nose_len, half_width = px(22), px(13)
         points = [ship_point(nose_len, 0),
                   ship_point(-nose_len * 0.7, half_width),
                   ship_point(-nose_len * 0.35, 0),
@@ -940,8 +933,8 @@ class DrawUI:
         ERR_DIM = theme.RED_DIM
         ERR_BRIGHT = theme.RED_BRIGHT
         blink_on = (pygame.time.get_ticks() // 400) % 2 == 0
-        pad = 22
-        small = fonts.font(17)
+        pad = px(22)
+        small = ui_font(17)
         self.draw_ui_layout()
 
         # Pilot ID: our callsign, with the link down
@@ -949,45 +942,46 @@ class DrawUI:
         self._frame(rect, ERR)
         self._box_title(rect, "PILOT ID // LOST", ERR)
         rule_y = self._draw_callsign_name(rect, callsign or "UNREGISTERED", ERR_BRIGHT, ERR_DIM)
-        value_x = rect.left + pad + small.size("IFF ")[0] + 14
-        y = rule_y + 10
+        value_x = rect.left + pad + small.size("IFF ")[0] + px(14)
+        y = rule_y + px(10)
         for label, value in (("IFF", "--- ---"), ("LINK", "SIGNAL LOST")):
             self.screen.blit(small.render(label, True, ERR_DIM), (rect.left + pad, y))
             self.screen.blit(small.render(value, True, ERR), (value_x, y))
-            y += small.get_height() + 4
+            y += small.get_height() + px(4)
 
         # Signal relay: the pilot we are watching, with PREV / NEXT
         radar_x, radar_y, radar_size = self._get_radar_bounds()
         top = self._get_panel_rects()[0]
-        relay = pygame.Rect(rect.right + 24, rect.top, max(160, radar_x - 24 - (rect.right + 24)), rect.height)
+        relay = pygame.Rect(rect.right + px(24), rect.top,
+                            max(px(160), radar_x - px(24) - (rect.right + px(24))), rect.height)
         self._frame(relay, ERR)
         self._box_title(relay, "SIGNAL RELAY", ERR)
         self.screen.blit(small.render(f"WATCHING {number:02d} OF {total:02d}", True, ERR_DIM),
-                         (relay.left + pad, relay.top + 34))
-        self.screen.blit(fonts.font(26).render(watched, True, theme.GREEN),
-                         (relay.left + pad, relay.top + 34 + small.get_height() + 4))
-        bh = 34
-        bw = (relay.width - 2 * pad - 10) // 2
-        by = relay.bottom - 16 - bh
+                         (relay.left + pad, relay.top + px(34)))
+        self.screen.blit(ui_font(26).render(watched, True, theme.GREEN),
+                         (relay.left + pad, relay.top + px(34) + small.get_height() + px(4)))
+        bh = px(34)
+        bw = (relay.width - 2 * pad - px(10)) // 2
+        by = relay.bottom - px(16) - bh
         self._button((relay.left + pad, by, bw, bh), "< PREV", 'spectate_prev', enabled=total > 1)
-        self._button((relay.left + pad + bw + 10, by, bw, bh), "NEXT >", 'spectate_next', enabled=total > 1)
+        self._button((relay.left + pad + bw + px(10), by, bw, bh), "NEXT >", 'spectate_next', enabled=total > 1)
 
         # Power: where the fuel and draw readouts would be
-        power = pygame.Rect(radar_x, top.top + 22, radar_size, top.height - 44)
+        power = pygame.Rect(radar_x, top.top + px(22), radar_size, top.height - px(44))
         self._frame(power, ERR)
         self._box_title(power, "POWER // NO FEED", ERR)
-        readout = fonts.font(26)
-        y = power.top + 34
+        readout = ui_font(26)
+        y = power.top + px(34)
         self.screen.blit(readout.render("FUEL", True, ERR_DIM), (power.left + pad, y))
-        self.screen.blit(readout.render(f"|{'-' * 6}|", True, ERR), (power.left + pad + 110, y))
-        y += readout.get_height() + 6
+        self.screen.blit(readout.render(f"|{'-' * 6}|", True, ERR), (power.left + pad + px(110), y))
+        y += readout.get_height() + px(6)
         self.screen.blit(readout.render("DRAW", True, ERR_DIM), (power.left + pad, y))
         dash = readout.render("----", True, ERR)
         self.screen.blit(dash, dash.get_rect(topright=(power.right - pad, y)))
-        alert = fonts.font(20).render("CARRIER LOST", True, ERR)
+        alert = ui_font(20).render("CARRIER LOST", True, ERR)
         if blink_on:
-            box = pygame.Rect(0, 0, alert.get_width() + 24, alert.get_height() + 12)
-            box.midbottom = (power.centerx, power.bottom - 14)
+            box = pygame.Rect(0, 0, alert.get_width() + px(24), alert.get_height() + px(12))
+            box.midbottom = (power.centerx, power.bottom - px(14))
             self._frame(box, ERR, tick=8, width=2)
             self.screen.blit(alert, alert.get_rect(center=box.center))
 
@@ -996,12 +990,12 @@ class DrawUI:
         self._frame(radar, ERR, tick=12)
         self._box_title(radar, "RADAR // NO RETURNS", ERR)
         if blink_on:
-            msg = fonts.font(34).render("NO SIGNAL", True, ERR)
+            msg = ui_font(34).render("NO SIGNAL", True, ERR)
             self.screen.blit(msg, msg.get_rect(center=radar.center))
 
         # Telemetry: the same three columns as ship info, all dashes
-        font = fonts.font(19)
-        line_h = font.get_height() + 3
+        font = ui_font(19)
+        line_h = font.get_height() + px(3)
         columns = [
             [("NAV-COM", ERR_DIM), ("POS  X ------  Y ------", ERR), ("GRID --", ERR),
              ("VEL  X ----  Y ----", ERR), (f"SPD  --- / {SHIP_MAX_SPEED:03d} U", ERR), ("HDG  --- DEG", ERR)],
@@ -1010,32 +1004,32 @@ class DrawUI:
         ]
         rendered = [[font.render(t, True, c) for t, c in col] for col in columns]
         col_w = [max(s.get_width() for s in col) for col in rendered]
-        gap = 44
+        gap = px(44)
         box_w = sum(col_w) + gap * (len(columns) - 1) + 2 * pad
-        box_h = ui.THIN_HEIGHT - 24
+        box_h = px(ui.THIN_HEIGHT - 24)
         _, _, _, world_bottom = self._get_world_bounds()
-        tele = pygame.Rect(24, world_bottom + 12, box_w, box_h)
+        tele = pygame.Rect(px(24), world_bottom + px(12), box_w, box_h)
         self._frame(tele, ERR)
         rows = max(len(c) for c in columns)
-        y0 = tele.top + (box_h - rows * line_h) // 2 + 4
+        y0 = tele.top + (box_h - rows * line_h) // 2 + px(4)
         x = tele.left + pad
         for col, cw in zip(rendered, col_w):
             for i, surf in enumerate(col):
                 self.screen.blit(surf, (x, y0 + i * line_h))
-            pygame.draw.line(self.screen, ERR_DIM, (x, y0 + line_h - 2), (x + cw, y0 + line_h - 2))
+            pygame.draw.line(self.screen, ERR_DIM, (x, y0 + line_h - px(2)), (x + cw, y0 + line_h - px(2)), px(1))
             x += cw + gap
 
         # Controls: the only live buttons left (watch, return)
-        bank_left = tele.right + 48
-        bank_w = self.screen.get_width() - 24 - bank_left
-        if bank_w >= 150 and options:
+        bank_left = tele.right + px(48)
+        bank_w = self.screen.get_width() - px(24) - bank_left
+        if bank_w >= px(150) and options:
             bank = pygame.Rect(bank_left, tele.top, bank_w, tele.height)
             self._frame(bank, ERR, tick=8)
             self._box_title(bank, "CONTROLS // OFFLINE", ERR, steady=True)
-            inner = pygame.Rect(bank.left + 14, bank.top + 24, bank.width - 28, bank.height - 38)
-            n, bgap = len(options), 8
-            bw = min(360, (inner.width - bgap * (n - 1)) // n)
-            bh = min(52, inner.height)
+            inner = pygame.Rect(bank.left + px(14), bank.top + px(24), bank.width - px(28), bank.height - px(38))
+            n, bgap = len(options), px(8)
+            bw = min(px(360), (inner.width - bgap * (n - 1)) // n)
+            bh = min(px(52), inner.height)
             by = inner.centery - bh // 2
             for i, (action, label, key_hint) in enumerate(options):
                 self._button((inner.left + i * (bw + bgap), by, bw, bh), label, action, key=key_hint)
@@ -1067,7 +1061,7 @@ class DrawUI:
         displays = [b for b in displays if b[1] not in hidden_buttons]
 
         left = self._left_column_rect()
-        gap = 12
+        gap = px(12)
         helm_h = (left.height - gap) // 2
         self._bank(pygame.Rect(left.left, left.top, left.width, helm_h), "HELM // WEAPONS", helm, 2)
         self._bank(pygame.Rect(left.left, left.top + helm_h + gap, left.width, left.height - helm_h - gap),
@@ -1081,14 +1075,14 @@ class DrawUI:
         if not specs:
             return
 
-        pad, gap = 14, 8
-        head = 24
+        pad, gap = px(14), px(8)
+        head = px(24)
         rows = (len(specs) + cols - 1) // cols
         inner = pygame.Rect(rect.left + pad, rect.top + head, rect.width - 2 * pad, rect.height - head - pad)
         bw = (inner.width - gap * (cols - 1)) // cols
-        bh = min(92, (inner.height - gap * (rows - 1)) // rows)
+        bh = min(px(92), (inner.height - gap * (rows - 1)) // rows)
         top = inner.top + (inner.height - (bh * rows + gap * (rows - 1))) // 2
-        big, small, key_font = fonts.font(21), fonts.font(14), fonts.font(14)
+        big, small, key_font = ui_font(21), ui_font(14), ui_font(14)
         for i, (label, action, kwargs) in enumerate(specs):
             r, c = divmod(i, cols)
             style = dict(font=big, sub_font=small, key_font=key_font, **kwargs)
@@ -1099,16 +1093,16 @@ class DrawUI:
         if not show:
             return
         top = self._get_panel_rects()[0]
-        font = fonts.font(26)
-        line_h = font.get_height() + 6
+        font = ui_font(26)
+        line_h = font.get_height() + px(6)
 
         radar_x, _, radar_size = self._get_radar_bounds()
-        pad, gap, ack_w = 16, 16, 170
-        alert_font = fonts.font(20)
-        box_h = 2 * line_h + 14 + alert_font.get_height() + 20 + 12  # frame: 12 above the block, to the alert row's bottom
-        y = top.centery - box_h // 2 + 12  # so the frame is centred in the top panel
-        alert_y = y + 2 * line_h + 14
-        panel_box = pygame.Rect(radar_x, y - 12, radar_size, box_h)
+        pad, gap, ack_w = px(16), px(16), px(170)
+        alert_font = ui_font(20)
+        box_h = 2 * line_h + px(14) + alert_font.get_height() + px(20 + 12)  # frame: 12 above the block, to the alert row's bottom
+        y = top.centery - box_h // 2 + px(12)  # so the frame is centred in the top panel
+        alert_y = y + 2 * line_h + px(14)
+        panel_box = pygame.Rect(radar_x, y - px(12), radar_size, box_h)
         self._frame(panel_box, fill=theme.BG, tick=10, width=1)
 
         # Top rows: [fault button] then label / bar / value columns filling the rest
@@ -1157,7 +1151,7 @@ class DrawUI:
             if not active:
                 continue
             surf = alert_font.render(text, True, theme.RED)
-            box = pygame.Rect(0, 0, surf.get_width() + 24, surf.get_height() + 12)
+            box = pygame.Rect(0, 0, surf.get_width() + px(24), surf.get_height() + px(12))
             if side == "left":
                 box.topleft = (panel_box.left + pad, alert_y)
             else:
@@ -1177,7 +1171,7 @@ class DrawUI:
         self._frame(rect)
         self._box_title(rect, "PILOT ID")
 
-        pad = 22
+        pad = px(22)
         x = rect.left + pad
         name = callsign or "UNREGISTERED"
         rule_y = self._draw_callsign_name(rect, name, theme.AMBER_BRIGHT, theme.AMBER_FAINT)
@@ -1193,10 +1187,10 @@ class DrawUI:
             ("IFF", f"{iff >> 12:03X}-{iff & 0xFFF:03X}", LIVE),
             ("NET", net_value, net_color),
         ]
-        small = fonts.font(17)
-        line_h = small.get_height() + 4
-        value_x = x + small.size("IFF ")[0] + 14
-        y = rule_y + 10
+        small = ui_font(17)
+        line_h = small.get_height() + px(4)
+        value_x = x + small.size("IFF ")[0] + px(14)
+        y = rule_y + px(10)
         for label, value, color in rows:
             self.screen.blit(small.render(label, True, LABEL), (x, y))
             self.screen.blit(small.render(value, True, color), (value_x, y))
@@ -1204,11 +1198,11 @@ class DrawUI:
 
         # Slot number at the end of the IFF row, and a carrier lamp at the end of the NET row
         slot = small.render(f"SLOT {player_id:02d}", True, LABEL)
-        self.screen.blit(slot, slot.get_rect(topright=(rect.right - pad, rule_y + 10)))
+        self.screen.blit(slot, slot.get_rect(topright=(rect.right - pad, rule_y + px(10))))
         if not local:
             lamp_on = (pygame.time.get_ticks() // 700) % 2 == 0
-            lamp = (rect.right - pad - 4, rule_y + 10 + line_h + small.get_height() // 2)
-            pygame.draw.circle(self.screen, LIVE if lamp_on else theme.GREEN_FAINT, lamp, 4)
+            lamp = (rect.right - pad - px(4), rule_y + px(10) + line_h + small.get_height() // 2)
+            pygame.draw.circle(self.screen, LIVE if lamp_on else theme.GREEN_FAINT, lamp, px(4))
 
     # Cloaking readout in the bottom console: how visible the ship is to others, as a
     # percentage (100 = fully visible, 0 = hidden), plus five cells filled up to the cloaking
@@ -1223,31 +1217,31 @@ class DrawUI:
         self._frame(rect)
         self._box_title(rect, "CLOAKING")
 
-        value = fonts.font(15).render(f"VISIBILITY: {visible_percent}%", True,
+        value = ui_font(15).render(f"VISIBILITY: {visible_percent}%", True,
                                       theme.GREEN if visible_percent else theme.AMBER_DIM)
-        self.screen.blit(value, value.get_rect(topright=(rect.right - 22, rect.top + 6)))
+        self.screen.blit(value, value.get_rect(topright=(rect.right - px(22), rect.top + px(6))))
 
         # One row: DECLOAK | five level cells | CLOAK. The buttons register their own clicks.
-        pad, gap = 22, 12
-        btn_w = btn_h = 48  # square
-        row_top = rect.centery - btn_h // 2 + 12
+        pad, gap = px(22), px(12)
+        btn_w = btn_h = px(48)  # square
+        row_top = rect.centery - btn_h // 2 + px(12)
         self._button(pygame.Rect(rect.left + pad, row_top, btn_w, btn_h), "-", "cloak_down",
-                     enabled=level > 0, font=fonts.font(26))
+                     enabled=level > 0, font=ui_font(26))
         self._button(pygame.Rect(rect.right - pad - btn_w, row_top, btn_w, btn_h), "+", "cloak_up",
-                     enabled=level < 5, font=fonts.font(26))
+                     enabled=level < 5, font=ui_font(26))
 
         cells_left = rect.left + pad + btn_w + gap
         cells_right = rect.right - pad - btn_w - gap
-        cell_gap = 8
+        cell_gap = px(8)
         cell_w = (cells_right - cells_left - 4 * cell_gap) // 5
-        cell_h = 22
+        cell_h = px(22)
         y = row_top + (btn_h - cell_h) // 2
         for i in range(5):
             cell = pygame.Rect(cells_left + i * (cell_w + cell_gap), y, cell_w, cell_h)
             if i < level:
                 pygame.draw.rect(self.screen, theme.GREEN, cell)
             else:
-                pygame.draw.rect(self.screen, theme.AMBER_DIM, cell, 2)
+                pygame.draw.rect(self.screen, theme.AMBER_DIM, cell, px(2))
 
     # Navigation readout: in the bottom console, between the deep field scan and cloaking.
     def draw_navcom(self, ship, show=True):
@@ -1257,9 +1251,9 @@ class DrawUI:
         self._frame(rect)
         self._box_title(rect, "NAV-COM")
 
-        font = fonts.font(20)
-        line_h = font.get_height() + 4
-        pad = 22
+        font = ui_font(20)
+        line_h = font.get_height() + px(4)
+        pad = px(22)
         rows = [
             ("POS", f"X {int(ship.pos_x):+06d}   Y {int(ship.pos_y):+06d}"),
             ("GRID", self.grid_ref(ship.pos_x, ship.pos_y)),
@@ -1267,8 +1261,8 @@ class DrawUI:
             ("SPD", f"{ship.speed:03.0f} / {SHIP_MAX_SPEED:03d} U"),
             ("HDG", f"{int(ship.heading) % 360:03d} DEG"),
         ]
-        label_w = max(font.size(label)[0] for label, _ in rows) + 24
-        top = rect.top + 28 + max(0, (rect.height - 36 - len(rows) * line_h) // 2)  # 28: below the title line
+        label_w = max(font.size(label)[0] for label, _ in rows) + px(24)
+        top = rect.top + px(28) + max(0, (rect.height - px(36) - len(rows) * line_h) // 2)  # 28: below the title line
         for i, (label, value) in enumerate(rows):
             y = top + i * line_h
             self.screen.blit(font.render(label, True, theme.AMBER_DIM), (rect.left + pad, y))
@@ -1283,8 +1277,8 @@ class DrawUI:
                        dfs_warning='idle', show=True):
         if not show:
             return
-        font = fonts.font(19)
-        line_h = font.get_height() + 3
+        font = ui_font(19)
+        line_h = font.get_height() + px(3)
 
         LIVE = theme.GREEN  # live readouts / system on
         CAUTION = theme.AMBER_BRIGHT
@@ -1326,21 +1320,21 @@ class DrawUI:
         rendered = [[font.render(t, True, c) for t, c in col] for col in columns]
         col_w = [max(s.get_width() for s in col) for col in rendered]
 
-        pad, gap = 22, 44
+        pad, gap = px(22), px(44)
         box_w = sum(col_w) + gap * (len(columns) - 1) + pad * 2
-        box_h = ui.THIN_HEIGHT - 24
+        box_h = px(ui.THIN_HEIGHT - 24)
         _, _, _, world_bottom = self._get_world_bounds()
-        box = pygame.Rect(24, world_bottom + 12, box_w, box_h)  # left end of the bottom strip
+        box = pygame.Rect(px(24), world_bottom + px(12), box_w, box_h)  # left end of the bottom strip
         self._frame(box)
 
         rows = max(len(c) for c in columns)
-        y0 = box.top + (box_h - rows * line_h) // 2 + 4
+        y0 = box.top + (box_h - rows * line_h) // 2 + px(4)
         x = box.left + pad
         for col, w in zip(rendered, col_w):
             for i, surf in enumerate(col):
                 self.screen.blit(surf, (x, y0 + i * line_h))
             # Heading underline
-            pygame.draw.line(self.screen, theme.AMBER_FAINT, (x, y0 + line_h - 2), (x + w, y0 + line_h - 2))
+            pygame.draw.line(self.screen, theme.AMBER_FAINT, (x, y0 + line_h - px(2)), (x + w, y0 + line_h - px(2)), px(1))
             x += w + gap
 
     # Overlay on the ship in the flight window: a heading vector (where the nose points)
@@ -1354,37 +1348,38 @@ class DrawUI:
         old_clip = self.screen.get_clip()
         self.screen.set_clip(self._viewport_rect())
 
-        font = fonts.font(16)
-        start_gap = 44  # start outside the ship sprite
+        font = ui_font(16)
+        start_gap = 44  # world pixels, like the ship sprite: start outside the ship sprite
 
         # Heading: where the nose points
         fx, fy = ship.facing()
         hdg_start = (cx + fx * start_gap, cy + fy * start_gap)
-        hdg_end = (cx + fx * (start_gap + k.HEADING_LEN), cy + fy * (start_gap + k.HEADING_LEN))
+        hdg_end = (cx + fx * (start_gap + px(k.HEADING_LEN)), cy + fy * (start_gap + px(k.HEADING_LEN)))
         self._arrow(hdg_start, hdg_end, theme.AMBER_BRIGHT)
         label = font.render(f"HDG {int(ship.heading) % 360:03d}", True, theme.AMBER_BRIGHT)
-        self.screen.blit(label, label.get_rect(midbottom=(hdg_end[0], hdg_end[1] - 6)))
+        self.screen.blit(label, label.get_rect(midbottom=(hdg_end[0], hdg_end[1] - px(6))))
 
         # Velocity: where it is moving, length = speed
         if ship.speed > 1:
             ux, uy = ship.dir_x, ship.dir_y
-            length = k.SPEED_LEN * min(1.0, ship.speed / SHIP_MAX_SPEED)
+            length = px(k.SPEED_LEN) * min(1.0, ship.speed / SHIP_MAX_SPEED)
             vel_start = (cx + ux * start_gap, cy + uy * start_gap)
             vel_end = (cx + ux * (start_gap + length), cy + uy * (start_gap + length))
             self._arrow(vel_start, vel_end, theme.GREEN_BRIGHT)
             label = font.render(f"SPD {ship.speed:03.0f} U", True, theme.GREEN_BRIGHT)
-            self.screen.blit(label, label.get_rect(topleft=(vel_end[0] + 8, vel_end[1] + 8)))
+            self.screen.blit(label, label.get_rect(topleft=(vel_end[0] + px(8), vel_end[1] + px(8))))
 
         self.screen.set_clip(old_clip)
 
     # A line from start to end with an arrowhead at end.
     def _arrow(self, start, end, color, width=2, head=10):
-        pygame.draw.line(self.screen, color, start, end, width)
+        pygame.draw.line(self.screen, color, start, end, px(width))
         dx, dy = end[0] - start[0], end[1] - start[1]
         length = math.hypot(dx, dy)
         if length < 1:
             return
         ux, uy = dx / length, dy / length
+        head = px(head)
         base = (end[0] - ux * head, end[1] - uy * head)
         wing = (-uy * head * 0.5, ux * head * 0.5)
         pygame.draw.polygon(self.screen, color, [
@@ -1405,11 +1400,12 @@ class DrawUI:
             labels = ["PNL-A1  //  ACCESS 7C", "PNL-B4  //  NO STEP", "PNL-L2", "PNL-R2"]
             # Old burned-in readouts go in the bottom panel's empty wings either side
             # of ship telemetry (panel-local coords). Other panels are covered by instruments.
-            ghost_w = ui.PANEL_WIDTH - 140
-            ghost_h = ui.THIN_HEIGHT - 44
+            ghost_w = px(ui.PANEL_WIDTH - 140)
+            ghost_h = px(ui.THIN_HEIGHT - 44)
             ghosts = [
                 (),
-                ((24, 22, ghost_w, ghost_h), (screen_width - 24 - ghost_w, 22, ghost_w, ghost_h)),
+                ((px(24), px(22), ghost_w, ghost_h),
+                 (screen_width - px(24) - ghost_w, px(22), ghost_w, ghost_h)),
                 (),
                 (),
             ]
@@ -1441,8 +1437,8 @@ class DrawUI:
             screen_x = x - camera_x
             if world_left < screen_x < world_right:
                 pygame.draw.line(self.screen, k.SCOPE_GRID, (screen_x, world_top), (screen_x, world_bottom), 1)
-                label = self.font_grid.render(str(int(x)), True, k.SCOPE_GRID_TEXT)
-                self.screen.blit(label, (screen_x + 5, world_top + 5))
+                label = ui_legacy_font(k.FONT_SIZE_GRID).render(str(int(x)), True, k.SCOPE_GRID_TEXT)
+                self.screen.blit(label, (screen_x + px(5), world_top + px(5)))
             x += GRID_SIZE
 
         y = start_y
@@ -1450,8 +1446,8 @@ class DrawUI:
             screen_y = y - camera_y
             if world_top < screen_y < world_bottom:
                 pygame.draw.line(self.screen, k.SCOPE_GRID, (world_left, screen_y), (world_right, screen_y), 1)
-                label = self.font_grid.render(str(int(y)), True, k.SCOPE_GRID_TEXT)
-                self.screen.blit(label, (world_left + 5, screen_y + 5))
+                label = ui_legacy_font(k.FONT_SIZE_GRID).render(str(int(y)), True, k.SCOPE_GRID_TEXT)
+                self.screen.blit(label, (world_left + px(5), screen_y + px(5)))
             y += GRID_SIZE
 
     # Red blinking border around the flight window while a missile has a lock on us.
@@ -1463,7 +1459,7 @@ class DrawUI:
         if (self.lock_blink_counter // k.LOCK_BLINK_FREQUENCY) % 2 == 0:
             pygame.draw.rect(self.screen, theme.RED,
                              (world_left, world_top, world_right - world_left, world_bottom - world_top),
-                             k.LOCK_BORDER_WIDTH)
+                             px(k.LOCK_BORDER_WIDTH))
 
     # Flashing warning text when the ship is laser painted by an enemy.
     def draw_laser_painted_warning(self, painted, show=True):
@@ -1473,9 +1469,9 @@ class DrawUI:
         self.lock_blink_counter += 1
         if (self.lock_blink_counter // k.LASER_PAINTED_BLINK_FREQUENCY) % 2 == 0:
             # Bottom-right corner, clear of the gun-solution banner up top
-            warning_text = self.font_body.render("LASER LOCK DETECTED", True, theme.RED_BRIGHT)
-            self.screen.blit(warning_text, (world_right - warning_text.get_width() - 20,
-                                            world_bottom - warning_text.get_height() - 20))
+            warning_text = ui_legacy_font(k.FONT_SIZE_BODY).render("LASER LOCK DETECTED", True, theme.RED_BRIGHT)
+            self.screen.blit(warning_text, (world_right - warning_text.get_width() - px(20),
+                                            world_bottom - warning_text.get_height() - px(20)))
 
     # Subtle catastrophe alert: a pulsing red border, a faint vignette and corner Xs.
     def draw_catastrophe_warning(self, active, show=True):
@@ -1493,8 +1489,8 @@ class DrawUI:
             self.screen.blit(vignette_surface, (0, 0))
 
             x_color = theme.RED_BRIGHT
-            x_size = 30
-            thickness = 2
+            x_size = px(30)
+            thickness = px(2)
 
             # Top-Left X
             pygame.draw.line(self.screen, x_color,
@@ -1509,7 +1505,7 @@ class DrawUI:
                              (world_right - x_size, world_top), (world_right, world_top + x_size), thickness)
 
             pygame.draw.rect(self.screen, theme.RED_BRIGHT,
-                             (world_left, world_top, world_right - world_left, world_bottom - world_top), 2)
+                             (world_left, world_top, world_right - world_left, world_bottom - world_top), px(2))
 
     # Flashing red box in the bottom-left of the flight window while hull is critical.
     def draw_low_health_warning(self, low_health, show=True):
@@ -1517,21 +1513,21 @@ class DrawUI:
             return
 
         world_left, _, _, world_bottom = self._get_world_bounds()
-        box_x = world_left + 10
-        box_y = world_bottom - 120
-        box_w = 150
-        box_h = 100
+        box_x = world_left + px(10)
+        box_y = world_bottom - px(120)
+        box_w = px(150)
+        box_h = px(100)
 
         self.health_blink_counter += 1
         if (self.health_blink_counter // 10) % 2 == 0:  # on for 10 frames, off for 10
             color = theme.RED
-            pygame.draw.rect(self.screen, color, (box_x, box_y, box_w, box_h), 2)
-            pygame.draw.line(self.screen, color, (box_x, box_y), (box_x + box_w, box_y + box_h), 2)
-            pygame.draw.line(self.screen, color, (box_x + box_w, box_y), (box_x, box_y + box_h), 2)
+            pygame.draw.rect(self.screen, color, (box_x, box_y, box_w, box_h), px(2))
+            pygame.draw.line(self.screen, color, (box_x, box_y), (box_x + box_w, box_y + box_h), px(2))
+            pygame.draw.line(self.screen, color, (box_x + box_w, box_y), (box_x, box_y + box_h), px(2))
 
-            text = self.font_critical.render("HULL CRITICAL", True, color)
+            text = ui_font(15).render("HULL CRITICAL", True, color)
             text_x = box_x + (box_w - text.get_width()) // 2
-            text_y = box_y + box_h - text.get_height() - 6
+            text_y = box_y + box_h - text.get_height() - px(6)
             self.screen.blit(text, (text_x, text_y))
 
     # Blinking yellow box with a warning while the ship's shrink value is above 0.
@@ -1540,13 +1536,13 @@ class DrawUI:
             return
 
         world_left, world_right, world_top, _ = self._get_world_bounds()
-        text = self.font_critical.render("RADIATION DETECTED", True, k.RADIATION_YELLOW)
-        box = pygame.Rect(0, 0, text.get_width() + 24, text.get_height() + 14)
-        box.midtop = ((world_left + world_right) // 2, world_top + 12)
+        text = ui_font(15).render("RADIATION DETECTED", True, k.RADIATION_YELLOW)
+        box = pygame.Rect(0, 0, text.get_width() + px(24), text.get_height() + px(14))
+        box.midtop = ((world_left + world_right) // 2, world_top + px(12))
 
         self.radiation_blink_counter += 1
         if (self.radiation_blink_counter // k.RADIATION_BLINK_FREQUENCY) % 2 == 0:
-            pygame.draw.rect(self.screen, k.RADIATION_YELLOW, box, 2)
+            pygame.draw.rect(self.screen, k.RADIATION_YELLOW, box, px(2))
             self.screen.blit(text, text.get_rect(center=box.center))
 
     # A single orange line sweeping left to right across the flight window, with the
@@ -1568,13 +1564,13 @@ class DrawUI:
         pulse = 0.4 + 0.6 * abs(math.sin(self.pirate_sweep_counter * 0.05))
         brightness = int(255 * pulse)
         color = (brightness, brightness // 4, brightness // 5)
-        pygame.draw.line(self.screen, color, (line_x, world_top), (line_x, world_bottom), 2)
+        pygame.draw.line(self.screen, color, (line_x, world_top), (line_x, world_bottom), px(2))
 
         # Text pulses between readable and bright, never as dim as the sweep line
         text_color = theme.RED if pulse < 0.7 else theme.RED_BRIGHT
-        warning_text = self.font_pirate_lock.render("HOSTILE GUN SOLUTION DETECTED", True, text_color)
-        text_rect = warning_text.get_rect(midtop=((world_left + world_right) // 2, world_top + 18))
-        pygame.draw.rect(self.screen, theme.BLACK, text_rect.inflate(16, 6))
+        warning_text = ui_legacy_font(24).render("HOSTILE GUN SOLUTION DETECTED", True, text_color)
+        text_rect = warning_text.get_rect(midtop=((world_left + world_right) // 2, world_top + px(18)))
+        pygame.draw.rect(self.screen, theme.BLACK, text_rect.inflate(px(16), px(6)))
         self.screen.blit(warning_text, text_rect)
 
     # Random horizontal bands of light across the screen when the ship takes a hit.
@@ -1589,8 +1585,8 @@ class DrawUI:
         num_glitch_lines = random.randint(3, 8)
         for _ in range(num_glitch_lines):
             glitch_y = random.randint(0, screen_height)
-            glitch_height = random.randint(2, 8)
-            glitch_width = random.randint(100, 400)
+            glitch_height = random.randint(px(2), px(8))
+            glitch_width = random.randint(px(100), px(400))
             glitch_x = random.randint(0, screen_width - glitch_width)
             glitch_color = (255, 255, random.randint(100, 200), 120)
             pygame.draw.rect(glitch, glitch_color, (glitch_x, glitch_y, glitch_width, glitch_height))
@@ -1602,22 +1598,22 @@ class DrawUI:
         if not show or not out_of_fuel or self._fuel_bar_rect is None:
             return
 
-        box = self._fuel_bar_rect.inflate(8, 8)
+        box = self._fuel_bar_rect.inflate(px(8), px(8))
         on = (pygame.time.get_ticks() // 350) % 2 == 0
         col = theme.RED_BRIGHT if on else theme.RED
         self._frame(box, col, fill=theme.BG, tick=10, width=2)
 
-        title = fonts.font(20).render("DEPLETED", True, col)
+        title = ui_font(20).render("DEPLETED", True, col)
         self.screen.blit(title, title.get_rect(center=box.center))
 
         # Systems throttled: a second tag in the free space under the bar, the largest size that fits
         if self._throttle_rect is not None:
-            tag = self._throttle_rect.inflate(8, 4)
+            tag = self._throttle_rect.inflate(px(8), px(4))
             size = 18
-            while size > 10 and fonts.font(size).size("SYSTEMS THROTTLED")[0] > tag.width - 8:
+            while size > 10 and ui_font(size).size("SYSTEMS THROTTLED")[0] > tag.width - px(8):
                 size -= 1
             self._frame(tag, col, fill=theme.BG, tick=10, width=2)
-            sub = fonts.font(size).render("SYSTEMS THROTTLED", True, col)
+            sub = ui_font(size).render("SYSTEMS THROTTLED", True, col)
             self.screen.blit(sub, sub.get_rect(center=tag.center))
 
     # Large text centred at the top of the flight window, on a dark plate. Call it every
@@ -1626,20 +1622,20 @@ class DrawUI:
         if not show or not text:
             return
         world_left, world_right, world_top, _ = self._get_world_bounds()
-        banner_font = fonts.font(44)
+        banner_font = ui_font(44)
         line_color = color or theme.GREEN_BRIGHT
-        max_width = (world_right - world_left) - 120
+        max_width = (world_right - world_left) - px(120)
         lines = self._wrap_banner_text(text, banner_font, max_width)
         line_surfs = [banner_font.render(line, True, line_color) for line in lines]
         line_height = banner_font.get_linesize()
         block_width = max(surf.get_width() for surf in line_surfs)
         block_height = line_height * len(line_surfs)
         center_x = (world_left + world_right) // 2
-        block_top = world_top + 60
-        plate = pygame.Rect(0, 0, block_width, block_height).inflate(40, 16)
-        plate.midtop = (center_x, block_top - 8)
+        block_top = world_top + px(60)
+        plate = pygame.Rect(0, 0, block_width, block_height).inflate(px(40), px(16))
+        plate.midtop = (center_x, block_top - px(8))
         pygame.draw.rect(self.screen, theme.BLACK, plate)
-        pygame.draw.rect(self.screen, line_color, plate, 2)
+        pygame.draw.rect(self.screen, line_color, plate, px(2))
         for index, surf in enumerate(line_surfs):
             self.screen.blit(surf, surf.get_rect(midtop=(center_x, block_top + index * line_height)))
 
@@ -1667,15 +1663,15 @@ class DrawUI:
         world_left, world_right, world_top, world_bottom = self._get_world_bounds()
 
         # Corner warning indicator (top right; the top left one is gone)
-        pygame.draw.circle(self.screen, theme.RED, (world_right - 15, world_top + 15), 8, 2)
+        pygame.draw.circle(self.screen, theme.RED, (world_right - px(15), world_top + px(15)), px(8), px(2))
 
         # Plain text in a red box, fixed at the top-left of the flight window
-        warning_text = self.font_dfs_warning.render("STATUS: DFS SWEEP DETECTED", True, theme.RED)
-        pad = 10
-        box = pygame.Rect(world_left + 32, world_top + 30,
+        warning_text = ui_legacy_font(28).render("STATUS: DFS SWEEP DETECTED", True, theme.RED)
+        pad = px(10)
+        box = pygame.Rect(world_left + px(32), world_top + px(30),
                           warning_text.get_width() + pad * 2, warning_text.get_height() + pad * 2)
         pygame.draw.rect(self.screen, theme.BG, box)
-        pygame.draw.rect(self.screen, theme.RED, box, 2)
+        pygame.draw.rect(self.screen, theme.RED, box, px(2))
         self.screen.blit(warning_text, (box.left + pad, box.top + pad))
 
     # Banner at the top of the flight window confirming a missile reached its contact.
@@ -1690,10 +1686,10 @@ class DrawUI:
         if time_left < duration / 3 and int(time_left * 12) % 2:
             return
 
-        text = self.font_scan_header.render("MSL STATUS: CONTACT CONFIRMED", True, theme.AMBER_BRIGHT)
-        pad_x, pad_y = 18, 8
+        text = ui_legacy_font(k.FONT_SIZE_SCAN_HEADER).render("MSL STATUS: CONTACT CONFIRMED", True, theme.AMBER_BRIGHT)
+        pad_x, pad_y = px(18), px(8)
         box = pygame.Rect(0, 0, text.get_width() + pad_x * 2, text.get_height() + pad_y * 2)
-        box.topleft = (world_left + 16, world_top + 64)
+        box.topleft = (world_left + px(16), world_top + px(64))
         self._frame(box, theme.AMBER, fill=theme.BG, tick=6)
         self.screen.blit(text, (box.left + pad_x, box.top + pad_y))
 
@@ -1709,10 +1705,10 @@ class DrawUI:
         if time_left < duration / 4 and int(time_left * 12) % 2:
             return
 
-        text = self.font_scan_header.render(f"SHIP DESTRUCTION DETECTED: {callsign}", True, theme.RED)
-        pad_x, pad_y = 18, 8
+        text = ui_legacy_font(k.FONT_SIZE_SCAN_HEADER).render(f"SHIP DESTRUCTION DETECTED: {callsign}", True, theme.RED)
+        pad_x, pad_y = px(18), px(8)
         box = pygame.Rect(0, 0, text.get_width() + pad_x * 2, text.get_height() + pad_y * 2)
-        box.midtop = ((world_left + world_right) // 2, world_top + 16)
+        box.midtop = ((world_left + world_right) // 2, world_top + px(16))
         self._frame(box, theme.RED, fill=theme.BG, tick=6)
         self.screen.blit(text, (box.left + pad_x, box.top + pad_y))
 
@@ -1730,8 +1726,8 @@ class DrawUI:
 
         # CRT phosphor background and scanlines
         pygame.draw.rect(self.screen, theme.BG_SENSOR, radar_rect)
-        for y in range(radar_y, radar_y + radar_size, 4):
-            pygame.draw.line(self.screen, theme.GREEN_FAINT, (radar_x, y), (radar_x + radar_size, y))
+        for y in range(radar_y, radar_y + radar_size, px(4)):
+            pygame.draw.line(self.screen, theme.GREEN_FAINT, (radar_x, y), (radar_x + radar_size, y), px(1))
         self._frame(radar_rect, k.HUD_AMBER, fill=None, tick=15)
 
         # Tactical grid. The hardware clip keeps edge blips and grid lines inside the scope.
@@ -1739,23 +1735,23 @@ class DrawUI:
         self.screen.set_clip(radar_rect)
 
         grid_color = theme.GREEN_DIM
-        pygame.draw.line(self.screen, grid_color, (radar_x, center_y), (radar_x + radar_size, center_y), 1)
-        pygame.draw.line(self.screen, grid_color, (center_x, radar_y), (center_x, radar_y + radar_size), 1)
+        pygame.draw.line(self.screen, grid_color, (radar_x, center_y), (radar_x + radar_size, center_y), px(1))
+        pygame.draw.line(self.screen, grid_color, (center_x, radar_y), (center_x, radar_y + radar_size), px(1))
 
         if rings:
             ring_layer = pygame.Surface(radar_rect.size, pygame.SRCALPHA)
             for i in range(1, rings + 1):
                 pygame.draw.circle(ring_layer, theme.RANGE_RING, (center_x - radar_x, center_y - radar_y),
-                                   round(max_radius * i / rings), 1)
+                                   round(max_radius * i / rings), px(1))
             self.screen.blit(ring_layer, radar_rect.topleft)
 
         # Out-of-bounds caution hatching: red diagonal lines wherever the map ends
         scale = max_radius / ui.RADAR_SCALE
-        px, py = player_ship.rect.center
-        w_left = center_x + (0 - px) * scale
-        w_right = center_x + (self.world_width - px) * scale
-        w_top = center_y + (0 - py) * scale
-        w_bottom = center_y + (self.world_height - py) * scale
+        player_x, player_y = player_ship.rect.center
+        w_left = center_x + (0 - player_x) * scale
+        w_right = center_x + (self.world_width - player_x) * scale
+        w_top = center_y + (0 - player_y) * scale
+        w_bottom = center_y + (self.world_height - player_y) * scale
         r = radar_rect
         strips = []
         if w_top > r.top:
@@ -1770,35 +1766,35 @@ class DrawUI:
             strips.append(pygame.Rect(x0, r.top, r.right - x0, r.height))
         for strip in strips:
             self.screen.set_clip(strip.clip(r))
-            for d in range(-r.height, r.width, 80):
+            for d in range(-r.height, r.width, px(80)):
                 pygame.draw.line(self.screen, k.CAUTION_RED,
-                                 (r.left + d, r.bottom), (r.left + d + r.height, r.top), 2)
+                                 (r.left + d, r.bottom), (r.left + d + r.height, r.top), px(2))
         self.screen.set_clip(radar_rect)
         # Solid red boundary line at the world edge
         edge = pygame.Rect(int(w_left), int(w_top), int(w_right - w_left), int(w_bottom - w_top))
-        pygame.draw.rect(self.screen, k.CAUTION_RED, edge, 2)
+        pygame.draw.rect(self.screen, k.CAUTION_RED, edge, px(2))
 
         # Player position: a glowing cluster
-        pygame.draw.circle(self.screen, theme.WHITE, (center_x, center_y), 3)
-        pygame.draw.rect(self.screen, theme.WHITE, (center_x - 1, center_y - 1, 3, 3))
+        pygame.draw.circle(self.screen, theme.WHITE, (center_x, center_y), px(3))
+        pygame.draw.rect(self.screen, theme.WHITE, (center_x - px(1), center_y - px(1), px(3), px(3)))
 
         # Sweep arm: only while a scan is running (R), pointing at the ray being cast
         if sweep_angle is not None:
             arm_end = (center_x + math.cos(sweep_angle) * max_radius, center_y + math.sin(sweep_angle) * max_radius)
-            pygame.draw.line(self.screen, theme.GREEN_BRIGHT, (center_x, center_y), arm_end, 1)
+            pygame.draw.line(self.screen, theme.GREEN_BRIGHT, (center_x, center_y), arm_end, px(1))
 
         # Plot signatures as blocky retro blips
         for sig_x, sig_y, color in signatures:
-            radar_px = int(center_x + (sig_x - px) * scale)
-            radar_py = int(center_y + (sig_y - py) * scale)
-            pygame.draw.rect(self.screen, color, (radar_px - 2, radar_py - 2, 4, 4))
-            pygame.draw.rect(self.screen, tuple(min(255, c + 110) for c in color), (radar_px - 1, radar_py - 1, 2, 2))
+            radar_px = int(center_x + (sig_x - player_x) * scale)
+            radar_py = int(center_y + (sig_y - player_y) * scale)
+            pygame.draw.rect(self.screen, color, (radar_px - px(2), radar_py - px(2), px(4), px(4)))
+            pygame.draw.rect(self.screen, tuple(min(255, c + 110) for c in color), (radar_px - px(1), radar_py - px(1), px(2), px(2)))
 
         # Moving contacts from the close range scan: a red dot where each one is now
         for mover_x, mover_y in movers:
-            radar_px = int(center_x + (mover_x - px) * scale)
-            radar_py = int(center_y + (mover_y - py) * scale)
-            pygame.draw.circle(self.screen, theme.RED, (radar_px, radar_py), 3)
+            radar_px = int(center_x + (mover_x - player_x) * scale)
+            radar_py = int(center_y + (mover_y - player_y) * scale)
+            pygame.draw.circle(self.screen, theme.RED, (radar_px, radar_py), px(3))
 
         self.screen.set_clip(old_clip)
 
@@ -1810,10 +1806,11 @@ class DrawUI:
         if show_label:
             label_text = "RADAR [ SCANNING... ]" if is_scanning else "RADAR"
             label_color = k.DATA if is_scanning else k.HUD_AMBER
-            label = self.font_radar_label.render(label_text, True, label_color)
-            label_bg = pygame.Rect(radar_x + 12, radar_y + 12, label.get_width() + 16, label.get_height() + 6)
+            label = ui_legacy_font(k.FONT_SIZE_RADAR).render(label_text, True, label_color)
+            label_bg = pygame.Rect(radar_x + px(12), radar_y + px(12),
+                                   label.get_width() + px(16), label.get_height() + px(6))
             pygame.draw.rect(self.screen, theme.BLACK, label_bg)
-            pygame.draw.rect(self.screen, label_color, label_bg, 1)
+            pygame.draw.rect(self.screen, label_color, label_bg, px(1))
             self.screen.blit(label, label.get_rect(center=label_bg.center))
 
     # SWEEP button in the scope's top-right corner. Drawn after the laser and DFS lines
@@ -1822,8 +1819,8 @@ class DrawUI:
         if not show:
             return
         radar_x, radar_y, radar_size = self._get_radar_bounds()
-        sweep = pygame.Rect(0, 0, 112, 34)
-        sweep.topright = (radar_x + radar_size - 12, radar_y + 12)
+        sweep = pygame.Rect(0, 0, px(112), px(34))
+        sweep.topright = (radar_x + radar_size - px(12), radar_y + px(12))
         self._button(sweep, "SWEEP", 'radar_sweep', key="R", lit=is_scanning)
 
     # Tint each distance band (1 = innermost, of `band_count`) in `hot` on the radar.
@@ -1874,14 +1871,14 @@ class DrawUI:
         # machine the beam comes out of (drawn over the beam start)
         rad = math.radians(laser.direction)
         fx, fy = math.cos(rad), math.sin(rad)  # along the beam
-        px, py = -fy, fx  # across the beam
+        side_x, side_y = -fy, fx  # across the beam
         half_len, half_wid = 5, 4
         cx, cy = screen_origin
         emitter = [
-            (cx + fx * half_len + px * half_wid, cy + fy * half_len + py * half_wid),
-            (cx + fx * half_len - px * half_wid, cy + fy * half_len - py * half_wid),
-            (cx - fx * half_len - px * half_wid, cy - fy * half_len - py * half_wid),
-            (cx - fx * half_len + px * half_wid, cy - fy * half_len + py * half_wid),
+            (cx + fx * half_len + side_x * half_wid, cy + fy * half_len + side_y * half_wid),
+            (cx + fx * half_len - side_x * half_wid, cy + fy * half_len - side_y * half_wid),
+            (cx - fx * half_len - side_x * half_wid, cy - fy * half_len - side_y * half_wid),
+            (cx - fx * half_len + side_x * half_wid, cy - fy * half_len + side_y * half_wid),
         ]
         pygame.draw.polygon(self.screen, theme.BG, emitter)
         pygame.draw.polygon(self.screen, beam_color, emitter, 1)
@@ -1892,10 +1889,10 @@ class DrawUI:
 
         # Range readout beside the impact point while locked
         if laser.laser_locked:
-            label = self.font_scan_body.render(f"RNG {laser.target_distance:.0f}", True, theme.AMBER_BRIGHT)
-            label_rect = label.get_rect(midleft=(screen_end[0] + 14, screen_end[1] - 14))
+            label = ui_legacy_font(k.FONT_SIZE_SCAN_BODY).render(f"RNG {laser.target_distance:.0f}", True, theme.AMBER_BRIGHT)
+            label_rect = label.get_rect(midleft=(screen_end[0] + px(14), screen_end[1] - px(14)))
             label_rect.clamp_ip(viewport)
-            pygame.draw.rect(self.screen, theme.BG, label_rect.inflate(6, 2))
+            pygame.draw.rect(self.screen, theme.BG, label_rect.inflate(px(6), px(2)))
             self.screen.blit(label, label_rect)
 
         self.screen.set_clip(None)
@@ -1907,8 +1904,8 @@ class DrawUI:
         radar_end_y = int(center_y + rel_y * radar_scale)
 
         self.screen.set_clip(radar_rect)
-        pygame.draw.line(self.screen, beam_color, (center_x, center_y), (radar_end_x, radar_end_y), 1)
-        pygame.draw.rect(self.screen, theme.WHITE, (radar_end_x - 1, radar_end_y - 1, 2, 2))
+        pygame.draw.line(self.screen, beam_color, (center_x, center_y), (radar_end_x, radar_end_y), px(1))
+        pygame.draw.rect(self.screen, theme.WHITE, (radar_end_x - px(1), radar_end_y - px(1), px(2), px(2)))
         self.screen.set_clip(None)
 
     # Mining beam from the ship to the rock it is burning: a layered beam with a pulsing
@@ -1941,10 +1938,10 @@ class DrawUI:
             pygame.draw.line(ring, (*theme.WHITE, alpha), (20, 20 - flare_size), (20, 20 + flare_size), 1)
         self.screen.blit(ring, (ex - 20, ey - 20))
 
-        label = self.font_scan_body.render(f"{rock.material.upper()} {progress * 100:.0f}%", True, theme.RED_BRIGHT)
-        label_rect = label.get_rect(midleft=(ex + rock.size + 8, ey))
+        label = ui_legacy_font(k.FONT_SIZE_SCAN_BODY).render(f"{rock.material.upper()} {progress * 100:.0f}%", True, theme.RED_BRIGHT)
+        label_rect = label.get_rect(midleft=(ex + rock.size + px(8), ey))
         label_rect.clamp_ip(viewport)
-        pygame.draw.rect(self.screen, theme.BG, label_rect.inflate(6, 2))
+        pygame.draw.rect(self.screen, theme.BG, label_rect.inflate(px(6), px(2)))
         self.screen.blit(label, label_rect)
 
         self.screen.set_clip(None)
@@ -1967,7 +1964,7 @@ class DrawUI:
         locked = laser_assessor.laser_locked
 
         # Buttons fill the bottom half of the box, edge to edge inside the frame
-        controls = pygame.Rect(box.left + 8, box.top + top_h + 4, box.width - 16, box.height - top_h - 8)
+        controls = pygame.Rect(box.left + px(8), box.top + top_h + px(4), box.width - px(16), box.height - top_h - px(8))
         self._button_row(controls, [
             (1, "<", 'arrow_key_left', dict(key="", enabled=enabled, hold=True, align="center")),
             (1, ">", 'arrow_key_right', dict(key="", enabled=enabled, hold=True, align="center")),
@@ -1993,12 +1990,12 @@ class DrawUI:
             text1, color1 = "TARGETING INACTIVE", theme.GREY  # switched off is not a threat
             text2, color2 = "SYSTEM OFFLINE", theme.GREY
 
-        region_top = box.top + tab.height // 2 + 2
-        region = pygame.Rect(box.left + 8, region_top, box.width - 16, box.top + top_h - 4 - region_top)
-        surf1, surf2 = self._fit_status(region, [(text1, color1), (text2, color2)], gap=28)
+        region_top = box.top + tab.height // 2 + px(2)
+        region = pygame.Rect(box.left + px(8), region_top, box.width - px(16), box.top + top_h - px(4) - region_top)
+        surf1, surf2 = self._fit_status(region, [(text1, color1), (text2, color2)], gap=px(28))
         y = region.centery - surf1.get_height() // 2
-        self.screen.blit(surf1, (region.left + 8, y))
-        self.screen.blit(surf2, (region.left + 8 + surf1.get_width() + 28, y))
+        self.screen.blit(surf1, (region.left + px(8), y))
+        self.screen.blit(surf2, (region.left + px(8) + surf1.get_width() + px(28), y))
 
     # Material assessor box: what the beam is on, scan progress, and the last result.
     #
@@ -2034,21 +2031,21 @@ class DrawUI:
         else:
             text, color = "READY: PRESS SCAN", k.HUD_AMBER
 
-        region_top = box.top + tab.height // 2 + 2
-        region = pygame.Rect(box.left + 8, region_top, box.width - 16, box.top + top_h - 22 - region_top)
+        region_top = box.top + tab.height // 2 + px(2)
+        region = pygame.Rect(box.left + px(8), region_top, box.width - px(16), box.top + top_h - px(22) - region_top)
         surf, = self._fit_status(region, [(text, color)])
-        self.screen.blit(surf, (region.left + 8, region.centery - surf.get_height() // 2))
+        self.screen.blit(surf, (region.left + px(8), region.centery - surf.get_height() // 2))
 
         # Progress bar along the bottom of the top half: |###########     |
         # The segment count comes from the box width, so the bar runs edge to edge
-        bar_font = self.font_scan_body
+        bar_font = ui_legacy_font(k.FONT_SIZE_SCAN_BODY)
         cell_w = bar_font.size("#")[0]
-        target_w = box.width - 28
+        target_w = box.width - px(28)
         segments = max(1, (target_w - bar_font.size("||")[0]) // cell_w)
         filled = round(segments * assessor.scan_progress())
         bar_text = "|" + "#" * filled + " " * (segments - filled) + "|"
         bar_surf = bar_font.render(bar_text, True, k.HUD_AMBER if scanning else theme.AMBER_DIM)
-        self.screen.blit(bar_surf, bar_surf.get_rect(midleft=(box.left + 14, box.top + top_h - 14)))
+        self.screen.blit(bar_surf, bar_surf.get_rect(midleft=(box.left + px(14), box.top + top_h - px(14))))
 
     # SCAN button in the bottom half of the material box. Drawn after the panel so it sits on top.
     def draw_material_scan_button(self, assessor, show=True):
@@ -2056,7 +2053,7 @@ class DrawUI:
             return
         box = self.material_box_rect()
         top_h = box.height // 2
-        controls = pygame.Rect(box.left + 8, box.top + top_h + 4, box.width - 16, box.height - top_h - 8)
+        controls = pygame.Rect(box.left + px(8), box.top + top_h + px(4), box.width - px(16), box.height - top_h - px(8))
         can_scan = assessor.scanning is None and assessor.laser_target() is not None
         self._button_row(controls, [
             (1, "SCAN", 'material_scan', dict(key="N", enabled=can_scan)),
@@ -2073,23 +2070,23 @@ class DrawUI:
         direction, degrees = k.DFS_HEADINGS[direction_index % 8]
         self._border_tab(rect, f"DEEP FIELD SCAN // {direction} {degrees:03d}°", k.SCOPE_BORDER, fill=k.SCOPE_BG)
 
-        x = rect.left + 15
+        x = rect.left + px(15)
         # Status and the last scan's reading
-        y = rect.top + 28
+        y = rect.top + px(28)
         if not system_online:
-            self.screen.blit(self.font_scan_body.render("STATUS: OFFLINE", True, k.SCOPE_OFFLINE), (x, y))
+            self.screen.blit(ui_legacy_font(k.FONT_SIZE_SCAN_BODY).render("STATUS: OFFLINE", True, k.SCOPE_OFFLINE), (x, y))
             reading, color = "NO SIGNAL", k.SCOPE_OFFLINE
         else:
-            self.screen.blit(self.font_scan_body.render("STATUS: ONLINE", True, k.SCOPE_ONLINE), (x, y))
+            self.screen.blit(ui_legacy_font(k.FONT_SIZE_SCAN_BODY).render("STATUS: ONLINE", True, k.SCOPE_ONLINE), (x, y))
             if not has_result:
                 reading, color = "AWAITING SCAN", k.SCOPE_OFFLINE
             elif reported_range is None:
                 reading, color = "NO MOVEMENT", k.SCOPE_OFFLINE
             else:
                 reading, color = f"ENEMY MOVEMENT ~{int(round(reported_range, -1))} U", k.SCOPE_THREAT
-        self.screen.blit(self.font_scan_body.render(reading, True, color), (x, y + 34))
+        self.screen.blit(ui_legacy_font(k.FONT_SIZE_SCAN_BODY).render(reading, True, color), (x, y + px(34)))
 
-        controls = pygame.Rect(rect.left + 15, rect.bottom - 15 - 42, rect.width - 30, 42)
+        controls = pygame.Rect(rect.left + px(15), rect.bottom - px(15 + 42), rect.width - px(30), px(42))
         self._button_row(controls, [
             (2, "< BRG", 'dfs_bearing_ccw', dict(key="DN", enabled=system_online)),
             (2, "BRG >", 'dfs_bearing_cw', dict(key="UP", enabled=system_online)),
@@ -2170,10 +2167,10 @@ class DrawUI:
                        center_y + (start_y - origin_y) * radar_scale)
         radar_end = (center_x + (end_x - origin_x) * radar_scale,
                      center_y + (end_y - origin_y) * radar_scale)
-        pygame.draw.line(self.screen, orange_color, radar_start, radar_end, 1)
+        pygame.draw.line(self.screen, orange_color, radar_start, radar_end, px(1))
 
         # Large arrow from the ship to the radar edge, in the scan direction
-        arrow(center_x, center_y, radar_size * 0.12, 8, 5, amber_color, 2)
+        arrow(center_x, center_y, radar_size * 0.12, px(8), px(5), amber_color, px(2))
 
         self.screen.set_clip(None)
 
@@ -2192,8 +2189,8 @@ class DrawUI:
 
         screen_width = self.screen.get_width()
         screen_height = self.screen.get_height()
-        map_rect = pygame.Rect(ui.PANEL_WIDTH, ui.THIN_HEIGHT,
-                               screen_width - 2 * ui.PANEL_WIDTH, screen_height - 2 * ui.THIN_HEIGHT)
+        map_rect = pygame.Rect(px(ui.PANEL_WIDTH), px(ui.THIN_HEIGHT),
+                               screen_width - 2 * px(ui.PANEL_WIDTH), screen_height - 2 * px(ui.THIN_HEIGHT))
 
         pygame.draw.rect(self.screen, k.SCOPE_BG, map_rect)
 
@@ -2229,12 +2226,12 @@ class DrawUI:
         for gx in range(min_x, max_x + 1, GRID_SIZE):
             p1 = world_to_screen(gx - player_x, min_y - player_y)
             p2 = world_to_screen(gx - player_x, max_y - player_y)
-            pygame.draw.line(self.screen, theme.GREEN_FAINT, p1, p2, 1)
+            pygame.draw.line(self.screen, theme.GREEN_FAINT, p1, p2, px(1))
 
         for gy in range(min_y, max_y + 1, GRID_SIZE):
             p1 = world_to_screen(min_x - player_x, gy - player_y)
             p2 = world_to_screen(max_x - player_x, gy - player_y)
-            pygame.draw.line(self.screen, theme.GREEN_FAINT, p1, p2, 1)
+            pygame.draw.line(self.screen, theme.GREEN_FAINT, p1, p2, px(1))
 
         # World boundaries
         boundary_pts = [
@@ -2243,7 +2240,7 @@ class DrawUI:
             world_to_screen(self.world_width - player_x, self.world_height - player_y),
             world_to_screen(0 - player_x, self.world_height - player_y),
         ]
-        pygame.draw.polygon(self.screen, theme.AMBER_DIM, boundary_pts, 1)
+        pygame.draw.polygon(self.screen, theme.AMBER_DIM, boundary_pts, px(1))
 
         # Shrink: the quadrant the ship is in, once it has sat still long enough to shrink
         if player_ship.shrink > 0:
@@ -2255,33 +2252,33 @@ class DrawUI:
             highlight = pygame.Surface(quadrant.size, pygame.SRCALPHA)
             highlight.fill((*theme.AMBER_BRIGHT, 40))
             self.screen.blit(highlight, quadrant.topleft)
-            pygame.draw.rect(self.screen, theme.AMBER_BRIGHT, quadrant, 2)
+            pygame.draw.rect(self.screen, theme.AMBER_BRIGHT, quadrant, px(2))
 
         # Close-range scan radius
         if scan_active:
             radius_px = scan_range * scale
             pygame.draw.circle(self.screen, (*theme.GREEN_FAINT, 40), map_center, int(radius_px))
-            pygame.draw.circle(self.screen, (*theme.GREEN_DIM, 100), map_center, int(radius_px), 1)
+            pygame.draw.circle(self.screen, (*theme.GREEN_DIM, 100), map_center, int(radius_px), px(1))
 
         # Laser beam, amber while locked
         if laser_active:
             rad = math.radians(laser_direction - 90)
             beam_end = world_to_screen(math.cos(rad) * LASER_RANGE, math.sin(rad) * LASER_RANGE)
             beam_color = theme.AMBER_BRIGHT if laser_locked else theme.GREEN
-            pygame.draw.line(self.screen, beam_color, world_to_screen(0, 0), beam_end, 2)
+            pygame.draw.line(self.screen, beam_color, world_to_screen(0, 0), beam_end, px(2))
 
             if laser_locked and locked_object:
                 obj_x = getattr(locked_object, 'pos_x', None) or locked_object.rect.center[0]
                 obj_y = getattr(locked_object, 'pos_y', None) or locked_object.rect.center[1]
                 lock_screen = world_to_screen(obj_x - player_x, obj_y - player_y)
-                pygame.draw.circle(self.screen, theme.AMBER_BRIGHT, lock_screen, 12, 2)
+                pygame.draw.circle(self.screen, theme.AMBER_BRIGHT, lock_screen, px(12), px(2))
 
         # Confirmed contacts, fading with confidence
         for pos_x, pos_y, contact_type, velocity, confidence in confirmed_contacts:
             screen_x, screen_y = world_to_screen(pos_x - player_x, pos_y - player_y)
 
             # Size and colour scale with confidence
-            marker_size = max(2, int(3 + confidence * 6))
+            marker_size = px(max(2, int(3 + confidence * 6)))
             alpha = int(255 * confidence)
             color = k.SCOPE_DATA
             kind = contact_type.lower()
@@ -2306,44 +2303,44 @@ class DrawUI:
                                      (marker_center[0] - marker_size // 2, marker_center[1] - marker_size),
                                      (marker_center[0] - marker_size // 2, marker_center[1] + marker_size)])
             else:
-                pygame.draw.circle(marker_surface, (*color, alpha), marker_center, marker_size, 1)
+                pygame.draw.circle(marker_surface, (*color, alpha), marker_center, marker_size, px(1))
 
             self.screen.blit(marker_surface, (pos[0] - marker_center[0], pos[1] - marker_center[1]))
 
             # Velocity vector, fading with confidence
             vx, vy = velocity
             if (vx != 0 or vy != 0) and confidence > 0.1:
-                vector_length = 25
+                vector_length = px(25)
                 vel_mag = math.hypot(vx, vy)
                 if vel_mag > 0:
                     dir_x = vx / vel_mag
                     dir_y = vy / vel_mag
                     head = (int(screen_x + dir_x * vector_length), int(screen_y + dir_y * vector_length))
-                    pygame.draw.line(self.screen, (*color, alpha), pos, head, 1)
+                    pygame.draw.line(self.screen, (*color, alpha), pos, head, px(1))
 
         # Player markers (local only)
         for i, (shape, mx, my) in enumerate(markers, 1):
             mpos = world_to_screen(mx - player_x, my - player_y)
-            self._draw_marker_shape(self.screen, shape, mpos, 9, theme.AMBER_BRIGHT)
-            tag = self.font_tiny.render(str(i), True, theme.AMBER_BRIGHT)
-            self.screen.blit(tag, (mpos[0] + 12, mpos[1] - tag.get_height() // 2))
+            self._draw_marker_shape(self.screen, shape, mpos, px(9), theme.AMBER_BRIGHT)
+            tag = ui_legacy_font(k.FONT_SIZE_TINY).render(str(i), True, theme.AMBER_BRIGHT)
+            self.screen.blit(tag, (mpos[0] + px(12), mpos[1] - tag.get_height() // 2))
 
         # Player centre
-        pygame.draw.circle(self.screen, theme.WHITE, map_center, 5)
+        pygame.draw.circle(self.screen, theme.WHITE, map_center, px(5))
 
         # Grid coordinates: cell indices pinned to the panel edges, so they stay readable as
         # the map scrolls, and kept clear of the header and close button
-        label_top = map_rect.top + 56
-        label_left = map_rect.left + 8
+        label_top = map_rect.top + px(56)
+        label_left = map_rect.left + px(8)
         for col in range(min_x // GRID_SIZE, max_x // GRID_SIZE):
             sx, _ = world_to_screen(col * GRID_SIZE + GRID_SIZE / 2 - player_x, 0)
-            if map_rect.left + 40 < sx < map_rect.right - 10:
-                txt = self.font_tiny.render(f"{col}X", True, k.SCOPE_GRID_TEXT)
+            if map_rect.left + px(40) < sx < map_rect.right - px(10):
+                txt = ui_legacy_font(k.FONT_SIZE_TINY).render(f"{col}X", True, k.SCOPE_GRID_TEXT)
                 self.screen.blit(txt, txt.get_rect(midtop=(int(sx), label_top)))
         for row in range(min_y // GRID_SIZE, max_y // GRID_SIZE):
             _, sy = world_to_screen(0, row * GRID_SIZE + GRID_SIZE / 2 - player_y)
-            if label_top + 20 < sy < map_rect.bottom - 40:
-                txt = self.font_tiny.render(f"{row}Y", True, k.SCOPE_GRID_TEXT)
+            if label_top + px(20) < sy < map_rect.bottom - px(40):
+                txt = ui_legacy_font(k.FONT_SIZE_TINY).render(f"{row}Y", True, k.SCOPE_GRID_TEXT)
                 self.screen.blit(txt, txt.get_rect(midleft=(label_left, int(sy))))
 
         self.screen.set_clip(previous_clip)
@@ -2352,23 +2349,23 @@ class DrawUI:
 
         # Header and footer
         header = f"TACTICAL MAP  //  GRID {self.grid_ref(player_x, player_y)}"
-        self.screen.blit(self.font_scan_header.render(header, True, k.SCOPE_HEADER), (map_rect.x + 18, map_rect.y + 14))
+        self.screen.blit(ui_legacy_font(k.FONT_SIZE_SCAN_HEADER).render(header, True, k.SCOPE_HEADER), (map_rect.x + px(18), map_rect.y + px(14)))
 
         contact_count = len(confirmed_contacts)
         moving_count = sum(1 for c in confirmed_contacts if c[3][0] != 0 or c[3][1] != 0)
         avg_confidence = (sum(c[4] for c in confirmed_contacts) / contact_count * 100) if contact_count > 0 else 0
         footer = f"CONFIRMED: {contact_count}  MOVING: {moving_count}  SIGNAL: {int(avg_confidence)}%"
-        txt_footer = self.font_scan_body.render(footer, True, k.SCOPE_DATA)
-        self.screen.blit(txt_footer, (map_rect.x + 18, map_rect.bottom - txt_footer.get_height() - 14))
+        txt_footer = ui_legacy_font(k.FONT_SIZE_SCAN_BODY).render(footer, True, k.SCOPE_DATA)
+        self.screen.blit(txt_footer, (map_rect.x + px(18), map_rect.bottom - txt_footer.get_height() - px(14)))
 
-        close = pygame.Rect(0, 0, 110, 34)
-        close.topright = (map_rect.right - 14, map_rect.top + 14)
+        close = pygame.Rect(0, 0, px(110), px(34))
+        close.topright = (map_rect.right - px(14), map_rect.top + px(14))
         self._button(close, "CLOSE", 'toggle_map', key="M")
 
         # Marker controls, bottom right
         if marker_mode in k.MARKER_SHAPES:
-            prompt = self.font_scan_body.render(f"CLICK THE MAP TO PLACE {marker_mode}", True, k.SCOPE_HEADER)
-            self.screen.blit(prompt, prompt.get_rect(midbottom=(map_rect.centerx, map_rect.bottom - 14)))
+            prompt = ui_legacy_font(k.FONT_SIZE_SCAN_BODY).render(f"CLICK THE MAP TO PLACE {marker_mode}", True, k.SCOPE_HEADER)
+            self.screen.blit(prompt, prompt.get_rect(midbottom=(map_rect.centerx, map_rect.bottom - px(14))))
         if marker_mode == 'PICK':
             specs = [(1, shape, f'marker_shape_{shape.lower()}', {}) for shape in k.MARKER_SHAPES]
             specs.append((1, "CANCEL", 'marker_cancel', {}))
@@ -2378,24 +2375,24 @@ class DrawUI:
             specs = [(2, "ADD MARKER", 'marker_add', {}),
                      (2, "CLEAR MARKERS", 'marker_clear', dict(enabled=bool(markers)))]
         n = len(specs)
-        row = pygame.Rect(0, 0, 130 * n + 8 * (n - 1) + (40 if marker_mode is None else 0), 34)
-        row.bottomright = (map_rect.right - 14, map_rect.bottom - 14)
+        row = pygame.Rect(0, 0, px(130 * n + 8 * (n - 1) + (40 if marker_mode is None else 0)), px(34))
+        row.bottomright = (map_rect.right - px(14), map_rect.bottom - px(14))
         self._button_row(row, specs)
 
     @staticmethod
     def _draw_marker_shape(surface, shape, center, size, color):
         cx, cy = int(center[0]), int(center[1])
         if shape == "CIRCLE":
-            pygame.draw.circle(surface, color, (cx, cy), size, 2)
+            pygame.draw.circle(surface, color, (cx, cy), size, px(2))
         elif shape == "SQUARE":
-            pygame.draw.rect(surface, color, (cx - size, cy - size, size * 2, size * 2), 2)
+            pygame.draw.rect(surface, color, (cx - size, cy - size, size * 2, size * 2), px(2))
         elif shape == "TRIANGLE":
-            pygame.draw.polygon(surface, color, [(cx, cy - size), (cx - size, cy + size), (cx + size, cy + size)], 2)
+            pygame.draw.polygon(surface, color, [(cx, cy - size), (cx - size, cy + size), (cx + size, cy + size)], px(2))
         elif shape == "DIAMOND":
-            pygame.draw.polygon(surface, color, [(cx, cy - size), (cx + size, cy), (cx, cy + size), (cx - size, cy)], 2)
+            pygame.draw.polygon(surface, color, [(cx, cy - size), (cx + size, cy), (cx, cy + size), (cx - size, cy)], px(2))
         else:  # CROSS
-            pygame.draw.line(surface, color, (cx - size, cy), (cx + size, cy), 2)
-            pygame.draw.line(surface, color, (cx, cy - size), (cx, cy + size), 2)
+            pygame.draw.line(surface, color, (cx - size, cy), (cx + size, cy), px(2))
+            pygame.draw.line(surface, color, (cx, cy - size), (cx, cy + size), px(2))
 
     # World position under a screen point on the tactical map (from the last drawn frame).
     def map_screen_to_world(self, pos):
@@ -2420,30 +2417,30 @@ class DrawUI:
         if not show:
             return
         w, h = self.screen.get_size()
-        x0 = k.PLAIN_MARGIN
-        top = k.PLAIN_TOP
-        head = self.menu_small_font
-        body = self.menu_font
+        x0 = px(k.PLAIN_MARGIN)
+        top = px(k.PLAIN_TOP)
+        head = ui_font(k.MENU_SMALL_SIZE)
+        body = ui_font(k.MENU_FONT_SIZE)
 
         self.screen.blit(head.render("ERGOT SYSTEMS // FLIGHT REPLAY", True, theme.AMBER_DIM), (x0, top))
         elapsed = int(progress * POSITION_RECORD_SECONDS)
         clock = head.render(f"T+ {elapsed // 60:02d}:{elapsed % 60:02d}", True, theme.AMBER_BRIGHT)
         self.screen.blit(clock, clock.get_rect(topright=(w - x0, top)))
-        rule_y = top + head.get_height() + 10
-        pygame.draw.line(self.screen, theme.AMBER_FAINT, (x0, rule_y), (w - x0, rule_y))
+        rule_y = top + head.get_height() + px(10)
+        pygame.draw.line(self.screen, theme.AMBER_FAINT, (x0, rule_y), (w - x0, rule_y), px(1))
 
         # Legend: one line per pilot, in the colour of its path
-        legend_w = 260
-        y = rule_y + 24
+        legend_w = px(260)
+        y = rule_y + px(24)
         for i, (callsign, _) in enumerate(pilots):
             color = k.REPLAY_PILOT_COLORS[i % len(k.REPLAY_PILOT_COLORS)]
             mid = y + body.get_height() // 2
-            pygame.draw.line(self.screen, color, (x0, mid), (x0 + 24, mid), 3)
-            self.screen.blit(body.render(callsign.upper(), True, color), (x0 + 36, y))
-            y += body.get_height() + 10
+            pygame.draw.line(self.screen, color, (x0, mid), (x0 + px(24), mid), px(3))
+            self.screen.blit(body.render(callsign.upper(), True, color), (x0 + px(36), y))
+            y += body.get_height() + px(10)
 
-        map_left = x0 + legend_w + 24
-        map_rect = pygame.Rect(map_left, rule_y + 24, w - map_left - x0, h - rule_y - 24 - 110)
+        map_left = x0 + legend_w + px(24)
+        map_rect = pygame.Rect(map_left, rule_y + px(24), w - map_left - x0, h - rule_y - px(24 + 110))
         pygame.draw.rect(self.screen, k.SCOPE_BG, map_rect)
 
         # The whole world fits the panel, centred, at one scale on both axes
@@ -2458,12 +2455,12 @@ class DrawUI:
         self.screen.set_clip(map_rect)
 
         pygame.draw.rect(self.screen, theme.AMBER_DIM,
-                         (int(origin_x), int(origin_y), int(world_width * scale), int(world_height * scale)), 1)
+                         (int(origin_x), int(origin_y), int(world_width * scale), int(world_height * scale)), px(1))
 
         for asteroid in asteroids:
             centre = to_screen(asteroid.pos_x, asteroid.pos_y)
             pygame.draw.circle(self.screen, theme.ASTEROID, (int(centre[0]), int(centre[1])),
-                               max(1, int(asteroid.size * scale)), 1)
+                               max(1, int(asteroid.size * scale)), px(1))
 
         for i, (_, path) in enumerate(pilots):
             color = k.REPLAY_PILOT_COLORS[i % len(k.REPLAY_PILOT_COLORS)]
@@ -2471,7 +2468,7 @@ class DrawUI:
             for run in runs:
                 points = [to_screen(x, y) for x, y in run]
                 if len(points) >= 2:
-                    pygame.draw.lines(self.screen, color, False, points, 2)
+                    pygame.draw.lines(self.screen, color, False, points, px(2))
             for before, after in gaps:
                 self._draw_blink_mark(to_screen(*before), color)
                 if after is not None:
@@ -2479,7 +2476,7 @@ class DrawUI:
                     self._draw_dashed_line(to_screen(*before), to_screen(*after), color)
             if runs and runs[-1]:
                 head_x, head_y = to_screen(*runs[-1][-1])
-                pygame.draw.circle(self.screen, color, (int(head_x), int(head_y)), 4)
+                pygame.draw.circle(self.screen, color, (int(head_x), int(head_y)), px(4))
 
         self.screen.set_clip(previous_clip)
         self._frame(map_rect, k.SCOPE_BORDER, fill=None, width=2, tick=14)
@@ -2491,7 +2488,7 @@ class DrawUI:
             (1, "STEP", 'replay_forward', dict(key="RIGHT", enabled=progress < last_sample)),
             (1, "EXIT REPLAY", 'replay_exit', dict(key="ESC")),
         ]
-        self._button_row(pygame.Rect(map_rect.left, map_rect.bottom + 20, map_rect.width, 40), specs)
+        self._button_row(pygame.Rect(map_rect.left, map_rect.bottom + px(20), map_rect.width, px(40)), specs)
 
     # A recorded path up to `progress` samples, as (runs, gaps).
     #
@@ -2529,20 +2526,22 @@ class DrawUI:
 
     def _draw_blink_mark(self, centre, color, size=5):
         cx, cy = int(centre[0]), int(centre[1])
-        pygame.draw.line(self.screen, color, (cx - size, cy - size), (cx + size, cy + size), 2)
-        pygame.draw.line(self.screen, color, (cx - size, cy + size), (cx + size, cy - size), 2)
+        size = px(size)
+        pygame.draw.line(self.screen, color, (cx - size, cy - size), (cx + size, cy + size), px(2))
+        pygame.draw.line(self.screen, color, (cx - size, cy + size), (cx + size, cy - size), px(2))
 
     def _draw_dashed_line(self, start, end, color, dash=6, gap=5):
         length = math.hypot(end[0] - start[0], end[1] - start[1])
         if length == 0:
             return
         dx, dy = (end[0] - start[0]) / length, (end[1] - start[1]) / length
+        dash, gap = px(dash), px(gap)
         distance = 0.0
         while distance < length:
             seg_end = min(distance + dash, length)
             a = (start[0] + dx * distance, start[1] + dy * distance)
             b = (start[0] + dx * seg_end, start[1] + dy * seg_end)
-            pygame.draw.line(self.screen, color, a, b, 1)
+            pygame.draw.line(self.screen, color, a, b, px(1))
             distance += dash + gap
 
     # ------------------------------------------------------------------

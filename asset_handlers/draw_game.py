@@ -7,6 +7,8 @@ import os
 from config import theme
 from config.constants import SELF_MIN_ALPHA
 from asset_handlers import fonts
+from asset_handlers.ui_scale import px
+from config import ui_constants as ui
 from objects.explosion import FLASH_COLOR, phosphor_color
 from pathlib import Path
 
@@ -41,9 +43,10 @@ def is_visible_to_camera(obj, camera_x, camera_y, screen_width, screen_height):
     else:
         obj_x, obj_y = obj.pos_x, obj.pos_y
 
-    # Viewport bounds (must match draw_ui_layout panel dimensions)
-    panel_width = 500
-    thin_height = 100
+    # Viewport bounds: the console panels, less a 100 px margin so that objects partly
+    # showing past a panel edge are still drawn
+    panel_width = px(ui.PANEL_WIDTH) - 100
+    thin_height = px(ui.THIN_HEIGHT) - 100
 
     world_left = panel_width
     world_right = screen_width - panel_width

@@ -17,6 +17,7 @@ def main():
     clock = pygame.time.Clock()
 
     size = pygame.display.get_desktop_sizes()[0]
+    # size = 1920, 1080
     screen = pygame.display.set_mode(size)
     core = Core(screen)
 

@@ -130,7 +130,7 @@ CORRIDOR_WIDTH = 2000
 
 LASER_RANGE = 5000  # laser assessor
 LASER_STEP = 4  # laser assessor sampling step
-LASER_DWELL_TIME = 0.6
+LASER_DWELL_TIME = 0.3
 
 DECOY_LIFETIME = 30
 

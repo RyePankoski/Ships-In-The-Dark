@@ -10,7 +10,7 @@ import random
 import pygame
 
 from config import theme
-from asset_handlers import fonts
+from asset_handlers.ui_scale import px, ui_font
 
 
 def _shade(color, delta):
@@ -63,11 +63,11 @@ _GHOST_FORMS = [
 def _ghost_form(surf, rng, area, form):
     """Burn a fixed readout screen into `area`: header, rule, then dot-leader rows."""
     title, rows = form
-    f = fonts.font(17)
-    lh = f.get_height() + 4
+    f = ui_font(17)
+    lh = f.get_height() + px(4)
     col = (13, 10, 1)
-    cols = max(16, (area.width - 24) // max(1, f.size("M")[0]))
-    x, y = area.left + 12, area.top + 10
+    cols = max(16, (area.width - px(24)) // max(1, f.size("M")[0]))
+    x, y = area.left + px(12), area.top + px(10)
 
     def burn(text, pos):
         t = f.render_steady(text, True, col, (0, 0, 0))  # opaque black bg so BLEND_ADD only adds the glyphs
@@ -75,8 +75,8 @@ def _ghost_form(surf, rng, area, form):
 
     burn(title, (x, y))
     y += lh
-    pygame.draw.line(surf, _shade(theme.BG, 6), (x, y - 2), (area.right - 12, y - 2))
-    y += 4
+    pygame.draw.line(surf, _shade(theme.BG, 6), (x, y - px(2)), (area.right - px(12), y - px(2)), px(1))
+    y += px(4)
     for label, value in rows:
         if y + lh > area.bottom:
             break
@@ -84,18 +84,18 @@ def _ghost_form(surf, rng, area, form):
         burn(f"{label} {'.' * dots} {value}", (x, y))
         y += lh
     # Faint outline of the old window, worn in places
-    _worn_rect(surf, rng, area, _shade(theme.BG, 5), 1, 0.02)
+    _worn_rect(surf, rng, area, _shade(theme.BG, 5), px(1), 0.02)
 
 
 def _stencil(surf, rng, label):
     """Chipped stencilled panel ID in the bottom-right corner."""
     w, h = surf.get_size()
-    t = fonts.font(13).render_steady(label, True, theme.AMBER_FAINT)
-    x, y = w - t.get_width() - 18, h - t.get_height() - 14
+    t = ui_font(13).render_steady(label, True, theme.AMBER_FAINT)
+    x, y = w - t.get_width() - px(18), h - t.get_height() - px(14)
     surf.blit(t, (x, y))
     for _ in range(6):  # paint flaked off
         cx, cy = x + rng.randrange(t.get_width()), y + rng.randrange(t.get_height())
-        pygame.draw.circle(surf, theme.BG, (cx, cy), rng.randint(1, 2))
+        pygame.draw.circle(surf, theme.BG, (cx, cy), rng.randint(px(1), px(2)))
 
 
 def _worn_rect(surf, rng, rect, color, width, wear):
@@ -112,7 +112,7 @@ def _worn_rect(surf, rng, rect, color, width, wear):
         length = max(abs(x2 - x1), abs(y2 - y1))
         for _ in range(int(length * wear)):
             a = rng.random()
-            seg = rng.randint(3, 28) / max(1, length)
+            seg = rng.randint(px(3), px(28)) / max(1, length)
             b = min(1.0, a + seg)
             p1 = (x1 + (x2 - x1) * a, y1 + (y2 - y1) * a)
             p2 = (x1 + (x2 - x1) * b, y1 + (y2 - y1) * b)
@@ -122,11 +122,12 @@ def _worn_rect(surf, rng, rect, color, width, wear):
 
 def _rivets(surf):
     w, h = surf.get_size()
-    for x, y in ((14, 14), (w - 15, 14), (14, h - 15), (w - 15, h - 15)):
-        pygame.draw.circle(surf, (0, 0, 0), (x + 1, y + 1), 3)
-        pygame.draw.circle(surf, (24, 22, 14), (x, y), 3)
-        pygame.draw.line(surf, (8, 8, 5), (x - 2, y + 1), (x + 2, y - 1))  # screw slot
-        surf.set_at((x - 1, y - 2), (50, 45, 25))  # glint
+    near, far = px(14), px(15)
+    for x, y in ((near, near), (w - far, near), (near, h - far), (w - far, h - far)):
+        pygame.draw.circle(surf, (0, 0, 0), (x + px(1), y + px(1)), px(3))
+        pygame.draw.circle(surf, (24, 22, 14), (x, y), px(3))
+        pygame.draw.line(surf, (8, 8, 5), (x - px(2), y + px(1)), (x + px(2), y - px(1)), px(1))  # screw slot
+        surf.set_at((x - px(1), y - px(2)), (50, 45, 25))  # glint
 
 
 def build_panel(size, seed, label, border, ghost_areas=()):
@@ -144,7 +145,7 @@ def build_panel(size, seed, label, border, ghost_areas=()):
         _grit(surf, rng, 0.012)
         _stencil(surf, rng, label)
         _rivets(surf)
-        _worn_rect(surf, rng, surf.get_rect(), border, 2, 0.012)
+        _worn_rect(surf, rng, surf.get_rect(), border, px(2), 0.012)
     else:
-        pygame.draw.rect(surf, border, surf.get_rect(), 2)
+        pygame.draw.rect(surf, border, surf.get_rect(), px(2))
     return surf
