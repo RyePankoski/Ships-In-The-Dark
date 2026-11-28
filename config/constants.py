@@ -81,6 +81,7 @@ MISSILE_MAX_SPEED = 500
 MISSILE_FUEL = 15
 MISSILE_FUEL_USE_RATE = 3
 TOTAL_MISSILES = 5
+TOTAL_DECOYS = 3
 
 # Missile obstacle avoidance (single-feeler steering)
 MISSILE_FEELER_LENGTH = 200  # how far ahead the missile looks for rocks
@@ -117,10 +118,12 @@ MINING_YIELD = {'icy': 'fuel', 'metallic': 'missile', 'semi-metallic': 'hull'}
 # ---------------------------------------------------------------------------
 # Sensors and countermeasures
 # ---------------------------------------------------------------------------
-RADAR_PULSE_RANGE = 4000
-RADAR_PULSE_SPEED = 2
 
-CLOSE_RANGE_SCAN_RANGE = 1000
+
+# Be careful with these values, can cause major lag.
+RADAR_PULSE_RANGE = 4000
+RADAR_PULSE_SPEED = 40
+CLOSE_RANGE_SCAN_RANGE = 800
 
 CORRIDOR_DEPTH = 8000  # deep field scan configuration
 CORRIDOR_WIDTH = 2000

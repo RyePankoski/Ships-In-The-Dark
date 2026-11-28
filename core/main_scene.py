@@ -569,6 +569,7 @@ class MainScene:
         self.draw_ui.draw_corpo_miner_fire_warning(self.player_ship.mining_vessel_sees_you)
         self.draw_ui.draw_bullet_damage_glitch(self.player_ship.took_damage)
         self.draw_ui.draw_low_health_warning(self.player_ship.health_low)
+        self.draw_ui.draw_radiation_warning(self.player_ship.shrink)
         self.draw_ui.draw_out_of_fuel_warning(self.player_ship.fuel <= 0)
 
         # Last, so the console sits on top of everything else
@@ -585,6 +586,7 @@ class MainScene:
             self.draw_game.draw_stars(camera_x, camera_y)
             self.draw_game.draw_asteroids(world.asteroids, camera_x, camera_y)
             self.draw_game.draw_ships(world.ships, camera_x, camera_y, self.my_id, self.close_range_scan.on)
+            self.draw_game.draw_derelicts(world.derelicts, camera_x, camera_y)
             self.draw_game.draw_drones(world.drones, camera_x, camera_y)
             self.draw_game.draw_pirates(world.pirates, camera_x, camera_y)
             self.draw_game.draw_decoys(world.decoys, camera_x, camera_y)
@@ -647,8 +649,9 @@ class MainScene:
         self._outbox.append({'type': 'cloak_down'})
 
     def _decoy(self):
-        self._outbox.append({'type': 'decoy'})
-        self.audio_manager.play_sfx('deploy_decoy')
+        if self.player_ship.can_deploy_decoy():
+            self._outbox.append({'type': 'decoy'})
+            self.audio_manager.play_sfx('deploy_decoy')
 
     def _fire_missile(self):
         target_id = getattr(self.laser_assessor.missile_target, 'net_id', None)

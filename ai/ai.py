@@ -91,7 +91,10 @@ class AI:
                 self.ship.cloaking_value = 3
 
     def hide(self):
-        edge = 800
+        if self.player_ship is None:
+            return
+
+        edge = 700
         step = 100
         distance_squared = squared_distance((self.ship.pos_x, self.ship.pos_y), self.player_ship.rect.center)
 

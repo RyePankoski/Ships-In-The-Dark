@@ -8,6 +8,7 @@ from objects.decoy import Decoy
 from objects.drone import Drone
 from objects.mining_vessel import MiningVessel
 from objects.missile import Missile
+from objects.derelict import Derelict
 from objects.ship import Ship
 from simulation.contacts import Contacts
 from simulation.grid import Grid
@@ -52,6 +53,7 @@ class World:
         self.width = self.height = self.settings.size
 
         self.ships = []
+        self.derelicts = []
         self.missiles = []
         self.decoys = []
         self.bullets = []
@@ -88,6 +90,39 @@ class World:
         # from the one that generates the world, so a seeded match can be replayed in tests.
         self.rng = random.Random(None if seed is None else f"{seed}:gameplay")
         self._generate(random.Random(seed))
+
+    def _generate(self, rng):
+        centers = [(rng.randint(0, self.width), rng.randint(0, self.height)) for _ in range(max(3, self.settings.asteroids // 50))]
+
+        if self.settings.layout == 'belt':
+            self._generate_asteroid_belt(rng)
+        else:
+            for _ in range(self.settings.asteroids):
+                if self.settings.layout == 'clustered':
+                    pos_x, pos_y = self._clustered_point(rng, centers)
+                else:
+                    pos_x = rng.randint(0, self.width)
+                    pos_y = rng.randint(0, self.height)
+
+                self._add_asteroid(pos_x, pos_y, rng)
+
+        if not self.with_npcs:
+            return
+
+        for _ in range(self.settings.drones):
+            pos_x = rng.randint(0, self.width)
+            pos_y = rng.randint(0, self.height)
+            drone = Drone(pos_x, pos_y)
+            drone.net_id = self.new_id()
+            self.drones.add_to_grid(drone)
+
+        for _ in range(self.settings.pirates):
+            x, y = self.random_empty_point()
+            pirate = MiningVessel(x, y, speed=40)
+            pirate.net_id = self.new_id()
+            self.pirates.add_to_grid(pirate)
+
+        self.setup_derelict()
 
     def step(self, commands, dt):
         """Advance the world by dt. commands = {player_id: command dict}."""
@@ -145,6 +180,18 @@ class World:
 
         self.ships.append(ship)
         return ship
+
+    def setup_derelict(self):
+        derelict = Derelict(100, 100)
+        self.derelicts.append(derelict)
+
+        # while True:
+        #     x, y = (self.rng.randint(0, self.width), self.rng.randint(0, self.height))
+        #     if is_clear_ship_spot(self.asteroids, x, y):
+        #         break
+        #
+        # derelict = Derelict(x, y)
+        # self.derelicts.append(derelict)
 
     def setup_single_player(self, callsign, player_id=1, enemy_id=2, enemy_callsign="UNKNOWN"):
         """The single-player scenario: the player and one AI opponent near each other."""
@@ -224,10 +271,11 @@ class World:
                 ship.fire()
 
         elif kind == 'decoy':
-            decoy = Decoy(ship.rect.center[0], ship.rect.center[1],
-                          self.rng.randint(-1, 1), self.rng.randint(-1, 1), self.rng.randint(20, 25))
-            decoy.net_id = self.new_id()
-            self.decoys.append(decoy)
+            if ship.can_deploy_decoy():
+                ship.deploy_decoy()
+                decoy = Decoy(ship.rect.center[0], ship.rect.center[1],self.rng.randint(-1, 1), self.rng.randint(-1, 1), self.rng.randint(20, 25))
+                decoy.net_id = self.new_id()
+                self.decoys.append(decoy)
 
         elif kind == 'cloak_up':
             ship.increase_cloaking()
@@ -436,36 +484,7 @@ class World:
             return spot
         return self.random_clear_ship_spot()
 
-    def _generate(self, rng):
-        centers = [(rng.randint(0, self.width), rng.randint(0, self.height)) for _ in range(max(3, self.settings.asteroids // 50))]
 
-        if self.settings.layout == 'belt':
-            self._generate_asteroid_belt(rng)
-        else:
-            for _ in range(self.settings.asteroids):
-                if self.settings.layout == 'clustered':
-                    pos_x, pos_y = self._clustered_point(rng, centers)
-                else:
-                    pos_x = rng.randint(0, self.width)
-                    pos_y = rng.randint(0, self.height)
-
-                self._add_asteroid(pos_x, pos_y, rng)
-
-        if not self.with_npcs:
-            return
-
-        for _ in range(self.settings.drones):
-            pos_x = rng.randint(0, self.width)
-            pos_y = rng.randint(0, self.height)
-            drone = Drone(pos_x, pos_y)
-            drone.net_id = self.new_id()
-            self.drones.add_to_grid(drone)
-
-        for _ in range(self.settings.pirates):
-            x, y = self.random_empty_point()
-            pirate = MiningVessel(x, y, speed=40)
-            pirate.net_id = self.new_id()
-            self.pirates.add_to_grid(pirate)
 
     def _generate_asteroid_belt(self, rng):
         points_on_belt = 20
@@ -484,7 +503,6 @@ class World:
                 x += rng.randint(-random_offset, random_offset)
                 y += rng.randint(-random_offset, random_offset)
                 self._add_asteroid(x, y, rng)
-
 
     def _add_asteroid(self, pos_x, pos_y, rng):
         asteroid = Asteroid(pos_x, pos_y, rng.randint(MIN_ROCK_RADIUS, MAX_ROCK_RADIUS), rng)

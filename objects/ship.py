@@ -53,6 +53,7 @@ class Ship(DirectionSteered):
         self.range_bands_on = False
 
         self.max_speed = SHIP_MAX_SPEED
+        self.total_decoys = TOTAL_DECOYS
 
         self.total_missiles = TOTAL_MISSILES
         self.missile_cooling_down = False
@@ -90,6 +91,9 @@ class Ship(DirectionSteered):
         self.position_record = []
         self.position_record.append((self.pos_x, self.pos_y))
         self.record_position_timer = Timer()
+        self.shrink_timer = Timer()
+        self.shrink = 0
+
         self.was_blinking = False  # blinking as record_flights saw it last frame
 
     def run_ship(self, dt, width, height):
@@ -120,7 +124,7 @@ class Ship(DirectionSteered):
             return
 
         self.move(dt)
-        self.handle_radiation_buildup(dt)
+        self.handle_shrink(dt)
         self.cooldowns(dt)
         self.update_rect()
 
@@ -130,7 +134,6 @@ class Ship(DirectionSteered):
         self.bounce(width, height)
 
     def record_position(self, dt):
-
         if not self.record_position_timer.is_running():
             self.record_position_timer.start(POSITION_RECORD_SECONDS)
             self.position_record.append((int(self.pos_x), int(self.pos_y)))
@@ -141,7 +144,6 @@ class Ship(DirectionSteered):
         self.visibility = map_to_range_log(self.cloaking_value, 0, 5, 255, 0, 0.08)
 
     def calculate_draw_and_use_fuel(self, dt):
-
         if self.is_ai:
             return
 
@@ -188,14 +190,6 @@ class Ship(DirectionSteered):
         use = self.current_draw / 45 * dt * TICK_RATE
         self.fuel -= use
 
-    @property
-    def net_id(self):
-        return self.player_id
-
-    @property
-    def center(self):
-        return self.rect.center
-
     def on_radar_ping(self, angle):
         self.enemy_radar_ping_coordinates.append(angle)
 
@@ -215,6 +209,14 @@ class Ship(DirectionSteered):
             return True
         return False
 
+    def can_deploy_decoy(self):
+        if self.total_decoys > 0:
+            return True
+        return False
+
+    def deploy_decoy(self):
+        self.total_decoys -= 1
+
     def can_fire_missile(self):
         if self.missile_cooling_down:
             return False
@@ -227,15 +229,19 @@ class Ship(DirectionSteered):
                 self.missile_cooling_down = False
                 self.missile_cooldown_timer = 0
 
-    def handle_radiation_buildup(self, dt):
+    def handle_shrink(self, dt):
         if self.speed < 1:
-            self.time_not_moving += dt
-            self.radiation_buildup += ((self.time_not_moving ** 2.0) / 10000.0)
-            self.radiation_buildup = min(self.radiation_buildup, 500)
-        elif self.speed > 1:
-            self.radiation_buildup -= map_to_range_linear(self.speed, 0, 80, 0, 10) * dt
-            self.radiation_buildup = max(0.0, self.radiation_buildup)
-            self.time_not_moving = 0.0
+            if not self.shrink_timer.is_running():
+                self.shrink_timer.start(10)
+        else:
+            self.shrink_timer.stop()
+            self.shrink = 0
+
+        if self.shrink_timer.update(dt):
+            self.shrink += 1
+            self.shrink_timer.start(5)
+            print(self.shrink)
+
 
     def move(self, dt):
         self.pos_x += self.vel_x * dt
@@ -358,3 +364,11 @@ class Ship(DirectionSteered):
     def decrease_cloaking(self):
         self.cloaking_value -= 1
         self.cloaking_value = max(0.0, self.cloaking_value)
+
+    @property
+    def net_id(self):
+        return self.player_id
+
+    @property
+    def center(self):
+        return self.rect.center

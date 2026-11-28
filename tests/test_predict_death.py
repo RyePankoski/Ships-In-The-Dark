@@ -16,7 +16,7 @@ def _world_with_fast_ship_in_rock():
     world = World(seed=1, with_npcs=False)
     world.asteroids.clear()  # drop the generated field so only the rock below can hit
     ship = Ship(500, 500, player_id=1)
-    ship._set_velocity(150, 0)  # over the 100 crash threshold, under SHIP_MAX_SPEED
+    ship.set_velocity(150, 0)  # over the 100 crash threshold, under SHIP_MAX_SPEED
     world.ships.append(ship)
     rock = Asteroid(*ship.rect.center, 60)  # centred on the ship
     world.asteroids.add_to_grid(rock)

@@ -45,6 +45,7 @@ class DrawUI:
         self.lock_blink_counter = 0
         self.pirate_sweep_counter = 0
         self.health_blink_counter = 0
+        self.radiation_blink_counter = 0
         self.tutorial_splash_elapsed = 0.0
 
         # Filled in by the draw calls that own them, read by overlays drawn later
@@ -1533,6 +1534,21 @@ class DrawUI:
             text_y = box_y + box_h - text.get_height() - 6
             self.screen.blit(text, (text_x, text_y))
 
+    # Blinking yellow box with a warning while the ship's shrink value is above 0.
+    def draw_radiation_warning(self, shrink, show=True):
+        if not show or shrink <= 0:
+            return
+
+        world_left, world_right, world_top, _ = self._get_world_bounds()
+        text = self.font_critical.render("RADIATION DETECTED", True, k.RADIATION_YELLOW)
+        box = pygame.Rect(0, 0, text.get_width() + 24, text.get_height() + 14)
+        box.midtop = ((world_left + world_right) // 2, world_top + 12)
+
+        self.radiation_blink_counter += 1
+        if (self.radiation_blink_counter // k.RADIATION_BLINK_FREQUENCY) % 2 == 0:
+            pygame.draw.rect(self.screen, k.RADIATION_YELLOW, box, 2)
+            self.screen.blit(text, text.get_rect(center=box.center))
+
     # A single orange line sweeping left to right across the flight window, with the
     # warning text, while pirates have a lock and are firing.
     def draw_corpo_miner_fire_warning(self, pirate_firing, show=True):
@@ -2229,6 +2245,18 @@ class DrawUI:
         ]
         pygame.draw.polygon(self.screen, theme.AMBER_DIM, boundary_pts, 1)
 
+        # Shrink: the quadrant the ship is in, once it has sat still long enough to shrink
+        if player_ship.shrink > 0:
+            x0, y0, x1, y1 = self.shrink_quadrant(player_x, player_y, player_ship.shrink)
+            top_left = world_to_screen(x0 - player_x, y0 - player_y)
+            bottom_right = world_to_screen(x1 - player_x, y1 - player_y)
+            quadrant = pygame.Rect(int(top_left[0]), int(top_left[1]),
+                                   int(bottom_right[0] - top_left[0]), int(bottom_right[1] - top_left[1]))
+            highlight = pygame.Surface(quadrant.size, pygame.SRCALPHA)
+            highlight.fill((*theme.AMBER_BRIGHT, 40))
+            self.screen.blit(highlight, quadrant.topleft)
+            pygame.draw.rect(self.screen, theme.AMBER_BRIGHT, quadrant, 2)
+
         # Close-range scan radius
         if scan_active:
             radius_px = scan_range * scale
@@ -2534,6 +2562,26 @@ class DrawUI:
         col = min(max(int(x // GRID_SIZE), 0), self.world_width // GRID_SIZE - 1)
         row = min(max(int(y // GRID_SIZE), 0), self.world_height // GRID_SIZE - 1)
         return f"{col}X {row}Y"
+
+    # World rectangle (x0, y0, x1, y1) of the quadrant holding (pos_x, pos_y) after `level` halvings
+    # of the world. Each level halves the current quadrant again; halving stops once a half
+    # would be narrower or shorter than one grid cell, so that is the smallest quadrant.
+    def shrink_quadrant(self, pos_x, pos_y, level):
+        x0, y0, x1, y1 = 0, 0, self.world_width, self.world_height
+        for _ in range(level):
+            if (x1 - x0) / 2 < GRID_SIZE or (y1 - y0) / 2 < GRID_SIZE:
+                break
+            mid_x = (x0 + x1) / 2
+            mid_y = (y0 + y1) / 2
+            if pos_x < mid_x:
+                x1 = mid_x
+            else:
+                x0 = mid_x
+            if pos_y < mid_y:
+                y1 = mid_y
+            else:
+                y0 = mid_y
+        return x0, y0, x1, y1
 
     def impact_asteroid(self):
         crt.impact(*k.IMPACT_ASTEROID)

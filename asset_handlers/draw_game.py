@@ -74,7 +74,6 @@ class DrawGame:
         self.ship_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship.png"))
         self.ship_forward_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship_forward.png"))
         self.ship_backward_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship_backward.png"))
-
         self.ship_forward_left_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship_forward_left.png"))
         self.ship_forward_right_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship_forward_right.png"))
         self.ship_backward_left_sprite = pygame.image.load(os.path.join(asset_path, "pngs/ship_backward_left.png"))
@@ -95,6 +94,7 @@ class DrawGame:
         self.pirate_sprite = pygame.image.load(os.path.join(asset_path, "pngs/pirate.png"))
         self.pirate_ambushing_sprite = pygame.image.load(os.path.join(asset_path, "pngs/pirate_ambushing.png"))
 
+        self.derelict_ship = pygame.image.load(os.path.join(asset_path, "pngs/derelict.png"))
         self.font_asteroid_name = fonts.font(14)
 
         # Generate starfield
@@ -185,6 +185,16 @@ class DrawGame:
             screen_x = decoy.pos_x - camera_x
             screen_y = decoy.pos_y - camera_y
             self.screen.blit(self.decoy_sprite, (screen_x, screen_y))
+
+    def draw_derelicts(self, derelicts, camera_x, camera_y, show=True):
+        if not show:
+            return
+        for derelict in derelicts:
+            if is_visible_to_camera(derelict, camera_x, camera_y, self.screen.get_width(), self.screen.get_height()):
+                screen_x = derelict.pos_x - camera_x
+                screen_y = derelict.pos_y - camera_y
+                rect = self.derelict_ship.get_rect(center=(screen_x, screen_y))
+                self.screen.blit(self.derelict_ship, rect)
 
     def pick_player_sprite(self, ship):
         """Choose the player's sprite from a thrust direction, turn input and speed."""
