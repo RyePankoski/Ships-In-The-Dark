@@ -288,7 +288,6 @@ class World:
                     ship.dir_x *= -1.1
                     ship.dir_y *= -1.1
 
-
     def predict(self, my_id, command, dt):
         """A client's guess at the next dt, between snapshots. Only motion: our own
         ship answers our keys, everything else coasts. Hits, damage, firing and
@@ -368,8 +367,7 @@ class World:
         ship.mining_progress = 0.0
 
     def _finish_mining(self, ship, rock):
-        _, collect = _MINING_HANDLERS[MINING_YIELD[rock.material]]
-        collect(ship)
+        _give_yield(ship, MINING_YIELD[rock.material])
 
         rock.alive = False  # _step_asteroids removes it and tells the clients
         ship.mining_on = False  # the beam switches itself off once the rock is burned out
@@ -439,19 +437,19 @@ class World:
         return self.random_clear_ship_spot()
 
     def _generate(self, rng):
-        centers = [(rng.randint(0, self.width), rng.randint(0, self.height)) for _ in range(max(3, self.settings.asteroids // 20))]
-        for _ in range(self.settings.asteroids):
-            if self.settings.layout == 'clustered':
-                pos_x, pos_y = self._clustered_point(rng, centers)
-            else:
-                pos_x = rng.randint(0, self.width)
-                pos_y = rng.randint(0, self.height)
+        centers = [(rng.randint(0, self.width), rng.randint(0, self.height)) for _ in range(max(3, self.settings.asteroids // 50))]
 
-            asteroid = Asteroid(pos_x, pos_y, rng.randint(MIN_ROCK_RADIUS, MAX_ROCK_RADIUS), rng)
-            asteroid.net_id = self.new_id()
+        if self.settings.layout == 'belt':
+            self._generate_asteroid_belt(rng)
+        else:
+            for _ in range(self.settings.asteroids):
+                if self.settings.layout == 'clustered':
+                    pos_x, pos_y = self._clustered_point(rng, centers)
+                else:
+                    pos_x = rng.randint(0, self.width)
+                    pos_y = rng.randint(0, self.height)
 
-            asteroid.id_for_ui = _generate_asteroid_names(rng)
-            self.asteroids.add_to_grid(asteroid)
+                self._add_asteroid(pos_x, pos_y, rng)
 
         if not self.with_npcs:
             return
@@ -469,37 +467,85 @@ class World:
             pirate.net_id = self.new_id()
             self.pirates.add_to_grid(pirate)
 
+    def _generate_asteroid_belt(self, rng):
+        points_on_belt = 20
+        belt, distance_between_points = _make_belt(self.width, self.height, points_on_belt, rng)
+        random_offset = math.floor(distance_between_points / 2)
+
+        # Round down so we don't go over the no of asteroids.
+        asteroids_per_point = math.floor(self.settings.asteroids / len(belt))
+
+        for i in range(len(belt)):
+            for j in range(asteroids_per_point):
+                belt_point = belt[i]
+                x = belt_point[0]
+                y = belt_point[1]
+
+                x += rng.randint(-random_offset, random_offset)
+                y += rng.randint(-random_offset, random_offset)
+                self._add_asteroid(x, y, rng)
+
+
+    def _add_asteroid(self, pos_x, pos_y, rng):
+        asteroid = Asteroid(pos_x, pos_y, rng.randint(MIN_ROCK_RADIUS, MAX_ROCK_RADIUS), rng)
+        asteroid.net_id = self.new_id()
+
+        asteroid.id_for_ui = _generate_asteroid_names(rng)
+        self.asteroids.add_to_grid(asteroid)
+
     def _clustered_point(self, rng, centers):
         """A point in a belt: near one of the cluster centres, kept inside the world."""
         cx, cy = rng.choice(centers)
-        spread = self.width / 10
+        spread = self.width / 15
         x = min(max(round(rng.gauss(cx, spread)), 0), self.width)
         y = min(max(round(rng.gauss(cy, spread)), 0), self.height)
         return x, y
 
 
-def _has_fuel_room(ship):
-    return ship.fuel < SHIP_MAX_FUEL
+def _make_belt(width, height, points_on_belt, rng):
+    belt = []
 
+    start_point_x = rng.randint(0, 100)
+    start_point_y = rng.randint(0, height)
+    end_point_x = rng.randint(width - 100, width)
+    end_point_y = rng.randint(0, height)
 
-def _add_fuel(ship):
-    ship.fuel = min(SHIP_MAX_FUEL, ship.fuel + MINING_FUEL_YIELD)
+    belt.append((start_point_x, start_point_y))
 
+    x_dir = (end_point_x - start_point_x) / points_on_belt
+    y_dir = (end_point_y - start_point_y) / points_on_belt
 
-def _has_missile_room(ship):
-    return ship.total_missiles < TOTAL_MISSILES
+    # Make a line of points between start and end
+    for _ in range(points_on_belt):
+        x, y = belt[-1]
 
+        x += int(x_dir)
+        y += int(y_dir)
 
-def _add_missiles(ship):
-    ship.total_missiles = min(TOTAL_MISSILES, ship.total_missiles + MINING_MISSILE_YIELD)
+        belt.append((x, y))
 
+    distance = math.sqrt(((end_point_x - start_point_x) ** 2 + (end_point_y - start_point_y) ** 2))
+    distance /= points_on_belt
+    random_offset = distance / 3
 
-def _needs_repair(ship):
-    return ship.health < SHIP_MAX_HEALTH
+    # Mutate points on the line
+    for i in range(len(belt)):
+        # Dont mutate start or end points
+        if i == 0 or i == len(belt) - 1:
+            continue
 
+        mutation = belt[i]
 
-def _repair_hull(ship):
-    ship.health = SHIP_MAX_HEALTH
+        x = mutation[0]
+        y = mutation[1]
+
+        x += rng.randint(int(-random_offset), int(random_offset))
+        y += rng.randint(int(-random_offset), int(random_offset))
+        mutation = x, y
+
+        belt[i] = mutation
+
+    return belt, distance
 
 
 def _generate_asteroid_names(rng):
@@ -516,18 +562,30 @@ def _generate_asteroid_names(rng):
 
 
 def _can_mine(ship, rock):
-    """A live asteroid of a mineable kind, in range, and the ship has room for what it pays."""
-    if getattr(rock, 'kind', None) != 'asteroid' or not rock.alive or rock.material not in MINING_YIELD:
+    if getattr(rock, 'kind', None) != 'asteroid' or not rock.alive:
+        return False
+    if rock.material not in MINING_YIELD:
         return False
     cx, cy = ship.center
     if math.hypot(rock.pos_x - cx, rock.pos_y - cy) > MINING_RANGE:
         return False
-    has_room, _ = _MINING_HANDLERS[MINING_YIELD[rock.material]]
-    return has_room(ship)
+    return _has_room_for(ship, MINING_YIELD[rock.material])
 
 
-_MINING_HANDLERS = {
-    'fuel': (_has_fuel_room, _add_fuel),
-    'missile': (_has_missile_room, _add_missiles),
-    'hull': (_needs_repair, _repair_hull),
-}
+def _has_room_for(ship, resource):
+    if resource == 'fuel':
+        return ship.fuel < SHIP_MAX_FUEL
+    if resource == 'missile':
+        return ship.total_missiles < TOTAL_MISSILES
+    if resource == 'hull':
+        return ship.health < SHIP_MAX_HEALTH
+    return False
+
+
+def _give_yield(ship, resource):
+    if resource == 'fuel':
+        ship.fuel = min(SHIP_MAX_FUEL, ship.fuel + MINING_FUEL_YIELD)
+    elif resource == 'missile':
+        ship.total_missiles = min(TOTAL_MISSILES, ship.total_missiles + MINING_MISSILE_YIELD)
+    elif resource == 'hull':
+        ship.health = SHIP_MAX_HEALTH

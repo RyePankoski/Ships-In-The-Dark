@@ -25,6 +25,24 @@ def is_clear_ship_spot(asteroids, x, y):
     return is_empty_space(asteroids, x + SHIP_CENTRE_OFFSET, y + SHIP_CENTRE_OFFSET)
 
 
+# Random points across the world until one is empty of rocks. rng is passed in so the caller's stream is used.
+def random_empty_point(asteroids, rng, width, height):
+    while True:
+        x = rng.randint(0, width)
+        y = rng.randint(0, height)
+        if is_empty_space(asteroids, x, y):
+            return x, y
+
+
+# Random points across the world until one is a clear spot for a ship. rng is passed in so the caller's stream is used.
+def random_clear_ship_spot(asteroids, rng, width, height):
+    while True:
+        x = rng.randint(0, width)
+        y = rng.randint(0, height)
+        if is_clear_ship_spot(asteroids, x, y):
+            return x, y
+
+
 def in_sector(origin_x, origin_y, direction_deg, target_pos, half_width_deg=45):
     """True if target lies strictly within half_width_deg of a compass bearing (0 = north/up, 90 = east)."""
     rel_x = target_pos[0] - origin_x

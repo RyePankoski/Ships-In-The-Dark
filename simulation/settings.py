@@ -11,12 +11,12 @@ from dataclasses import dataclass, asdict, replace
 OPTIONS = {
     'size': (1000, 3000, 5000, 8000, 10000, 12000, 20000),  # side length of the square world, world units
     'asteroids': (0, 10, 50, 100, 200, 250, 500, 1000),  # rocks in the world
-    'layout': ('scattered', 'clustered'),  # scattered: spread evenly; clustered: in belts
+    'layout': ('scattered', 'clustered', 'belt'),  # scattered: spread evenly; clustered: in belts
     'drones': (0, 2, 5, 10, 20, 40, 100),  # mining drones
     'pirates': (0, 1, 2, 3, 4, 5),  # mining vessels that shoot at pilots
 }
 
-LAYOUT_NAMES = {'scattered': 'SCATTERED', 'clustered': 'CLUSTERED'}
+LAYOUT_NAMES = {'scattered': 'SCATTERED', 'clustered': 'CLUSTERED', 'belt': 'BELT'}
 
 
 @dataclass(frozen=True)
