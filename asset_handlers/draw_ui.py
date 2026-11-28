@@ -1964,6 +1964,9 @@ class DrawUI:
         if enabled:
             text1 = f"CLASS: {target_type.upper()}"
             color1 = k.DATA if has_contact else theme.GREY
+            if target_type.upper() == "ENEMY SHIP":
+                blink_on = (pygame.time.get_ticks() // 350) % 2 == 0
+                color1 = theme.RED_BRIGHT if blink_on else theme.RED_DIM
             if locked:
                 text2, color2 = "STATUS: LOCK ACQUIRED", theme.AMBER_BRIGHT
             elif has_contact:

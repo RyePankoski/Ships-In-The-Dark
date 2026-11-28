@@ -31,7 +31,6 @@ class AI:
         self.chosen_direction = None
         self.asteroid_to_avoid = None
 
-        self.ultimate_destination = None
         self.current_destination = None
 
         self.ambushing = False
@@ -50,11 +49,13 @@ class AI:
         self.reset_inputs()
         self._read_and_consume_messages()
         # self.handle_picking_destination()
-        self.reason(asteroids)
+        # self.reason(asteroids)
         self.damp_sideways_drift(dt)
 
         if self.current_destination:
             self.are_we_there_yet(dt)
+        else:
+            self.handle_picking_destination()
 
         # if random.random() < 0.001 and not self.ambushing:
         #     self.ambushing = True
@@ -207,14 +208,13 @@ class AI:
                 self._queue_message(f"I sense a drone at {drone.pos_x}, {drone.pos_y}")
 
     def handle_picking_destination(self):
-        if self.ultimate_destination is None:
+        if self.current_destination is None:
             self._queue_message("I have no destination, so I will choose a new one, and find its heading")
 
             margin = 100
-            self.ultimate_destination = random.randint(margin, self.world_width - margin), random.randint(margin, self.world_height - margin)
-            self.current_destination = self.ultimate_destination
+            self.current_destination = random.randint(margin, self.world_width - margin), random.randint(margin, self.world_height - margin)
 
-            self._queue_message(f"I have chosen a new destination: {self.ultimate_destination} and found its heading. Heading there")
+            self._queue_message(f"I have chosen a new destination: {self.current_destination} and found its heading. Heading there")
             self.en_route = True
 
     def _queue_message(self, message):

@@ -197,9 +197,9 @@ class MainScene:
             self._escape()
             # Instruments
         if key_pressed(events, pygame.K_e):
-            self.laser_assessor.toggle()
+            self.laser_assessor.toggle_laser()
         if key_pressed(events, pygame.K_i):
-            self.laser_assessor.lock()
+            self.laser_assessor.toggle_lock()
         if key_pressed(events, pygame.K_t):
             self.blink.press()
         if key_pressed(events, pygame.K_g):
@@ -262,7 +262,7 @@ class MainScene:
         if action == 'toggle_laser':
             self.laser_assessor.toggle()
         elif action == 'laser_lock':
-            self.laser_assessor.lock()
+            self.laser_assessor.toggle_lock()
         elif action == 'material_scan':
             self.material_assessor.start_scan()
         elif action == 'toggle_mining':
@@ -335,6 +335,12 @@ class MainScene:
         audio = self.audio_manager
 
         audio.play_while('thrust', key_held(pygame.K_w, pygame.K_a, pygame.K_s, pygame.K_d))
+
+        laser = self.laser_assessor
+        audio.play_while('laser_dir_change', laser.turning)
+        if laser.tracking_lost:
+            audio.play_sfx('laser_lock_lost')
+            laser.tracking_lost = False
         # The beam hums while it has a rock locked. The world drops the lock when the
         # rock is mined out or the beam is switched off, so the hum stops with it.
         audio.play_while('mining_laser', ship.mining_target is not None, loops=-1)
@@ -345,6 +351,7 @@ class MainScene:
         audio.play_while('low_health', ship.health_low and ship.alive)
         audio.play_while('ftl_jumping', self.ftl_traveling)
         audio.play_while('ftl_arrival', self.ftl_arriving)
+        audio.play_while('enemy_on_laser', self.laser_assessor.see_enemy)
 
         # Not stopped when it turns false, so the warning finishes
         if ship.low_fuel and not ship.fuel_acknowledge:
@@ -649,6 +656,7 @@ class MainScene:
             self.laser_assessor.on = False
             self._outbox.append({'type': 'fire', 'target': target_id})
             self.audio_manager.play_sfx('fire_missile')
+            self.audio_manager.play_sfx('missile_en_route')
 
     def _debug_enemy_fire(self):
         # The debug "enemy fires at me" key only exists in single-player

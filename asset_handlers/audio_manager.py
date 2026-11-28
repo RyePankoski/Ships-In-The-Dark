@@ -56,6 +56,7 @@ class AudioManager:
             'material_scan_complete': 'sounds/material_scan_complete.wav',
             'scan_interrupt': 'sounds/scan_interrupt.wav',
             'mining_laser': 'sounds/mining_laser.wav',
+            'enemy_on_laser': 'sounds/enemy_on_laser.wav',
 
             # DFS scanner
             'dfs_toggle': 'sounds/dfs_toggle.wav',
@@ -65,6 +66,7 @@ class AudioManager:
 
             # Missiles, radar & combat
             'fire_missile': 'sounds/fire_missile.wav',
+            'missile_en_route' : 'sounds/missile_en_route.wav',
             'enemy_missile_lock': 'sounds/enemy_missile_lock.wav',
             'missile_contact': 'sounds/missile_contact.wav',
             'deploy_decoy': 'sounds/deploy_decoy.wav',
